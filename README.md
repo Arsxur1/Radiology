@@ -23,6 +23,7 @@ Production-grade система интерпретации ЭКГ по [ТЗ](do
 | 5. Каузальный | `layer5_causal` | networkx-граф над YAML-правилами: цепочки причина→следствие, метки физиологично/патологично, флаги неправдоподобности |
 | 6. Интерпретация | `layer6_interpret` | `LLMProvider`: **Claude** + offline-**Stub**; заземление (drop незаземлённых утверждений); политика режимов A/B/эскалация; RU/UZ |
 | §11 Выходы | `outputs` | JSON, заключение RU/UZ, SVG-разметка кривой, каузальный граф, PDF |
+| §14 API/UI | `api` | FastAPI-сервис + одностраничный веб-интерфейс: загрузка/выбор → анализ → все 5 форматов |
 
 Конфигурация без хардкода: `configs/app.yaml` (режим, пороги, частота сети),
 `configs/norms/{adult,pediatric}.yaml` (возрастные нормы),
@@ -70,6 +71,43 @@ pip install -e ".[llm]"
 
 `ClaudeProvider` подключается автоматически, если ключ и пакет доступны;
 заземление проверяется в любом случае.
+
+## Веб-приложение (FastAPI + UI)
+
+Движок обёрнут в HTTP-сервис с одностраничным интерфейсом: выбор демо-случая
+или загрузка файла (WFDB/EDF/CSV) → анализ → заключение RU/UZ, находки,
+кривая, каузальный граф, скачивание PDF.
+
+```bash
+pip install -e ".[dev]"
+uvicorn cardiolens.api.app:app --reload      # → http://127.0.0.1:8000
+```
+
+Эндпоинты:
+
+| Метод | Путь | Назначение |
+|-------|------|-----------|
+| GET | `/` | Веб-интерфейс |
+| GET | `/health` | Проверка живости |
+| GET | `/api/cases` | Список демо-случаев |
+| POST | `/api/analyze` | Анализ: форма с `case` (синтетика) или `files` (загрузка) + `mode`, контекст пациента → JSON (§11) |
+| GET | `/api/analysis/{id}/report.pdf` | PDF-заключение |
+| GET | `/api/analysis/{id}/waveform.svg` | Размеченная кривая |
+| GET | `/api/analysis/{id}/graph.png` | Каузальный граф |
+| GET | `/api/analysis/{id}/conclusion?lang=ru\|uz` | Текст заключения |
+
+Пример через curl:
+
+```bash
+curl -s -F case=hyperk -F mode=B http://127.0.0.1:8000/api/analyze | jq .mode
+# CSV: обязательно указать частоту дискретизации
+curl -s -F files=@data/samples/sample_ecg.csv -F sampling_rate_hz=500 -F unit=uv \
+     http://127.0.0.1:8000/api/analyze | jq '.measurements.heart_rate_bpm'
+```
+
+> Ядро (Слои 1–5) работает офлайн; в облако уходит только опциональный
+> LLM-нарратив Слоя 6 (TZ §12). In-memory хранилище анализов — для MVP; в
+> production заменить на БД/объектное хранилище.
 
 ## Тесты
 

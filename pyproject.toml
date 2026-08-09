@@ -18,11 +18,14 @@ dependencies = [
     "neurokit2",
     "matplotlib",
     "reportlab",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]
 llm = ["anthropic"]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "ruff", "httpx"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
