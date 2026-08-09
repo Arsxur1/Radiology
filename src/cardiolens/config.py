@@ -86,8 +86,6 @@ def norms_for_patient(age_years: float | None, age_days: float | None) -> dict[s
     Children (age < 16y, or age given only in days) use pediatric norms.
     """
     is_pediatric = False
-    if age_days is not None and age_years is None:
-        is_pediatric = True
-    elif age_years is not None and age_years < 16:
+    if age_days is not None and age_years is None or age_years is not None and age_years < 16:
         is_pediatric = True
     return load_norms("pediatric" if is_pediatric else "adult")

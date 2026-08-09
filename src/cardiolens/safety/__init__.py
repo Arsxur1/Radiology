@@ -2,4 +2,4 @@
 
 from cardiolens.safety.critical import CriticalAlert, SafetyResult, scan_critical
 
-__all__ = ["scan_critical", "SafetyResult", "CriticalAlert"]
+__all__ = ["CriticalAlert", "SafetyResult", "scan_critical"]

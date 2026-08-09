@@ -25,7 +25,6 @@ DEMO_CASES: dict[str, dict] = {
     "tachy": dict(heart_rate_bpm=125),
     "hyperk": dict(heart_rate_bpm=72, t_amp_uv=750, potassium=6.6),
     "stemi": dict(heart_rate_bpm=70, st_elevation_uv=250, st_leads=["II", "III", "aVF"]),
-    "long_qt": dict(heart_rate_bpm=60, qt_ms=520, t_amp_uv=250),
     "child": dict(heart_rate_bpm=95, age_years=6),
 }
 

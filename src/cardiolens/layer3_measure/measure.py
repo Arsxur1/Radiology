@@ -19,7 +19,6 @@ from cardiolens.contracts.features import (
     Axes,
     Intervals,
     Measurements,
-    Morphology,
     STMeasurement,
 )
 from cardiolens.contracts.signal import SignalRepresentation
@@ -79,7 +78,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
         rpeaks = np.array([], dtype=int)
 
     m.r_peaks_samples = rpeaks.tolist()
-    m.n_beats = int(len(rpeaks))
+    m.n_beats = len(rpeaks)
 
     rr_s_mean = None
     if len(rpeaks) >= 2:
@@ -90,6 +89,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
         m.hrv_sdnn_ms = round(float(np.std(rr) * 1000.0), 1)
         # Regularity: coefficient of variation of RR < 10% -> regular.
         cv = float(np.std(rr) / (np.mean(rr) + 1e-9))
+        m.rr_cv = round(cv, 3)
         m.rhythm_regular = bool(cv < 0.10)
     else:
         m.notes.append("insufficient R-peaks for rhythm analysis (low confidence)")
@@ -118,6 +118,9 @@ def measure(sig: SignalRepresentation) -> Measurements:
                 qrs_ms=_median_ms(qrs_list, fs),
                 qt_ms=_median_ms(qt_list, fs),
             )
+            # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
+            p_valid = int(np.sum(np.isfinite(p_on)))
+            m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
             # ST measured off QRS offsets (J points), baseline from PR segment.
             _measure_st(sig, qrs_on, qrs_off, m)
         else:
@@ -138,6 +141,9 @@ def measure(sig: SignalRepresentation) -> Measurements:
 
     # --- Sokolow-Lyon voltage (LVH) ---
     m.sokolow_lyon_uv = _sokolow_lyon(sig, rpeaks, fs)
+
+    # --- V1 terminal QRS sign (RSR' typing for bundle branch block) ---
+    m.qrs_v1_terminal_positive = _v1_terminal_positive(sig, rpeaks, fs)
 
     # --- Morphology (peaked/flat/inverted T) ---
     m.morphology.st = m.morphology.st  # populated by _measure_st
@@ -191,6 +197,28 @@ def _sokolow_lyon(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> f
         return float(np.median(vals))
 
     return round(deep_s("V1") + max(tall_r("V5"), tall_r("V6")), 1)
+
+
+def _v1_terminal_positive(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> bool | None:
+    """Sign of the terminal QRS deflection in V1 (~40 ms after R).
+
+    Positive terminal force (R') -> RBBB pattern; negative -> LBBB pattern.
+    """
+    if "V1" not in sig.lead_names or len(rpeaks) == 0:
+        return None
+    row = sig.lead("V1")
+    baseline = float(np.median(row))
+    off = int(0.04 * fs)
+    win = int(0.02 * fs)
+    vals = []
+    for r in rpeaks:
+        a, b = r + off - win, r + off + win
+        if 0 <= a and b < len(row):
+            seg = row[a:b] - baseline
+            vals.append(seg[np.argmax(np.abs(seg))])
+    if not vals:
+        return None
+    return bool(np.median(vals) > 0)
 
 
 def _measure_st(

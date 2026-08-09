@@ -31,12 +31,17 @@ _LEAD_QRS_SCALE = {
 def _beat(
     rr_ms: float, fs: float, qrs_amp_uv: float, t_amp_uv: float,
     qt_ms: float, pr_ms: float, st_shift_uv: float = 0.0,
+    p_amp_scale: float = 1.0, qrs_width_scale: float = 1.0,
+    terminal_uv: float = 0.0,
 ) -> np.ndarray:
     """One PQRST complex spanning exactly ``rr_ms`` (µV).
 
     P peak is anchored early; R sits ``pr_ms`` after it (so measured PR tracks
     the input); the T wave is placed so measured QT tracks ``qt_ms``. QT is
-    capped to keep the T wave inside the RR interval.
+    capped to keep the T wave inside the RR interval. ``qrs_width_scale`` widens
+    the QRS (for BBB/WPW), ``terminal_uv`` adds a late terminal deflection (BBB
+    morphology, e.g. R' in V1), and ``p_amp_scale`` scales/removes the P wave
+    (0 = no P, for atrial fibrillation).
     """
     n = int(round(rr_ms / 1000.0 * fs))
     t = np.linspace(0, rr_ms, n, endpoint=False)
@@ -47,17 +52,19 @@ def _beat(
     p_onset = 20.0                     # P wave begins early in the beat
     p_peak = p_onset + 30.0
     r_pos = p_onset + pr_ms            # QRS onset ≈ pr_ms after P onset
-    # Keep the T wave inside the beat: cap QT so T offset < rr.
     max_qt = rr_ms - r_pos - 60.0
     qt_eff = min(qt_ms, max_qt) if max_qt > 140 else max(140.0, max_qt)
     t_peak = r_pos + qt_eff - 100.0    # so T offset (~t_peak+80) ≈ onset+qt
+    w = qrs_width_scale
 
-    p = gauss(p_peak, 12.0, 120.0)
-    q = gauss(r_pos - 14.0, 7.0, -0.15 * qrs_amp_uv)
-    r = gauss(r_pos, 10.0, qrs_amp_uv)
-    s = gauss(r_pos + 18.0, 9.0, -0.25 * qrs_amp_uv)
+    p = gauss(p_peak, 12.0, 120.0 * p_amp_scale)
+    q = gauss(r_pos - 14.0 * w, 7.0 * w, -0.15 * qrs_amp_uv)
+    r = gauss(r_pos, 10.0 * w, qrs_amp_uv)
+    s = gauss(r_pos + 18.0 * w, 9.0 * w, -0.25 * qrs_amp_uv)
+    # Terminal deflection ~40 ms after R (RSR' / broad terminal forces of BBB).
+    term = gauss(r_pos + 45.0 * w, 10.0 * w, terminal_uv) if abs(terminal_uv) > 1e-6 else 0.0
     tw = gauss(t_peak, 40.0, t_amp_uv)
-    beat = p + q + r + s + tw
+    beat = p + q + r + s + term + tw
     # Optional ST-segment elevation (STEMI stimulus): raise the J-to-T plateau.
     if abs(st_shift_uv) > 1e-6:
         j = r_pos + 30.0            # just after S
@@ -82,19 +89,23 @@ def generate_synthetic_ecg(
     potassium: float | None = None,
     st_elevation_uv: float = 0.0,
     st_leads: list[str] | None = None,
+    qrs_width_scale: float = 1.0,
+    p_amp_scale: float = 1.0,
+    rr_jitter_ms: float = 0.0,
+    bbb: str | None = None,
 ) -> SignalRepresentation:
     """Generate a deterministic synthetic 12-lead ECG.
 
-    Knobs (``qt_ms``, ``pr_ms``, ``heart_rate_bpm``, ``t_amp_uv``) let tests
-    synthesise long-QT, first-degree AV block, brady/tachy and peaked-T cases.
+    Knobs let tests synthesise a range of patterns: ``qt_ms``/``pr_ms``/
+    ``heart_rate_bpm``/``t_amp_uv`` (long-QT, AV block I, brady/tachy, peaked-T);
+    ``st_elevation_uv``+``st_leads`` (STEMI territory); ``qrs_width_scale``
+    (wide QRS); ``bbb`` in {"rbbb","lbbb"} (bundle branch block morphology);
+    ``p_amp_scale=0``+``rr_jitter_ms`` (atrial fibrillation).
     """
     rng = np.random.default_rng(seed)
     fs = float(sampling_rate_hz)
     n_samples = int(round(duration_s * fs))
     rr_ms = 60000.0 / heart_rate_bpm
-    # Default QT is rate-adaptive (inverse Bazett, QTc≈400ms) so a plain call
-    # yields a physiological QT that fits the RR interval instead of a capped,
-    # falsely-short value. Explicit qt_ms overrides (for long-QT test cases).
     if qt_ms is None:
         qt_ms = 400.0 * (rr_ms / 1000.0) ** 0.5
 
@@ -102,22 +113,47 @@ def generate_synthetic_ecg(
     lead_t_scale["aVR"] = -0.6
     lead_t_scale["V1"] = -0.3
 
+    # BBB: widen QRS and set a terminal deflection whose sign in V1 encodes the
+    # block type (RBBB -> terminal positive R' in V1; LBBB -> terminal negative).
+    terminal_by_lead = {ln: 0.0 for ln in STANDARD_12_LEADS}
+    if bbb in ("rbbb", "lbbb"):
+        qrs_width_scale = max(qrs_width_scale, 1.9)
+        sign = 1.0 if bbb == "rbbb" else -1.0
+        terminal_by_lead["V1"] = sign * 500.0
+        terminal_by_lead["V2"] = sign * 400.0
+        terminal_by_lead["V6"] = -sign * 350.0
+        terminal_by_lead["I"] = -sign * 300.0
+
+    # Shared per-beat RR sequence (consistent across all leads) with jitter.
+    beat_rrs: list[float] = []
+    total = 0.0
+    max_ms = duration_s * 1000.0 + rr_ms
+    while total < max_ms:
+        jit = rng.uniform(-rr_jitter_ms, rr_jitter_ms) if rr_jitter_ms > 0 else 0.0
+        this_rr = max(300.0, rr_ms + jit)
+        beat_rrs.append(this_rr)
+        total += this_rr
+
     signal = np.zeros((12, n_samples), dtype=np.float32)
     base_qrs_uv = 900.0
     st_target = set(st_leads or [])
 
     for li, lead in enumerate(STANDARD_12_LEADS):
-        beat = _beat(
-            rr_ms, fs,
-            qrs_amp_uv=base_qrs_uv * _LEAD_QRS_SCALE[lead],
-            t_amp_uv=t_amp_uv * lead_t_scale[lead],
-            qt_ms=qt_ms, pr_ms=pr_ms,
-            st_shift_uv=st_elevation_uv if lead in st_target else 0.0,
-        )
         row = np.zeros(n_samples, dtype=np.float32)
         start = 0
-        while start < n_samples:
+        for this_rr in beat_rrs:
+            beat = _beat(
+                this_rr, fs,
+                qrs_amp_uv=base_qrs_uv * _LEAD_QRS_SCALE[lead],
+                t_amp_uv=t_amp_uv * lead_t_scale[lead],
+                qt_ms=qt_ms, pr_ms=pr_ms,
+                st_shift_uv=st_elevation_uv if lead in st_target else 0.0,
+                p_amp_scale=p_amp_scale, qrs_width_scale=qrs_width_scale,
+                terminal_uv=terminal_by_lead[lead],
+            )
             end = min(start + len(beat), n_samples)
+            if start >= n_samples:
+                break
             row[start:end] = beat[: end - start]
             start += len(beat)
         t_axis = np.arange(n_samples) / fs

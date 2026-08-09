@@ -77,3 +77,24 @@ def test_csv_upload_without_rate_rejected():
 
 def test_missing_analysis_404():
     assert client.get("/api/analysis/deadbeef/report.pdf").status_code == 404
+
+
+def test_feedback_and_calibration_flow(tmp_path, monkeypatch):
+    monkeypatch.setenv("CARDIOLENS_FEEDBACK_PATH", str(tmp_path / "fb.jsonl"))
+    r = client.post("/api/analyze", data={"case": "stemi", "mode": "A"})
+    aid = r.json()["analysis_id"]
+    fb = {
+        "analysis_id": aid,
+        "reviewer": "dr. Y",
+        "findings": [
+            {"code": "st_elevation", "verdict": "confirmed", "confidence": 0.8},
+            {"code": "short_qt", "verdict": "rejected", "confidence": 0.7},
+        ],
+        "overall_agreement": True,
+    }
+    rf = client.post(f"/api/analysis/{aid}/feedback", json=fb)
+    assert rf.status_code == 200 and rf.json()["status"] == "recorded"
+    # Calibration endpoint runs (too few samples -> stays identity).
+    rc = client.post("/api/calibration/fit")
+    assert rc.status_code == 200
+    assert "temperature" in rc.json() and "ece_before" in rc.json()

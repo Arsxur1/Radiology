@@ -7,4 +7,4 @@ from cardiolens.layer3_measure.intervals import (
 )
 from cardiolens.layer3_measure.measure import measure
 
-__all__ = ["measure", "qtc_bazett", "qtc_fridericia", "qtc_framingham"]
+__all__ = ["measure", "qtc_bazett", "qtc_framingham", "qtc_fridericia"]

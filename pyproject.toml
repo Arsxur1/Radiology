@@ -25,6 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 llm = ["anthropic"]
+validation = ["pandas"]
 dev = ["pytest", "ruff", "httpx"]
 
 [tool.setuptools.packages.find]
@@ -38,3 +39,9 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Ignore idiomatic patterns: dict() kwargs for readability, deliberate broad
+# excepts around best-effort DSP, FastAPI Form()/File() default-arg idiom,
+# guard-clause boolean returns, and int() casts kept for clarity.
+ignore = ["C408", "BLE001", "B008", "SIM103", "RUF046"]

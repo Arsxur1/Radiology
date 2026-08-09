@@ -53,8 +53,7 @@ def detect_la_ra_reversal(sig: SignalRepresentation) -> bool:
         return False
     lead_i = sig.lead("I").astype(np.float64)
     avr = sig.lead("aVR").astype(np.float64)
-    # Net deflection sign over the record (robust to baseline via mean-removal).
-    i_net = float(np.mean(lead_i - np.median(lead_i)))
+    # Dominant (largest-magnitude) deflection sign, robust to baseline.
     i_dominant = lead_i[np.argmax(np.abs(lead_i - np.median(lead_i)))] - np.median(lead_i)
     avr_dominant = avr[np.argmax(np.abs(avr - np.median(avr)))] - np.median(avr)
     # Normal: lead I dominant deflection positive, aVR negative.

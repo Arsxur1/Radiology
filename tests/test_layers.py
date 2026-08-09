@@ -1,6 +1,5 @@
 """Per-layer tests (TZ §16)."""
 
-import numpy as np
 import pytest
 
 from cardiolens.config import load_rule_base, norms_for_patient

@@ -57,7 +57,10 @@ class Measurements(BaseModel):
     heart_rate_bpm: float | None = None
     rhythm_regular: bool | None = None
     rr_std_ms: float | None = None            # RR interval variability
+    rr_cv: float | None = None                # RR coefficient of variation
     hrv_sdnn_ms: float | None = None
+    p_wave_ratio: float | None = None         # fraction of beats with a detected P
+    qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
     n_beats: int = 0
     r_peaks_samples: list[int] = Field(default_factory=list)
     intervals: Intervals = Field(default_factory=Intervals)

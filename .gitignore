@@ -9,6 +9,8 @@ venv/
 .pytest_cache/
 .ruff_cache/
 outputs/
+data/feedback/
+configs/calibrator.json
 *.pdf
 !docs/**/*.pdf
 .DS_Store

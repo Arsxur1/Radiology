@@ -10,10 +10,10 @@ from cardiolens.layer1_ingestion.ptbxl import load_ptbxl_record
 from cardiolens.layer1_ingestion.synthetic import generate_synthetic_ecg
 
 __all__ = [
-    "load",
-    "load_wfdb",
-    "load_edf",
-    "load_csv",
-    "load_ptbxl_record",
     "generate_synthetic_ecg",
+    "load",
+    "load_csv",
+    "load_edf",
+    "load_ptbxl_record",
+    "load_wfdb",
 ]

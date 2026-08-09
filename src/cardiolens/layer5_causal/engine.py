@@ -127,6 +127,7 @@ def _standalone_codes() -> set[str]:
     return {
         "sinus_bradycardia", "sinus_tachycardia", "irregular_rhythm",
         "first_degree_av_block", "short_qt", "st_elevation",
+        "atrial_fibrillation", "st_depression", "t_inversion",
     }
 
 

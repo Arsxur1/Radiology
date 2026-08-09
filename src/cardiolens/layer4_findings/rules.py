@@ -19,6 +19,24 @@ from cardiolens.contracts.signal import SignalRepresentation
 # Precordial leads where juvenile T-inversion is a normal variant in children.
 _PEDIATRIC_TINV_OK = {"V1", "V2", "V3", "V4"}
 
+# Coronary territories and their reciprocal leads (TZ §7.2, §8.1).
+_TERRITORIES = [
+    ("нижняя", "pastki", {"II", "III", "aVF"}, {"I", "aVL"}),
+    ("передне-перегородочная", "old-septal", {"V1", "V2", "V3", "V4"}, {"II", "III", "aVF"}),
+    ("боковая", "yon", {"I", "aVL", "V5", "V6"}, {"III", "aVF"}),
+]
+
+
+def _territory_of(elevated: set[str]) -> tuple[str, str, set[str]] | None:
+    """Return (label_ru, label_uz, reciprocal_leads) for the best-matching territory."""
+    best = None
+    best_overlap = 0
+    for ru, uz, leads, recip in _TERRITORIES:
+        overlap = len(elevated & leads)
+        if overlap >= 2 and overlap > best_overlap:
+            best, best_overlap = (ru, uz, recip), overlap
+    return best
+
 
 def _ev(**kv: Any) -> list[Evidence]:
     return [Evidence(feature=k, value=str(v)) for k, v in kv.items()]
@@ -93,7 +111,7 @@ def detect_findings(
     # Intervals / QT (TZ §7.3)
     # ------------------------------------------------------------------ #
     iv = m.intervals
-    pr_lo, pr_hi = norms.get("intervals_ms", {}).get("pr", [None, None])
+    _, pr_hi = norms.get("intervals_ms", {}).get("pr", [None, None])
     if iv.pr_ms is not None and pr_hi and iv.pr_ms > pr_hi:
         fs.findings.append(Finding(
             code="first_degree_av_block", group="interval",
@@ -102,16 +120,18 @@ def detect_findings(
             evidence=_ev(pr_ms=iv.pr_ms, norm_high=pr_hi), confidence=0.85,
         ))
 
-    qrs_lo, qrs_hi = norms.get("intervals_ms", {}).get("qrs", [None, None])
-    if iv.qrs_ms is not None and qrs_hi and iv.qrs_ms > qrs_hi:
-        fs.findings.append(Finding(
-            code="wide_qrs_nonspecific", group="interval",
-            label_ru=f"Расширение QRS ({iv.qrs_ms} мс)",
-            label_uz=f"QRS kengayishi ({iv.qrs_ms} ms)",
-            evidence=_ev(qrs_ms=iv.qrs_ms, norm_high=qrs_hi), confidence=0.8,
-        ))
-
+    _conduction_findings(m, norms, fs)
     _qt_findings(iv, norms, is_pediatric, sig, fs)
+
+    # Atrial fibrillation: irregularly-irregular rhythm with absent P waves (§7.1).
+    if (m.rhythm_regular is False and (m.rr_cv or 0) > 0.15
+            and m.p_wave_ratio is not None and m.p_wave_ratio < 0.3):
+        fs.findings.append(Finding(
+            code="atrial_fibrillation", group="rhythm",
+            label_ru="Фибрилляция предсердий (нерегулярный ритм, отсутствие P)",
+            label_uz="Bo'lmachalar fibrillyatsiyasi (notekis ritm, P yo'q)",
+            evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio), confidence=0.7,
+        ))
 
     # ------------------------------------------------------------------ #
     # Ischemia — ST / T (TZ §7.2)
@@ -197,6 +217,47 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
         ))
 
 
+def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
+    """Classify a wide QRS into WPW / RBBB / LBBB / nonspecific (TZ §7.1)."""
+    iv = m.intervals
+    qrs_hi = norms.get("intervals_ms", {}).get("qrs", [None, None])[1]
+    pr_lo = norms.get("intervals_ms", {}).get("pr", [None, None])[0]
+    if iv.qrs_ms is None or not qrs_hi or iv.qrs_ms <= qrs_hi:
+        return
+    # Short PR + wide QRS -> pre-excitation (WPW): the wide QRS is explained by a
+    # delta wave, not by a bundle branch block (TZ §8.1).
+    if pr_lo and iv.pr_ms is not None and iv.pr_ms < pr_lo:
+        fs.findings.append(Finding(
+            code="wpw_preexcitation", group="interval",
+            label_ru=f"Преэкзитация (WPW): короткий PR {iv.pr_ms} мс + широкий QRS {iv.qrs_ms} мс",
+            label_uz=f"Preeksitatsiya (WPW): qisqa PR {iv.pr_ms} ms + keng QRS {iv.qrs_ms} ms",
+            evidence=_ev(pr_ms=iv.pr_ms, qrs_ms=iv.qrs_ms), confidence=0.7,
+        ))
+        return
+    term = m.qrs_v1_terminal_positive
+    if term is True:
+        fs.findings.append(Finding(
+            code="rbbb", group="interval",
+            label_ru=f"Полная блокада правой ножки (QRS {iv.qrs_ms} мс, RSR' в V1)",
+            label_uz=f"O'ng oyoqcha to'liq blokadasi (QRS {iv.qrs_ms} ms, V1 da RSR')",
+            evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="positive"), confidence=0.72,
+        ))
+    elif term is False:
+        fs.findings.append(Finding(
+            code="lbbb", group="interval",
+            label_ru=f"Полная блокада левой ножки (QRS {iv.qrs_ms} мс)",
+            label_uz=f"Chap oyoqcha to'liq blokadasi (QRS {iv.qrs_ms} ms)",
+            evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="negative"), confidence=0.72,
+        ))
+    else:
+        fs.findings.append(Finding(
+            code="wide_qrs_nonspecific", group="interval",
+            label_ru=f"Расширение QRS ({iv.qrs_ms} мс)",
+            label_uz=f"QRS kengayishi ({iv.qrs_ms} ms)",
+            evidence=_ev(qrs_ms=iv.qrs_ms, norm_high=qrs_hi), confidence=0.8,
+        ))
+
+
 def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
     thr = norms.get("st_uv", {})
     elev = thr.get("elevation_significant")
@@ -214,12 +275,26 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
         elif st.j_point_uv <= -depr:
             depressed.append(st.lead)
     if len(elevated) >= 2:
-        fs.findings.append(Finding(
-            code="st_elevation", group="ischemia",
-            label_ru=f"Элевация ST ({', '.join(elevated)})",
-            label_uz=f"ST elevatsiyasi ({', '.join(elevated)})",
-            evidence=_ev(leads=",".join(elevated), threshold_uv=elev), confidence=0.75,
-        ))
+        # Map to a coronary territory and check for reciprocal ST depression (§8.1).
+        terr = _territory_of(set(elevated))
+        if terr:
+            ru, uz, recip = terr
+            recip_present = sorted(recip & set(depressed))
+            recip_txt = f"; реципрокная депрессия в {', '.join(recip_present)}" if recip_present else ""
+            fs.findings.append(Finding(
+                code="st_elevation", group="ischemia",
+                label_ru=f"Элевация ST, {ru} территория ({', '.join(elevated)}){recip_txt}",
+                label_uz=f"ST elevatsiyasi, {uz} hudud ({', '.join(elevated)})",
+                evidence=_ev(leads=",".join(elevated), territory=ru,
+                             reciprocal=",".join(recip_present) or "none"), confidence=0.8,
+            ))
+        else:
+            fs.findings.append(Finding(
+                code="st_elevation", group="ischemia",
+                label_ru=f"Элевация ST ({', '.join(elevated)})",
+                label_uz=f"ST elevatsiyasi ({', '.join(elevated)})",
+                evidence=_ev(leads=",".join(elevated), threshold_uv=elev), confidence=0.75,
+            ))
     if len(depressed) >= 2:
         fs.findings.append(Finding(
             code="st_depression", group="ischemia",

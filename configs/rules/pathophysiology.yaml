@@ -90,3 +90,54 @@ rules:
       - { from: "lead_reversal_la_ra", to: "pseudo_pathology", relation: "explained_by" }
     explanation_ru: "Паттерн объясняется перестановкой электродов (артефакт), а не истинной патологией — переснять ЭКГ."
     explanation_uz: "Pattern elektrodlar almashinuvi (artefakt) bilan izohlanadi, haqiqiy patologiya emas — EKG qayta olinsin."
+
+  - id: "bbb_explains_wide_qrs"
+    label_ru: "Блокада ножки пучка Гиса"
+    label_uz: "Hisning oyoqcha blokadasi"
+    trigger_findings: ["rbbb", "lbbb"]
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "bundle_branch_block", kind: "cause", label_ru: "Блокада ножки", label_uz: "Oyoqcha blokadasi" }
+      - { id: "rbbb", kind: "finding", label_ru: "БПНПГ", label_uz: "O'ng oyoqcha blokadasi" }
+      - { id: "lbbb", kind: "finding", label_ru: "БЛНПГ", label_uz: "Chap oyoqcha blokadasi" }
+      - { id: "secondary_st_t", kind: "mechanism", label_ru: "Вторичные ST-T изменения", label_uz: "Ikkilamchi ST-T o'zgarishlar" }
+    edges:
+      - { from: "bundle_branch_block", to: "rbbb", relation: "causes" }
+      - { from: "bundle_branch_block", to: "lbbb", relation: "causes" }
+      - { from: "rbbb", to: "secondary_st_t", relation: "progresses_to" }
+      - { from: "lbbb", to: "secondary_st_t", relation: "progresses_to" }
+    explanation_ru: "Широкий QRS объяснён блокадой ножки; связанные ST-T изменения вторичны, а не первичная ишемия."
+    explanation_uz: "Keng QRS oyoqcha blokadasi bilan izohlanadi; ST-T o'zgarishlar ikkilamchi, birlamchi ishemiya emas."
+
+  - id: "wpw_preexcitation_chain"
+    label_ru: "Преэкзитация (WPW)"
+    label_uz: "Preeksitatsiya (WPW)"
+    trigger_findings: ["wpw_preexcitation"]
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "accessory_pathway", kind: "cause", label_ru: "Дополнительный путь проведения", label_uz: "Qo'shimcha o'tkazish yo'li" }
+      - { id: "wpw_preexcitation", kind: "finding", label_ru: "Короткий PR + дельта", label_uz: "Qisqa PR + delta" }
+      - { id: "wide_qrs_preexcited", kind: "finding", label_ru: "Широкий QRS (преэкзитация)", label_uz: "Keng QRS (preeksitatsiya)" }
+    edges:
+      - { from: "accessory_pathway", to: "wpw_preexcitation", relation: "causes" }
+      - { from: "wpw_preexcitation", to: "wide_qrs_preexcited", relation: "progresses_to" }
+    explanation_ru: "Широкий QRS объяснён преэкзитацией по дополнительному пути, а не блокадой ножки."
+    explanation_uz: "Keng QRS qo'shimcha yo'l orqali preeksitatsiya bilan izohlanadi, oyoqcha blokadasi emas."
+
+  - id: "coronary_occlusion_territory"
+    label_ru: "Окклюзия коронарной артерии (территория)"
+    label_uz: "Koronar arteriya okklyuziyasi (hudud)"
+    trigger_findings: ["st_elevation"]
+    physiologic: "pathologic"
+    critical: true
+    nodes:
+      - { id: "coronary_occlusion", kind: "cause", label_ru: "Окклюзия коронарной артерии", label_uz: "Koronar arteriya okklyuziyasi" }
+      - { id: "st_elevation", kind: "finding", label_ru: "Элевация ST (территория)", label_uz: "ST elevatsiyasi (hudud)" }
+      - { id: "reciprocal_change", kind: "finding", label_ru: "Реципрокная депрессия ST", label_uz: "Retsiprok ST depressiyasi" }
+    edges:
+      - { from: "coronary_occlusion", to: "st_elevation", relation: "causes" }
+      - { from: "st_elevation", to: "reciprocal_change", relation: "reciprocal" }
+    explanation_ru: "Элевация ST по территории коронарной артерии; реципрокные изменения подтверждают острую окклюзию."
+    explanation_uz: "Koronar arteriya hududi bo'yicha ST elevatsiyasi; retsiprok o'zgarishlar o'tkir okklyuziyani tasdiqlaydi."

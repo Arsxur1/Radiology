@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
     AppConfig,
+    configs_dir,
     load_app_config,
     load_rule_base,
     norms_for_patient,
@@ -48,10 +50,14 @@ def run_pipeline(
     mode: str | None = None,
     provider: LLMProvider | None = None,
     config: AppConfig | None = None,
+    calibrator: TemperatureScaler | None = None,
 ) -> PipelineResult:
     """Run the full CardioLens pipeline on one signal."""
     cfg = config or load_app_config()
     rule_base = load_rule_base()
+    # Confidence calibration (TZ §13): identity until a scaler is fitted/saved.
+    if calibrator is None:
+        calibrator = TemperatureScaler.load(configs_dir() / "calibrator.json")
     audit: list[str] = []
 
     # Layer 2 — preprocess + quality (TZ §5).
@@ -77,7 +83,13 @@ def run_pipeline(
     # Layer 4 — findings (TZ §7).
     norms = norms_for_patient(sig.patient.age_years, sig.patient.age_days)
     findings = detect_findings(sig, m, norms=norms, la_ra_reversed=la_ra_reversed)
-    audit.append(f"[L4] findings={[f.code for f in findings.findings]}")
+    # Apply confidence calibration to each finding (TZ §13).
+    for f in findings.findings:
+        f.confidence = round(calibrator.apply(f.confidence), 3)
+    audit.append(
+        f"[L4] findings={[f.code for f in findings.findings]} "
+        f"(calibrated T={calibrator.temperature})"
+    )
 
     # Safety scan (TZ §10) — before interpretation, independent of LLM.
     safety = scan_critical(findings, m)

@@ -16,6 +16,7 @@ touches the cloud (TZ §12).
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -23,6 +24,8 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 
 from cardiolens.api import service
+from cardiolens.calibration import TemperatureScaler, expected_calibration_error
+from cardiolens.feedback import DEFAULT_FEEDBACK_PATH, Feedback, FeedbackStore
 from cardiolens.outputs import (
     format_conclusion,
     render_causal_graph,
@@ -34,6 +37,10 @@ from cardiolens.outputs import (
 app = FastAPI(title="CardioLens", version="0.1.0")
 
 _STATIC = Path(__file__).parent / "static"
+
+
+def _feedback_store() -> FeedbackStore:
+    return FeedbackStore.at(os.environ.get("CARDIOLENS_FEEDBACK_PATH", DEFAULT_FEEDBACK_PATH))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -129,3 +136,31 @@ def graph_png(analysis_id: str) -> FileResponse:
 def conclusion(analysis_id: str, lang: str = "ru") -> str:
     result = _require(analysis_id)
     return format_conclusion(result, "uz" if lang == "uz" else "ru")
+
+
+@app.post("/api/analysis/{analysis_id}/feedback")
+def submit_feedback(analysis_id: str, fb: Feedback) -> dict:
+    """Capture physician corrections for future fine-tuning/calibration (TZ §13)."""
+    fb.analysis_id = analysis_id
+    result = service.get_analysis(analysis_id)
+    if result is not None and fb.mode is None:
+        fb.mode = result.report.mode
+    _feedback_store().append(fb)
+    return {"status": "recorded", "analysis_id": analysis_id,
+            "n_findings": len(fb.findings)}
+
+
+@app.post("/api/calibration/fit")
+def fit_calibration() -> dict:
+    """Fit the confidence calibrator from accumulated feedback (TZ §13, §16)."""
+    samples = _feedback_store().calibration_dataset()
+    scaler = TemperatureScaler().fit(samples)
+    ece_before = expected_calibration_error(samples)
+    ece_after = expected_calibration_error([(scaler.apply(c), y) for c, y in samples])
+    return {
+        "n_samples": len(samples),
+        "fitted": scaler.fitted,
+        "temperature": round(scaler.temperature, 4),
+        "ece_before": ece_before,
+        "ece_after": ece_after,
+    }
