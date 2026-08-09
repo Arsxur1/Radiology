@@ -69,6 +69,7 @@ async def analyze(
     sex: str | None = Form(default=None),
     potassium: float | None = Form(default=None),
     calcium: float | None = Form(default=None),
+    prior_ecg_id: str | None = Form(default=None),
     files: list[UploadFile] = File(default=[]),
 ) -> JSONResponse:
     try:
@@ -89,7 +90,7 @@ async def analyze(
             sig, age_years=age_years, age_days=age_days, sex=sex,
             potassium=potassium, calcium=calcium,
         )
-        analysis_id, result = service.run_and_store(sig, mode=mode)
+        analysis_id, result = service.run_and_store(sig, mode=mode, prior_id=prior_ecg_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

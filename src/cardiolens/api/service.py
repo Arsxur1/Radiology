@@ -100,8 +100,12 @@ def apply_patient_overrides(
 _STORE: dict[str, PipelineResult] = {}
 
 
-def run_and_store(sig, *, mode: str | None) -> tuple[str, PipelineResult]:
-    result = run_pipeline(sig, mode=mode)
+def run_and_store(sig, *, mode: str | None,
+                  prior_id: str | None = None) -> tuple[str, PipelineResult]:
+    prior = _STORE.get(prior_id) if prior_id else None
+    if prior_id:
+        sig.context.prior_ecg_id = prior_id
+    result = run_pipeline(sig, mode=mode, prior=prior)
     analysis_id = uuid.uuid4().hex[:12]
     _STORE[analysis_id] = result
     return analysis_id, result

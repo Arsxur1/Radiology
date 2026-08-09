@@ -30,6 +30,8 @@ from cardiolens.layer5_causal import analyze
 from cardiolens.layer6_interpret import InterpretationInput, interpret
 from cardiolens.layer6_interpret.provider import LLMProvider
 from cardiolens.safety import SafetyResult, scan_critical
+from cardiolens.safety.critical import CriticalAlert
+from cardiolens.serial import SerialComparison, compare
 
 
 @dataclass
@@ -42,6 +44,7 @@ class PipelineResult:
     report: InterpretationReport
     config: AppConfig
     audit_log: list[str] = field(default_factory=list)
+    serial: SerialComparison | None = None
 
 
 def run_pipeline(
@@ -51,6 +54,7 @@ def run_pipeline(
     provider: LLMProvider | None = None,
     config: AppConfig | None = None,
     calibrator: TemperatureScaler | None = None,
+    prior: PipelineResult | None = None,
 ) -> PipelineResult:
     """Run the full CardioLens pipeline on one signal."""
     cfg = config or load_app_config()
@@ -91,12 +95,31 @@ def run_pipeline(
         f"(calibrated T={calibrator.temperature})"
     )
 
+    # Serial comparison against a prior ECG (TZ §8.4).
+    serial: SerialComparison | None = None
+    if prior is not None:
+        serial = compare(findings, m, prior.findings, prior.measurements,
+                         prior_id=sig.context.prior_ecg_id)
+        audit.append(f"[serial] deltas={[d.code for d in serial.deltas]} "
+                     f"qtcΔ={serial.qtc_delta_ms}")
+
     # Safety scan (TZ §10) — before interpretation, independent of LLM.
     safety = scan_critical(findings, m)
+    # New critical dynamics on serial comparison force escalation (TZ §8.4, §10).
+    if serial is not None:
+        for d in serial.deltas:
+            if d.critical:
+                safety.alerts.append(CriticalAlert(
+                    code=f"serial_{d.code}", label_ru=d.label_ru, label_uz=d.label_uz,
+                    reason="significant serial change", log_id=f"serial-{d.code}"))
+                safety.audit_log.append(f"[serial] CRITICAL new/changed {d.code}")
     audit.extend(safety.audit_log)
 
     # Layer 5 — causal analysis (TZ §8).
     causal = analyze(findings, rule_base, sig.context)
+    # Serial dynamics strengthen confidence (TZ §8.4).
+    if serial is not None and serial.has_significant_change:
+        causal.confidence = round(min(1.0, causal.confidence + 0.05), 3)
     audit.append(
         f"[L5] rules={causal.activated_rules} critical={causal.critical_flags} "
         f"implausible={causal.implausible_flags} conf={causal.confidence}"
@@ -118,7 +141,7 @@ def run_pipeline(
 
     return PipelineResult(
         signal=sig, measurements=m, findings=findings, causal_graph=causal,
-        safety=safety, report=report, config=cfg, audit_log=audit,
+        safety=safety, report=report, config=cfg, audit_log=audit, serial=serial,
     )
 
 
