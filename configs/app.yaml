@@ -1,0 +1,34 @@
+# CardioLens application configuration.
+# Nothing algorithmic is hard-coded in the source; runtime behaviour is driven
+# from this file (TZ §0: "Ничего не хардкодь, где нужны конфиги").
+
+# Operating mode (TZ §2).
+#   A = decision support (default, safe). B = autonomous (gated).
+mode: "A"
+
+# Mains interference to reject (TZ §5). 50 Hz for Uzbekistan; 60 for US grid.
+mains_frequency_hz: 50
+
+preprocessing:
+  target_sampling_rate_hz: 500
+  bandpass_low_hz: 0.5      # baseline-wander removal
+  bandpass_high_hz: 40.0    # keep ST intact, remove HF noise
+  # Signal Quality Index below this marks a lead as low-quality (0..1).
+  sqi_accept_threshold: 0.5
+
+# Confidence gating for autonomous mode B (TZ §2, §16).
+confidence:
+  # Autonomous report is emitted only if overall confidence >= this.
+  autonomous_min_overall: 0.85
+  # Per-finding confidence floor for autonomous mode.
+  autonomous_min_component: 0.70
+
+# Disclaimers surfaced in every report (TZ §2, §10).
+disclaimers:
+  ru: "Инструмент поддержки принятия решений. Не заменяет врача."
+  uz: "Qaror qabul qilishni qo'llab-quvvatlash vositasi. Shifokor o'rnini bosmaydi."
+
+# Versioning for traceability / regulator-readiness (TZ §1, §11).
+versions:
+  schema: "0.1.0"
+  rules_base: "pathophysiology-0.1.0"

@@ -1,0 +1,32 @@
+# Adult ECG reference norms (TZ §6 "движок норм по возрасту/полу").
+# Values are intentionally editable config, not code constants.
+# Ranges are [low, high]; durations in milliseconds, rates in bpm.
+age_group: "adult"
+applies_when:
+  age_years_min: 16
+
+heart_rate_bpm: [60, 100]
+
+intervals_ms:
+  pr: [120, 200]
+  qrs: [70, 110]
+  qt: [350, 450]
+  # QTc thresholds are sex-specific below.
+
+qtc_ms:
+  # Bazett-corrected upper limits (TZ §6).
+  male_upper: 450
+  female_upper: 460
+  short_lower: 350
+
+axis_deg:
+  qrs_normal: [-30, 90]
+
+voltage_uv:
+  # LVH voltage criteria (Sokolow-Lyon: SV1 + RV5/RV6), microvolts.
+  sokolow_lyon_lvh: 3500
+
+st_uv:
+  # ST deviation thresholds at J+60ms, microvolts.
+  elevation_significant: 100
+  depression_significant: 100

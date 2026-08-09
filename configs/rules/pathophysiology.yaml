@@ -1,0 +1,92 @@
+# Pathophysiological rule / causal-chain base (TZ §8, §18 п.3).
+# Declarative — the causal logic lives here as data, NOT in Python (TZ §8:
+# "конфигурируемая база правил ... не хардкод в логике").
+#
+# Each rule describes a chain "root cause -> mechanism -> effects".
+# The Layer-5 engine activates a rule when its trigger_findings intersect the
+# observed findings, then builds a networkx graph from nodes/edges.
+#
+# Schema (validated by src/cardiolens/contracts/causal.py :: RuleBase):
+#   id, label_ru, label_uz
+#   trigger_findings: [finding_code, ...]   # activation
+#   context_support:  {potassium_min, potassium_max, calcium_min, ...}  # optional
+#   physiologic: "physiologic" | "pathologic"
+#   critical: bool
+#   nodes: [{id, kind, label_ru, label_uz}]  kind: cause|mechanism|finding|artifact
+#   edges: [{from, to, relation}]            relation: causes|progresses_to|reciprocal|explained_by
+#   explanation_ru / explanation_uz: short causal narrative seed for Layer 6
+
+version: "pathophysiology-0.1.0"
+
+rules:
+  - id: "hyperkalemia_severity_chain"
+    label_ru: "Гиперкалиемия"
+    label_uz: "Giperkaliyemiya"
+    trigger_findings: ["peaked_t_waves", "wide_qrs_nonspecific"]
+    context_support: { potassium_min: 5.5 }
+    physiologic: "pathologic"
+    critical: true
+    nodes:
+      - { id: "hyperkalemia", kind: "cause", label_ru: "Гиперкалиемия", label_uz: "Giperkaliyemiya" }
+      - { id: "peaked_t_waves", kind: "finding", label_ru: "Высокие остроконечные T", label_uz: "Baland uchli T to'lqinlar" }
+      - { id: "wide_qrs_nonspecific", kind: "finding", label_ru: "Расширение QRS", label_uz: "QRS kengayishi" }
+      - { id: "sine_wave", kind: "finding", label_ru: "Синусоидальный паттерн", label_uz: "Sinusoidal pattern" }
+    edges:
+      - { from: "hyperkalemia", to: "peaked_t_waves", relation: "causes" }
+      - { from: "peaked_t_waves", to: "wide_qrs_nonspecific", relation: "progresses_to" }
+      - { from: "wide_qrs_nonspecific", to: "sine_wave", relation: "progresses_to" }
+    explanation_ru: "Нарастание тяжести гиперкалиемии: остроконечные T → расширение QRS → синусоида. Требует неотложного внимания."
+    explanation_uz: "Giperkaliyemiya og'irlashuvi: uchli T → QRS kengayishi → sinusoida. Shoshilinch e'tibor talab qiladi."
+
+  - id: "hypokalemia_chain"
+    label_ru: "Гипокалиемия"
+    label_uz: "Gipokaliyemiya"
+    trigger_findings: ["u_waves", "flat_t_waves", "long_qt"]
+    context_support: { potassium_max: 3.5 }
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "hypokalemia", kind: "cause", label_ru: "Гипокалиемия", label_uz: "Gipokaliyemiya" }
+      - { id: "flat_t_waves", kind: "finding", label_ru: "Уплощение зубцов T", label_uz: "T to'lqinlarining yassilanishi" }
+      - { id: "u_waves", kind: "finding", label_ru: "U-волны", label_uz: "U to'lqinlar" }
+      - { id: "st_depression", kind: "finding", label_ru: "Депрессия ST", label_uz: "ST depressiyasi" }
+      - { id: "long_qt", kind: "finding", label_ru: "Удлинение QT", label_uz: "QT uzayishi" }
+    edges:
+      - { from: "hypokalemia", to: "flat_t_waves", relation: "causes" }
+      - { from: "hypokalemia", to: "u_waves", relation: "causes" }
+      - { from: "hypokalemia", to: "st_depression", relation: "causes" }
+      - { from: "hypokalemia", to: "long_qt", relation: "causes" }
+    explanation_ru: "Гипокалиемия: уплощение T, U-волны, депрессия ST, удлинение QT (риск аритмий)."
+    explanation_uz: "Gipokaliyemiya: T yassilanishi, U to'lqinlar, ST depressiyasi, QT uzayishi (aritmiya xavfi)."
+
+  - id: "lvh_strain_chain"
+    label_ru: "ГЛЖ с вторичными изменениями (strain)"
+    label_uz: "CHQG ikkilamchi o'zgarishlar bilan (strain)"
+    trigger_findings: ["lvh", "st_depression", "t_inversion"]
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "lvh", kind: "cause", label_ru: "Гипертрофия ЛЖ", label_uz: "Chap qorincha gipertrofiyasi" }
+      - { id: "strain_st_t", kind: "mechanism", label_ru: "Вторичные ST-T изменения (strain)", label_uz: "Ikkilamchi ST-T o'zgarishlar (strain)" }
+      - { id: "st_depression", kind: "finding", label_ru: "Депрессия ST", label_uz: "ST depressiyasi" }
+      - { id: "t_inversion", kind: "finding", label_ru: "Инверсия T", label_uz: "T inversiyasi" }
+    edges:
+      - { from: "lvh", to: "strain_st_t", relation: "causes" }
+      - { from: "strain_st_t", to: "st_depression", relation: "progresses_to" }
+      - { from: "strain_st_t", to: "t_inversion", relation: "progresses_to" }
+    explanation_ru: "ST-T изменения объясняются перегрузкой при ГЛЖ (strain), а не первичной ишемией."
+    explanation_uz: "ST-T o'zgarishlari CHQG dagi strain bilan izohlanadi, birlamchi ishemiya emas."
+
+  - id: "electrode_reversal_la_ra"
+    label_ru: "Подозрение на реверс электродов LA/RA"
+    label_uz: "LA/RA elektrodlar almashinuvi shubhasi"
+    trigger_findings: ["lead_reversal_la_ra"]
+    physiologic: "physiologic"   # artifact, not true pathology
+    critical: false
+    nodes:
+      - { id: "lead_reversal_la_ra", kind: "artifact", label_ru: "Реверс электродов LA/RA", label_uz: "LA/RA elektrodlar almashinuvi" }
+      - { id: "pseudo_pathology", kind: "finding", label_ru: "Псевдопатологический паттерн", label_uz: "Psevdopatologik pattern" }
+    edges:
+      - { from: "lead_reversal_la_ra", to: "pseudo_pathology", relation: "explained_by" }
+    explanation_ru: "Паттерн объясняется перестановкой электродов (артефакт), а не истинной патологией — переснять ЭКГ."
+    explanation_uz: "Pattern elektrodlar almashinuvi (artefakt) bilan izohlanadi, haqiqiy patologiya emas — EKG qayta olinsin."

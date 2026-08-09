@@ -1,0 +1,28 @@
+# Pediatric ECG reference norms (TZ §6, Rijnbeek/Davignon style).
+# Age-dependent — adult models transfer poorly to children (TZ §15).
+# Simplified age bands for MVP; expand per Davignon tables in later increments.
+age_group: "pediatric"
+applies_when:
+  age_years_max: 15
+
+# Heart-rate norms are strongly age-dependent (bpm).
+heart_rate_bpm_by_age:
+  - { age_days_max: 30, range: [90, 180] }        # neonate
+  - { age_years_max: 1, range: [100, 170] }        # infant
+  - { age_years_max: 3, range: [90, 150] }
+  - { age_years_max: 8, range: [70, 120] }
+  - { age_years_max: 15, range: [60, 110] }
+
+intervals_ms:
+  pr: [90, 170]        # shorter than adult
+  qrs: [50, 90]
+  qt: [300, 440]
+
+qtc_ms:
+  upper: 460
+  short_lower: 340
+
+# Clinically important pediatric caveat (TZ §7.2):
+# T-wave inversion in V1-V4 is NORMAL in children ("juvenile T-wave pattern").
+normal_variants:
+  juvenile_t_inversion_leads: ["V1", "V2", "V3", "V4"]
