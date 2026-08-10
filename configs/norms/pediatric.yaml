@@ -22,6 +22,16 @@ qtc_ms:
   upper: 460
   short_lower: 340
 
+# Right-axis deviation is a normal variant in neonates/infants (TZ §6), so the
+# pediatric normal QRS-axis range is intentionally wide to avoid over-calling.
+axis_deg:
+  qrs_normal: [-30, 180]
+  extreme_low: -90
+  extreme_high: 210
+
+voltage_uv:
+  low_voltage_limb: 400
+
 # Clinically important pediatric caveat (TZ §7.2):
 # T-wave inversion in V1-V4 is NORMAL in children ("juvenile T-wave pattern").
 normal_variants:

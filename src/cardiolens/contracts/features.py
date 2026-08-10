@@ -61,6 +61,9 @@ class Measurements(BaseModel):
     hrv_sdnn_ms: float | None = None
     p_wave_ratio: float | None = None         # fraction of beats with a detected P
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
+    qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak
+    atrial_rate_bpm: float | None = None          # P/flutter-wave rate (TZ §7.1)
+    av_dissociation: bool | None = None           # complete AV block signal (TZ §7.1)
     n_beats: int = 0
     r_peaks_samples: list[int] = Field(default_factory=list)
     intervals: Intervals = Field(default_factory=Intervals)

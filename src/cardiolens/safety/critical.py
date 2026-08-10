@@ -21,6 +21,7 @@ CRITICAL_CODES = {
     "long_qt": ("Длинный QT — риск TdP", "Uzun QT — TdP xavfi"),
     "peaked_t_waves": ("Паттерн гиперкалиемии (остроконечные T)",
                        "Giperkaliyemiya patterni (uchli T)"),
+    "complete_av_block": ("Полная АВ-блокада", "To'liq AV blokada"),
 }
 
 

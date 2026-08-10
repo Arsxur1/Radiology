@@ -133,6 +133,25 @@ def detect_findings(
             evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio), confidence=0.7,
         ))
 
+    # Complete (third-degree) AV block: atrioventricular dissociation (§7.1, §10).
+    if m.av_dissociation is True:
+        fs.findings.append(Finding(
+            code="complete_av_block", group="rhythm",
+            label_ru="Полная АВ-блокада (АВ-диссоциация)",
+            label_uz="To'liq AV blokada (AV dissotsiatsiya)",
+            evidence=_ev(av_dissociation=True, atrial_rate_bpm=m.atrial_rate_bpm,
+                         ventricular_rate_bpm=hr), confidence=0.8,
+        ))
+
+    # Atrial flutter: regular atrial rate ~250-350/min (sawtooth) (§7.1).
+    if m.atrial_rate_bpm is not None and 240 <= m.atrial_rate_bpm <= 360:
+        fs.findings.append(Finding(
+            code="atrial_flutter", group="rhythm",
+            label_ru=f"Трепетание предсердий (частота предсердий {m.atrial_rate_bpm}/мин)",
+            label_uz=f"Bo'lmachalar titrashi (bo'lmacha chastotasi {m.atrial_rate_bpm}/daq)",
+            evidence=_ev(atrial_rate_bpm=m.atrial_rate_bpm), confidence=0.65,
+        ))
+
     # ------------------------------------------------------------------ #
     # Ischemia — ST / T (TZ §7.2)
     # ------------------------------------------------------------------ #
@@ -176,6 +195,12 @@ def detect_findings(
         ))
 
     # ------------------------------------------------------------------ #
+    # Axis deviation (TZ §7.4) and low QRS voltage (TZ §7.5)
+    # ------------------------------------------------------------------ #
+    _axis_findings(m, norms, fs)
+    _low_voltage_findings(m, norms, fs)
+
+    # ------------------------------------------------------------------ #
     # Artifact hypothesis from Layer 2 (TZ §5, feeds §8.3)
     # ------------------------------------------------------------------ #
     if la_ra_reversed:
@@ -214,6 +239,51 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
             label_ru=f"Укорочение QT (QTc {qtc} мс)",
             label_uz=f"QT qisqarishi (QTc {qtc} ms)",
             evidence=_ev(qtc_bazett_ms=qtc, lower=short_lower), confidence=0.7,
+        ))
+
+
+def _axis_findings(m: Measurements, norms, fs: FindingSet) -> None:
+    """QRS-axis deviation (TZ §7.4)."""
+    axis = m.axes.qrs_deg
+    ad = norms.get("axis_deg", {})
+    rng = ad.get("qrs_normal")
+    if axis is None or not rng:
+        return
+    lo, hi = rng
+    ext_lo, ext_hi = ad.get("extreme_low"), ad.get("extreme_high")
+    if ext_lo is not None and (axis < ext_lo or (ext_hi is not None and axis > ext_hi)):
+        fs.findings.append(Finding(
+            code="extreme_axis", group="hypertrophy",
+            label_ru=f"Резкое отклонение оси (ось QRS {axis}°)",
+            label_uz=f"O'qning keskin og'ishi (QRS o'qi {axis}°)",
+            evidence=_ev(qrs_axis_deg=axis), confidence=0.7,
+        ))
+    elif axis < lo:
+        fs.findings.append(Finding(
+            code="left_axis_deviation", group="hypertrophy",
+            label_ru=f"Отклонение оси влево (ось QRS {axis}°)",
+            label_uz=f"O'qning chapga og'ishi (QRS o'qi {axis}°)",
+            evidence=_ev(qrs_axis_deg=axis, norm_low=lo), confidence=0.7,
+        ))
+    elif axis > hi:
+        fs.findings.append(Finding(
+            code="right_axis_deviation", group="hypertrophy",
+            label_ru=f"Отклонение оси вправо (ось QRS {axis}°)",
+            label_uz=f"O'qning o'ngga og'ishi (QRS o'qi {axis}°)",
+            evidence=_ev(qrs_axis_deg=axis, norm_high=hi), confidence=0.7,
+        ))
+
+
+def _low_voltage_findings(m: Measurements, norms, fs: FindingSet) -> None:
+    """Low QRS voltage in the limb leads (TZ §7.5)."""
+    thr = norms.get("voltage_uv", {}).get("low_voltage_limb")
+    amp = m.qrs_amplitude_limb_uv
+    if thr and amp is not None and amp < thr:
+        fs.findings.append(Finding(
+            code="low_qrs_voltage", group="other",
+            label_ru=f"Низкий вольтаж QRS (амплитуда {amp} мкВ)",
+            label_uz=f"Past QRS voltaji (amplituda {amp} µV)",
+            evidence=_ev(qrs_amplitude_limb_uv=amp, threshold=thr), confidence=0.7,
         ))
 
 

@@ -145,6 +145,9 @@ def measure(sig: SignalRepresentation) -> Measurements:
     # --- V1 terminal QRS sign (RSR' typing for bundle branch block) ---
     m.qrs_v1_terminal_positive = _v1_terminal_positive(sig, rpeaks, fs)
 
+    # --- Limb-lead QRS amplitude (for low-voltage detection, TZ §7.5) ---
+    m.qrs_amplitude_limb_uv = _limb_qrs_amplitude(sig, rpeaks, fs)
+
     # --- Morphology (peaked/flat/inverted T) ---
     m.morphology.st = m.morphology.st  # populated by _measure_st
     _measure_t_morphology(sig, rpeaks, fs, m)
@@ -219,6 +222,22 @@ def _v1_terminal_positive(sig: SignalRepresentation, rpeaks: np.ndarray, fs: flo
     if not vals:
         return None
     return bool(np.median(vals) > 0)
+
+
+def _limb_qrs_amplitude(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
+    """Median QRS peak-to-peak across the limb leads I/II/III (µV, TZ §7.5)."""
+    limb = [ln for ln in ("I", "II", "III") if ln in sig.lead_names]
+    if not limb or len(rpeaks) == 0:
+        return None
+    win = int(0.05 * fs)
+    amps = []
+    for lead in limb:
+        row = sig.lead(lead)
+        for r in rpeaks:
+            a, b = max(0, r - win), min(len(row), r + win)
+            seg = row[a:b]
+            amps.append(float(np.max(seg) - np.min(seg)))
+    return round(float(np.median(amps)), 1) if amps else None
 
 
 def _measure_st(

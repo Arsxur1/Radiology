@@ -21,10 +21,14 @@ qtc_ms:
 
 axis_deg:
   qrs_normal: [-30, 90]
+  extreme_low: -90      # below this = extreme/northwest axis
+  extreme_high: 180
 
 voltage_uv:
   # LVH voltage criteria (Sokolow-Lyon: SV1 + RV5/RV6), microvolts.
   sokolow_lyon_lvh: 3500
+  # Low QRS voltage: limb-lead QRS peak-to-peak below this (µV).
+  low_voltage_limb: 500
 
 st_uv:
   # ST deviation thresholds at J+60ms, microvolts.

@@ -93,6 +93,7 @@ def generate_synthetic_ecg(
     p_amp_scale: float = 1.0,
     rr_jitter_ms: float = 0.0,
     bbb: str | None = None,
+    amplitude_scale: float = 1.0,
 ) -> SignalRepresentation:
     """Generate a deterministic synthetic 12-lead ECG.
 
@@ -135,7 +136,8 @@ def generate_synthetic_ecg(
         total += this_rr
 
     signal = np.zeros((12, n_samples), dtype=np.float32)
-    base_qrs_uv = 900.0
+    base_qrs_uv = 900.0 * amplitude_scale
+    t_amp_uv = t_amp_uv * amplitude_scale
     st_target = set(st_leads or [])
 
     for li, lead in enumerate(STANDARD_12_LEADS):
