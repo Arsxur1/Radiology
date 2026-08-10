@@ -26,7 +26,8 @@ dependencies = [
 [project.optional-dependencies]
 llm = ["anthropic"]
 validation = ["pandas"]
-dev = ["pytest", "ruff", "httpx"]
+digitize = ["opencv-python-headless"]
+dev = ["pytest", "ruff", "httpx", "opencv-python-headless"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

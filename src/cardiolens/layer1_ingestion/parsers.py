@@ -121,11 +121,15 @@ def load_scp(path: str | Path) -> SignalRepresentation:  # pragma: no cover
     raise NotImplementedError("TODO(v2): SCP-ECG parsing (TZ §4).")
 
 
-def load_from_image(path: str | Path) -> SignalRepresentation:  # pragma: no cover
-    raise NotImplementedError(
-        "TODO(v2): paper-ECG digitisation via OpenCV; low provenance.confidence "
-        "on dirty photos (TZ §4)."
-    )
+def load_from_image(path: str | Path, **kwargs) -> SignalRepresentation:
+    """Digitise a single-lead trace from a clean gridded image (TZ §4).
+
+    Clean scans/PDF renders only in this increment; dirty-photo robustness and
+    multi-lead segmentation are v2 (TZ §17). Delegates to ``digitize_image``.
+    """
+    from cardiolens.layer1_ingestion.digitize import digitize_image
+
+    return digitize_image(path, **kwargs)
 
 
 def load(path: str | Path, **kwargs) -> SignalRepresentation:
@@ -140,4 +144,6 @@ def load(path: str | Path, **kwargs) -> SignalRepresentation:
         return load_csv(p, **kwargs)
     if ext in (".dcm",):
         return load_dicom(p)
+    if ext in (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"):
+        return load_from_image(p, **kwargs)
     raise ValueError(f"Unsupported extension: {ext}")
