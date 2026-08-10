@@ -39,9 +39,17 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Declare the source layout so first-party import detection is deterministic
+# across environments (CI vs local editable install).
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 # Ignore idiomatic patterns: dict() kwargs for readability, deliberate broad
 # excepts around best-effort DSP, FastAPI Form()/File() default-arg idiom,
 # guard-clause boolean returns, and int() casts kept for clarity.
 ignore = ["C408", "BLE001", "B008", "SIM103", "RUF046"]
+
+[tool.ruff.lint.isort]
+# Pin cardiolens as first-party so isort grouping never depends on whether the
+# package happens to be pip-installed in the runner (fixes CI I001 drift).
+known-first-party = ["cardiolens"]
