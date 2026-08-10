@@ -8,7 +8,8 @@ dist/
 venv/
 .pytest_cache/
 .ruff_cache/
-outputs/
+# Runtime output dir at repo root only — must NOT match src/cardiolens/outputs/
+/outputs/
 data/feedback/
 configs/calibrator.json
 *.pdf
