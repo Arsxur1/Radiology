@@ -5,8 +5,10 @@ Kept separate from the FastAPI wiring so it is unit-testable without HTTP.
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +19,10 @@ from cardiolens.layer1_ingestion import (
     load_wfdb,
 )
 from cardiolens.pipeline import PipelineResult, run_pipeline
+
+# Guardrails for the public-facing service.
+MAX_UPLOAD_BYTES = 64 * 1024 * 1024   # 64 MB total across uploaded files
+STORE_MAX_ENTRIES = 200               # bounded in-memory analysis cache
 
 # Synthetic demo cases exposed by the web UI (mirrors cardiolens.demo).
 DEMO_CASES: dict[str, dict] = {
@@ -53,25 +59,34 @@ def signal_from_uploads(
     """
     if not files:
         raise ValueError("no files uploaded")
+    total = sum(len(f.content) for f in files)
+    if total > MAX_UPLOAD_BYTES:
+        raise ValueError(f"upload too large ({total} bytes > {MAX_UPLOAD_BYTES})")
     tmp = Path(tempfile.mkdtemp(prefix="cardiolens_api_"))
-    saved: list[Path] = []
-    for f in files:
-        p = tmp / Path(f.filename).name
-        p.write_bytes(f.content)
-        saved.append(p)
+    try:
+        saved: list[Path] = []
+        for f in files:
+            # Path(...).name strips any directory components (traversal-safe).
+            p = tmp / Path(f.filename).name
+            p.write_bytes(f.content)
+            saved.append(p)
 
-    hea = next((p for p in saved if p.suffix.lower() == ".hea"), None)
-    if hea is not None:
-        return load_wfdb(hea.with_suffix(""))
-    edf = next((p for p in saved if p.suffix.lower() in (".edf", ".bdf")), None)
-    if edf is not None:
-        return load_edf(edf)
-    csv = next((p for p in saved if p.suffix.lower() in (".csv", ".txt")), None)
-    if csv is not None:
-        if sampling_rate_hz is None:
-            raise ValueError("sampling_rate_hz is required for CSV input")
-        return load_csv(csv, sampling_rate_hz=sampling_rate_hz, unit=unit)
-    raise ValueError("unsupported upload; expected WFDB(.hea+.dat), EDF, or CSV")
+        hea = next((p for p in saved if p.suffix.lower() == ".hea"), None)
+        if hea is not None:
+            return load_wfdb(hea.with_suffix(""))
+        edf = next((p for p in saved if p.suffix.lower() in (".edf", ".bdf")), None)
+        if edf is not None:
+            return load_edf(edf)
+        csv = next((p for p in saved if p.suffix.lower() in (".csv", ".txt")), None)
+        if csv is not None:
+            if sampling_rate_hz is None:
+                raise ValueError("sampling_rate_hz is required for CSV input")
+            return load_csv(csv, sampling_rate_hz=sampling_rate_hz, unit=unit)
+        raise ValueError("unsupported upload; expected WFDB(.hea+.dat), EDF, or CSV")
+    finally:
+        # Parsers read the raw signal into memory, so the temp files are no
+        # longer needed once parsing returns (or raises) — never leak them.
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def apply_patient_overrides(
@@ -96,20 +111,28 @@ def apply_patient_overrides(
     return sig
 
 
-# --- Simple in-memory analysis store (MVP; not for multi-worker production) ---
-_STORE: dict[str, PipelineResult] = {}
+# --- Bounded in-memory analysis store (MVP; not for multi-worker production) ---
+# LRU-evicting so a long-running server can't grow without bound. Swap for a DB
+# / object store in production (see DECISIONS.md).
+_STORE: OrderedDict[str, PipelineResult] = OrderedDict()
 
 
 def run_and_store(sig, *, mode: str | None,
                   prior_id: str | None = None) -> tuple[str, PipelineResult]:
-    prior = _STORE.get(prior_id) if prior_id else None
+    prior = get_analysis(prior_id) if prior_id else None
     if prior_id:
         sig.context.prior_ecg_id = prior_id
     result = run_pipeline(sig, mode=mode, prior=prior)
     analysis_id = uuid.uuid4().hex[:12]
     _STORE[analysis_id] = result
+    _STORE.move_to_end(analysis_id)
+    while len(_STORE) > STORE_MAX_ENTRIES:
+        _STORE.popitem(last=False)  # evict least-recently-used
     return analysis_id, result
 
 
 def get_analysis(analysis_id: str) -> PipelineResult | None:
-    return _STORE.get(analysis_id)
+    result = _STORE.get(analysis_id)
+    if result is not None:
+        _STORE.move_to_end(analysis_id)  # mark as recently used
+    return result

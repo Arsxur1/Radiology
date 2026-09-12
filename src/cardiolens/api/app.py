@@ -17,11 +17,13 @@ touches the cloud (TZ §12).
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from starlette.background import BackgroundTask
 
 from cardiolens.api import service
 from cardiolens.calibration import TemperatureScaler, expected_calibration_error
@@ -37,6 +39,11 @@ from cardiolens.outputs import (
 app = FastAPI(title="CardioLens", version="0.1.0")
 
 _STATIC = Path(__file__).parent / "static"
+
+
+def _cleanup(tmp_dir: str) -> BackgroundTask:
+    """Delete a temp dir after the FileResponse has been sent (no disk leak)."""
+    return BackgroundTask(shutil.rmtree, tmp_dir, ignore_errors=True)
 
 
 def _feedback_store() -> FeedbackStore:
@@ -111,26 +118,30 @@ def _require(analysis_id: str):
 @app.get("/api/analysis/{analysis_id}/report.pdf")
 def report_pdf(analysis_id: str) -> FileResponse:
     result = _require(analysis_id)
-    path = str(Path(tempfile.mkdtemp()) / f"{analysis_id}.pdf")
+    tmp = tempfile.mkdtemp()
+    path = str(Path(tmp) / f"{analysis_id}.pdf")
     write_pdf(result, path)
     return FileResponse(path, media_type="application/pdf",
-                        filename=f"cardiolens_{analysis_id}.pdf")
+                        filename=f"cardiolens_{analysis_id}.pdf",
+                        background=_cleanup(tmp))
 
 
 @app.get("/api/analysis/{analysis_id}/waveform.svg")
 def waveform_svg(analysis_id: str) -> FileResponse:
     result = _require(analysis_id)
-    path = str(Path(tempfile.mkdtemp()) / f"{analysis_id}.svg")
+    tmp = tempfile.mkdtemp()
+    path = str(Path(tmp) / f"{analysis_id}.svg")
     render_waveform(result, path)
-    return FileResponse(path, media_type="image/svg+xml")
+    return FileResponse(path, media_type="image/svg+xml", background=_cleanup(tmp))
 
 
 @app.get("/api/analysis/{analysis_id}/graph.png")
 def graph_png(analysis_id: str) -> FileResponse:
     result = _require(analysis_id)
-    path = str(Path(tempfile.mkdtemp()) / f"{analysis_id}.png")
+    tmp = tempfile.mkdtemp()
+    path = str(Path(tmp) / f"{analysis_id}.png")
     render_causal_graph(result, path)
-    return FileResponse(path, media_type="image/png")
+    return FileResponse(path, media_type="image/png", background=_cleanup(tmp))
 
 
 @app.get("/api/analysis/{analysis_id}/conclusion", response_class=PlainTextResponse)

@@ -6,7 +6,7 @@ Russian and Uzbek text render correctly in the PDF.
 
 from __future__ import annotations
 
-import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -86,11 +86,8 @@ def write_pdf(result: PipelineResult, path: str) -> str:
         flow.append(Paragraph(_esc(line) or "&nbsp;", body))
 
     doc.build(flow)
-    for f in (wave_png, graph_png):
-        try:
-            os.remove(f)
-        except OSError:
-            pass
+    # Remove the whole intermediate-image temp dir, not just its files.
+    shutil.rmtree(tmp, ignore_errors=True)
     return path
 
 
