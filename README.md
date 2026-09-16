@@ -121,6 +121,7 @@ per-class sensitivity/specificity и MAE интервалов.
 ```bash
 python -m cardiolens.validate                 # offline синтетический датасет
 python -m cardiolens.validate --ptbxl <root>  # реальная PTB-XL (локальный чекаут)
+python -m cardiolens.validate --ecg-arrhythmia <root>  # Chapman/Ningbo (локальный чекаут)
 ```
 
 Синтетический прогон даёт реальные (оптимистичные, помечены как синтетика)

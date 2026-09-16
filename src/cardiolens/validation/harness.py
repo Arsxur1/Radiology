@@ -168,3 +168,69 @@ def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:
         sig.patient.sex = "male" if row.get("sex") == 0 else "female"
         cases.append(LabeledCase(sig, gold, name=f"ptbxl_{ecg_id}"))
     return cases
+
+
+# SNOMED-CT concept id -> CardioLens finding code, for the PhysioNet
+# ecg-arrhythmia (Chapman-Shaoxing / Ningbo) 12-lead database. Extend as
+# finding coverage grows; unmapped codes are ignored during scoring.
+SNOMED_TO_CODE = {
+    "426783006": "sinus_rhythm",
+    "426177001": "sinus_bradycardia",
+    "427084000": "sinus_tachycardia",
+    "164889003": "atrial_fibrillation",
+    "164890007": "atrial_flutter",
+    "270492004": "first_degree_av_block",
+    "27885002": "complete_av_block",
+    "733534002": "lbbb", "164909002": "lbbb",
+    "713427006": "rbbb", "59118001": "rbbb",
+    "164931005": "st_elevation",
+    "429622005": "st_depression",
+    "39732003": "left_axis_deviation",
+    "47665007": "right_axis_deviation",
+    "164873001": "lvh",
+    "251146004": "low_qrs_voltage",
+    "111975006": "long_qt",
+}
+
+
+def snomed_dx_to_codes(dx_codes) -> set[str]:
+    """Map a list of SNOMED-CT ids (str/int) to CardioLens finding codes."""
+    return {SNOMED_TO_CODE[str(c).strip()] for c in dx_codes
+            if str(c).strip() in SNOMED_TO_CODE}
+
+
+def parse_dx_from_header(header_text: str) -> list[str]:
+    """Extract SNOMED-CT diagnosis ids from a WFDB header's ``#Dx:`` comment.
+
+    ecg-arrhythmia stores labels as a header comment, e.g. ``#Dx: 426783006,39732003``.
+    """
+    for line in header_text.splitlines():
+        s = line.strip()
+        if s.lower().startswith("#dx:"):
+            payload = s.split(":", 1)[1]
+            return [c.strip() for c in payload.replace(";", ",").split(",") if c.strip()]
+    return []
+
+
+def build_ecg_arrhythmia_dataset(root, limit: int = 50) -> list[LabeledCase]:  # pragma: no cover
+    """Load the PhysioNet ecg-arrhythmia (Chapman/Ningbo) dataset from a local checkout.
+
+    Expects WFDB records (``.hea`` + ``.mat``) under ``root`` (e.g. the
+    ``WFDBRecords/`` tree). Diagnostic labels come from each header's ``#Dx:``
+    SNOMED-CT comment, mapped via ``SNOMED_TO_CODE``. Runs only when the dataset
+    is present locally — PhysioNet is not reachable from this environment
+    (egress policy); see docs/CLINICAL_REFERENCES.md for how to obtain it.
+    """
+    from cardiolens.layer1_ingestion import load_wfdb
+
+    root = Path(root)
+    headers = sorted(root.rglob("*.hea"))[:limit]
+    cases: list[LabeledCase] = []
+    for hea in headers:
+        gold = snomed_dx_to_codes(parse_dx_from_header(hea.read_text(encoding="utf-8")))
+        try:
+            sig = load_wfdb(hea.with_suffix(""))
+        except Exception:  # noqa: S112 - skip unreadable records, keep validating the rest
+            continue
+        cases.append(LabeledCase(sig, gold, name=f"ecgarr_{hea.stem}"))
+    return cases

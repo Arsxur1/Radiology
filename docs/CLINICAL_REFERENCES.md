@@ -54,6 +54,23 @@ Bold rows are the criteria added in the clinical-knowledge increment; the rest
 predate it. Editing a threshold in `configs/norms/*.yaml` or adding a chain to
 `configs/rules/pathophysiology.yaml` updates the behaviour without code changes.
 
+## Validation datasets
+
+- **PTB-XL** (physionet.org/content/ptb-xl) — 12-lead, SCP-ECG labels. Adapter:
+  `validation.build_ptbxl_dataset`.
+- **ecg-arrhythmia / Chapman-Shaoxing + Ningbo**
+  (physionet.org/content/ecg-arrhythmia/1.0.0) — ~45k 10-second 12-lead records
+  (WFDB `.hea`+`.mat`) with SNOMED-CT diagnostic labels. Adapter:
+  `validation.build_ecg_arrhythmia_dataset`; SNOMED→finding mapping in
+  `validation.SNOMED_TO_CODE`.
+
+> **PhysioNet is not reachable from this environment** — its host is not on the
+> egress allowlist, so these datasets can't be downloaded here. To validate on
+> them, either (a) grant the environment's network policy access to
+> `physionet.org`, or (b) obtain a local checkout and point the harness at it:
+> `python -m cardiolens.validate --ecg-arrhythmia <local-root>` (or `--ptbxl`).
+> The adapters and SNOMED/SCP mappings are unit-tested and ready.
+
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is
 not clinically validated and is not a medical device. Every report carries the
