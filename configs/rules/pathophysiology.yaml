@@ -141,3 +141,53 @@ rules:
       - { from: "st_elevation", to: "reciprocal_change", relation: "reciprocal" }
     explanation_ru: "Элевация ST по территории коронарной артерии; реципрокные изменения подтверждают острую окклюзию."
     explanation_uz: "Koronar arteriya hududi bo'yicha ST elevatsiyasi; retsiprok o'zgarishlar o'tkir okklyuziyani tasdiqlaydi."
+
+  - id: "pericarditis_chain"
+    label_ru: "Острый перикардит"
+    label_uz: "O'tkir perikardit"
+    trigger_findings: ["pericarditis"]
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "pericardial_inflammation", kind: "cause", label_ru: "Воспаление перикарда", label_uz: "Perikard yallig'lanishi" }
+      - { id: "pericarditis", kind: "finding", label_ru: "Диффузная элевация ST", label_uz: "Diffuz ST elevatsiyasi" }
+      - { id: "pr_depression", kind: "finding", label_ru: "Депрессия PR", label_uz: "PR depressiyasi" }
+    edges:
+      - { from: "pericardial_inflammation", to: "pericarditis", relation: "causes" }
+      - { from: "pericarditis", to: "pr_depression", relation: "progresses_to" }
+    explanation_ru: "Диффузная (не территориальная) элевация ST с депрессией PR и без реципрокных изменений типична для перикардита, а не ОКС."
+    explanation_uz: "Diffuz (hududiy emas) ST elevatsiyasi PR depressiyasi bilan va retsiprok o'zgarishlarsiz — perikardit uchun tipik, OKS emas."
+
+  - id: "hypocalcemia_long_qt"
+    label_ru: "Гипокальциемия"
+    label_uz: "Gipokalsiyemiya"
+    trigger_findings: ["long_qt"]
+    context_support: { calcium_max: 2.1 }
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "hypocalcemia", kind: "cause", label_ru: "Гипокальциемия", label_uz: "Gipokalsiyemiya" }
+      - { id: "st_prolongation", kind: "mechanism", label_ru: "Удлинение сегмента ST", label_uz: "ST segmenti uzayishi" }
+      - { id: "long_qt", kind: "finding", label_ru: "Удлинение QT", label_uz: "QT uzayishi" }
+    edges:
+      - { from: "hypocalcemia", to: "st_prolongation", relation: "causes" }
+      - { from: "st_prolongation", to: "long_qt", relation: "progresses_to" }
+    explanation_ru: "Гипокальциемия удлиняет сегмент ST → удлинение QT (при низком уровне кальция)."
+    explanation_uz: "Gipokalsiyemiya ST segmentini uzaytiradi → QT uzayishi (past kalsiy darajasida)."
+
+  - id: "hypercalcemia_short_qt"
+    label_ru: "Гиперкальциемия"
+    label_uz: "Giperkalsiyemiya"
+    trigger_findings: ["short_qt"]
+    context_support: { calcium_min: 2.6 }
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "hypercalcemia", kind: "cause", label_ru: "Гиперкальциемия", label_uz: "Giperkalsiyemiya" }
+      - { id: "st_shortening", kind: "mechanism", label_ru: "Укорочение сегмента ST", label_uz: "ST segmenti qisqarishi" }
+      - { id: "short_qt", kind: "finding", label_ru: "Укорочение QT", label_uz: "QT qisqarishi" }
+    edges:
+      - { from: "hypercalcemia", to: "st_shortening", relation: "causes" }
+      - { from: "st_shortening", to: "short_qt", relation: "progresses_to" }
+    explanation_ru: "Гиперкальциемия укорачивает сегмент ST → укорочение QT (при высоком уровне кальция)."
+    explanation_uz: "Giperkalsiyemiya ST segmentini qisqartiradi → QT qisqarishi (yuqori kalsiy darajasida)."

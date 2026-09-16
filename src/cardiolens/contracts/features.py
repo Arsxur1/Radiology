@@ -64,6 +64,8 @@ class Measurements(BaseModel):
     qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak
     atrial_rate_bpm: float | None = None          # P/flutter-wave rate (TZ §7.1)
     av_dissociation: bool | None = None           # complete AV block signal (TZ §7.1)
+    p_wave_duration_ms: float | None = None       # atrial enlargement (P-mitrale)
+    p_wave_amplitude_uv: float | None = None      # atrial enlargement (P-pulmonale)
     n_beats: int = 0
     r_peaks_samples: list[int] = Field(default_factory=list)
     intervals: Intervals = Field(default_factory=Intervals)

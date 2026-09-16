@@ -34,3 +34,8 @@ st_uv:
   # ST deviation thresholds at J+60ms, microvolts.
   elevation_significant: 100
   depression_significant: 100
+
+# P-wave criteria for atrial enlargement (ecglibrary / 150 ECG Problems).
+p_wave:
+  duration_upper_ms: 120       # > 120 ms -> left atrial enlargement (P-mitrale)
+  amplitude_upper_uv: 250      # > 250 µV in lead II -> right atrial enlargement (P-pulmonale)

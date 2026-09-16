@@ -199,6 +199,7 @@ def detect_findings(
     # ------------------------------------------------------------------ #
     _axis_findings(m, norms, fs)
     _low_voltage_findings(m, norms, fs)
+    _atrial_enlargement_findings(m, norms, fs)
 
     # ------------------------------------------------------------------ #
     # Artifact hypothesis from Layer 2 (TZ §5, feeds §8.3)
@@ -239,6 +240,51 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
             label_ru=f"Укорочение QT (QTc {qtc} мс)",
             label_uz=f"QT qisqarishi (QTc {qtc} ms)",
             evidence=_ev(qtc_bazett_ms=qtc, lower=short_lower), confidence=0.7,
+        ))
+
+
+def _territorial_st_elevation(elevated, depressed, elev, fs: FindingSet) -> None:
+    """Focal (single-territory) ST elevation → STEMI with reciprocal check (§8.1)."""
+    terr = _territory_of(set(elevated))
+    if terr:
+        ru, uz, recip = terr
+        recip_present = sorted(recip & set(depressed))
+        recip_txt = f"; реципрокная депрессия в {', '.join(recip_present)}" if recip_present else ""
+        fs.findings.append(Finding(
+            code="st_elevation", group="ischemia",
+            label_ru=f"Элевация ST, {ru} территория ({', '.join(elevated)}){recip_txt}",
+            label_uz=f"ST elevatsiyasi, {uz} hudud ({', '.join(elevated)})",
+            evidence=_ev(leads=",".join(elevated), territory=ru,
+                         reciprocal=",".join(recip_present) or "none"), confidence=0.8,
+        ))
+    else:
+        fs.findings.append(Finding(
+            code="st_elevation", group="ischemia",
+            label_ru=f"Элевация ST ({', '.join(elevated)})",
+            label_uz=f"ST elevatsiyasi ({', '.join(elevated)})",
+            evidence=_ev(leads=",".join(elevated), threshold_uv=elev), confidence=0.75,
+        ))
+
+
+def _atrial_enlargement_findings(m: Measurements, norms, fs: FindingSet) -> None:
+    """Left/right atrial enlargement from P-wave duration/amplitude (TZ §7.4)."""
+    pw = norms.get("p_wave", {})
+    dur_hi, amp_hi = pw.get("duration_upper_ms"), pw.get("amplitude_upper_uv")
+    if dur_hi and m.p_wave_duration_ms is not None and m.p_wave_duration_ms > dur_hi:
+        fs.findings.append(Finding(
+            code="left_atrial_enlargement", group="hypertrophy",
+            label_ru=f"Увеличение левого предсердия (P-mitrale, {m.p_wave_duration_ms} мс)",
+            label_uz=f"Chap bo'lmacha kattalashuvi (P-mitrale, {m.p_wave_duration_ms} ms)",
+            evidence=_ev(p_wave_duration_ms=m.p_wave_duration_ms, threshold=dur_hi),
+            confidence=0.65,
+        ))
+    if amp_hi and m.p_wave_amplitude_uv is not None and m.p_wave_amplitude_uv > amp_hi:
+        fs.findings.append(Finding(
+            code="right_atrial_enlargement", group="hypertrophy",
+            label_ru=f"Увеличение правого предсердия (P-pulmonale, {m.p_wave_amplitude_uv} мкВ)",
+            label_uz=f"O'ng bo'lmacha kattalashuvi (P-pulmonale, {m.p_wave_amplitude_uv} µV)",
+            evidence=_ev(p_wave_amplitude_uv=m.p_wave_amplitude_uv, threshold=amp_hi),
+            confidence=0.65,
         ))
 
 
@@ -345,26 +391,20 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
         elif st.j_point_uv <= -depr:
             depressed.append(st.lead)
     if len(elevated) >= 2:
-        # Map to a coronary territory and check for reciprocal ST depression (§8.1).
-        terr = _territory_of(set(elevated))
-        if terr:
-            ru, uz, recip = terr
-            recip_present = sorted(recip & set(depressed))
-            recip_txt = f"; реципрокная депрессия в {', '.join(recip_present)}" if recip_present else ""
+        # Diffuse ST elevation across >=2 coronary territories (and no single
+        # reciprocal territory) points to pericarditis, not a focal STEMI — a
+        # classic mimic distinction (ecglibrary / 150 ECG Problems).
+        n_terr = sum(1 for _, _, leads, _ in _TERRITORIES if len(set(elevated) & leads) >= 2)
+        if n_terr >= 2 and len(depressed) == 0:
             fs.findings.append(Finding(
-                code="st_elevation", group="ischemia",
-                label_ru=f"Элевация ST, {ru} территория ({', '.join(elevated)}){recip_txt}",
-                label_uz=f"ST elevatsiyasi, {uz} hudud ({', '.join(elevated)})",
-                evidence=_ev(leads=",".join(elevated), territory=ru,
-                             reciprocal=",".join(recip_present) or "none"), confidence=0.8,
+                code="pericarditis", group="other",
+                label_ru=f"Диффузная элевация ST — перикардит? ({', '.join(elevated)})",
+                label_uz=f"Diffuz ST elevatsiyasi — perikardit? ({', '.join(elevated)})",
+                evidence=_ev(leads=",".join(elevated), territories=n_terr,
+                             reciprocal="none"), confidence=0.6,
             ))
         else:
-            fs.findings.append(Finding(
-                code="st_elevation", group="ischemia",
-                label_ru=f"Элевация ST ({', '.join(elevated)})",
-                label_uz=f"ST elevatsiyasi ({', '.join(elevated)})",
-                evidence=_ev(leads=",".join(elevated), threshold_uv=elev), confidence=0.75,
-            ))
+            _territorial_st_elevation(elevated, depressed, elev, fs)
     if len(depressed) >= 2:
         fs.findings.append(Finding(
             code="st_depression", group="ischemia",

@@ -99,6 +99,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
         waves = _delineate(cleaned, rpeaks, fs)
         if waves is not None:
             p_on = np.asarray(waves.get("ECG_P_Onsets", []), dtype=float)
+            p_off = np.asarray(waves.get("ECG_P_Offsets", []), dtype=float)
             qrs_on = np.asarray(waves.get("ECG_R_Onsets", []), dtype=float)
             qrs_off = np.asarray(waves.get("ECG_R_Offsets", []), dtype=float)
             t_off = np.asarray(waves.get("ECG_T_Offsets", []), dtype=float)
@@ -121,6 +122,11 @@ def measure(sig: SignalRepresentation) -> Measurements:
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
+            # P-wave duration/amplitude for atrial enlargement (P-mitrale/-pulmonale).
+            pdur = [(p_off[i] - p_on[i]) for i in range(min(len(p_on), len(p_off)))
+                    if np.isfinite(p_on[i]) and np.isfinite(p_off[i]) and p_off[i] > p_on[i]]
+            m.p_wave_duration_ms = _median_ms(pdur, fs)
+            m.p_wave_amplitude_uv = _p_amplitude(sig, p_on, p_off)
             # ST measured off QRS offsets (J points), baseline from PR segment.
             _measure_st(sig, qrs_on, qrs_off, m)
         else:
@@ -222,6 +228,23 @@ def _v1_terminal_positive(sig: SignalRepresentation, rpeaks: np.ndarray, fs: flo
     if not vals:
         return None
     return bool(np.median(vals) > 0)
+
+
+def _p_amplitude(sig: SignalRepresentation, p_on: np.ndarray, p_off: np.ndarray) -> float | None:
+    """Median P-wave amplitude in lead II (µV) — P-pulmonale if tall."""
+    if "II" not in sig.lead_names:
+        return None
+    row = sig.lead("II")
+    baseline = float(np.median(row))
+    amps = []
+    n = min(len(p_on), len(p_off))
+    for i in range(n):
+        a, b = p_on[i], p_off[i]
+        if np.isfinite(a) and np.isfinite(b) and 0 <= a < b < len(row):
+            seg = row[int(a):int(b)] - baseline
+            if seg.size:
+                amps.append(float(np.max(seg)))
+    return round(float(np.median(amps)), 1) if amps else None
 
 
 def _limb_qrs_amplitude(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
