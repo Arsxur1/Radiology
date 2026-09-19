@@ -58,6 +58,24 @@ def test_atrial_fibrillation():
     assert "atrial_fibrillation" in _find(m).codes()
 
 
+def test_atrial_fibrillation_detected_despite_present_p_ratio():
+    # Automated delineation labels a "P" for nearly every beat even in AF, so
+    # p_wave_ratio stays high on real records. Detection must ride the irregular-
+    # irregular RR pattern, not a hard P-absence gate (regression: this used to
+    # silently suppress every real-data AF, giving 0.0 sensitivity on PTB-XL).
+    m = Measurements(heart_rate_bpm=95, rhythm_regular=False, rr_cv=0.28,
+                     p_wave_ratio=0.95,
+                     intervals=Intervals(pr_ms=None, qrs_ms=90, qt_ms=360, qtc_bazett_ms=430))
+    assert "atrial_fibrillation" in _find(m).codes()
+
+
+def test_regular_rhythm_is_not_atrial_fibrillation():
+    m = Measurements(heart_rate_bpm=72, rhythm_regular=True, rr_cv=0.30,
+                     p_wave_ratio=0.1,
+                     intervals=Intervals(pr_ms=150, qrs_ms=90, qt_ms=380, qtc_bazett_ms=415))
+    assert "atrial_fibrillation" not in _find(m).codes()
+
+
 def test_normal_measurements_no_conduction_findings():
     m = Measurements(heart_rate_bpm=72, rhythm_regular=True, rr_cv=0.03,
                      p_wave_ratio=1.0, qrs_v1_terminal_positive=True,

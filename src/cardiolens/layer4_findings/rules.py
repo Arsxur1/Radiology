@@ -19,6 +19,13 @@ from cardiolens.contracts.signal import SignalRepresentation
 # Precordial leads where juvenile T-inversion is a normal variant in children.
 _PEDIATRIC_TINV_OK = {"V1", "V2", "V3", "V4"}
 
+# Minimum RR coefficient of variation for an "irregularly-irregular" rhythm to be
+# called atrial fibrillation. Tuned on a labelled PTB-XL subset: 0.15 recalls
+# ~0.82 of AF at ~0.82 specificity — the knee of the sens/spec curve. AF is
+# flagged at moderate confidence ("exclude AF"), so a false positive costs a
+# review, not a misdiagnosis.
+_AFIB_RR_CV_MIN = 0.15
+
 # Coronary territories and their reciprocal leads (TZ §7.2, §8.1).
 _TERRITORIES = [
     ("нижняя", "pastki", {"II", "III", "aVF"}, {"I", "aVL"}),
@@ -123,14 +130,21 @@ def detect_findings(
     _conduction_findings(m, norms, fs)
     _qt_findings(iv, norms, is_pediatric, sig, fs)
 
-    # Atrial fibrillation: irregularly-irregular rhythm with absent P waves (§7.1).
-    if (m.rhythm_regular is False and (m.rr_cv or 0) > 0.15
-            and m.p_wave_ratio is not None and m.p_wave_ratio < 0.3):
+    # Atrial fibrillation: irregularly-irregular rhythm (§7.1). Absent/chaotic P
+    # waves are the classic confirmatory sign, but automated P-wave delineation is
+    # unreliable in AF — a delineator labels a "P" for almost every beat even when
+    # none is organised, so on real records ``p_wave_ratio`` stays near 1.0 and a
+    # hard P-absence gate silently suppresses every detection. So the irregularly-
+    # irregular RR pattern is the primary criterion; a genuinely low P-wave ratio
+    # only raises confidence rather than being required.
+    if m.rhythm_regular is False and (m.rr_cv or 0) >= _AFIB_RR_CV_MIN:
+        p_absent = m.p_wave_ratio is not None and m.p_wave_ratio < 0.3
         fs.findings.append(Finding(
             code="atrial_fibrillation", group="rhythm",
-            label_ru="Фибрилляция предсердий (нерегулярный ритм, отсутствие P)",
-            label_uz="Bo'lmachalar fibrillyatsiyasi (notekis ritm, P yo'q)",
-            evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio), confidence=0.7,
+            label_ru="Фибрилляция предсердий (нерегулярно-нерегулярный ритм)",
+            label_uz="Bo'lmachalar fibrillyatsiyasi (notekis-notekis ritm)",
+            evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio),
+            confidence=0.8 if p_absent else 0.6,
         ))
 
     # Complete (third-degree) AV block: atrioventricular dissociation (§7.1, §10).
