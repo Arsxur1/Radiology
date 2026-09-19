@@ -62,6 +62,14 @@ class Measurements(BaseModel):
     p_wave_ratio: float | None = None         # fraction of beats with a detected P
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
     qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak
+    # NOT YET MEASURED (always None): Layer 3 has no robust estimator for these,
+    # so the atrial-flutter and complete-AV-block rules that consume them are
+    # currently inert. Flutter needs ventricular-QRS cancellation + atrial-
+    # organisation analysis (a single-lead FFT peak in the flutter band false-
+    # positives on ~1/4 of non-flutter records — validated on ecg-arrhythmia,
+    # n=67); complete AV block needs P-to-QRS association. Both are v2 (see
+    # DECISIONS.md D15a). Leaving them None keeps the rules from firing on
+    # fabricated inputs (§0).
     atrial_rate_bpm: float | None = None          # P/flutter-wave rate (TZ §7.1)
     av_dissociation: bool | None = None           # complete AV block signal (TZ §7.1)
     p_wave_duration_ms: float | None = None       # atrial enlargement (P-mitrale)

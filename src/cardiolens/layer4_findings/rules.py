@@ -148,6 +148,8 @@ def detect_findings(
         ))
 
     # Complete (third-degree) AV block: atrioventricular dissociation (§7.1, §10).
+    # NOTE: m.av_dissociation is not yet measured by Layer 3 (always None), so this
+    # rule is currently inert — see Measurements.av_dissociation / DECISIONS.md D15a.
     if m.av_dissociation is True:
         fs.findings.append(Finding(
             code="complete_av_block", group="rhythm",
@@ -158,6 +160,8 @@ def detect_findings(
         ))
 
     # Atrial flutter: regular atrial rate ~250-350/min (sawtooth) (§7.1).
+    # NOTE: m.atrial_rate_bpm is not yet measured by Layer 3 (always None), so this
+    # rule is currently inert — see Measurements.atrial_rate_bpm / DECISIONS.md D15a.
     if m.atrial_rate_bpm is not None and 240 <= m.atrial_rate_bpm <= 360:
         fs.findings.append(Finding(
             code="atrial_flutter", group="rhythm",
