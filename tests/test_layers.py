@@ -7,6 +7,7 @@ from cardiolens.layer1_ingestion import generate_synthetic_ecg
 from cardiolens.layer2_preprocess import assess_quality, detect_la_ra_reversal, preprocess
 from cardiolens.layer3_measure import measure
 from cardiolens.layer3_measure.intervals import qtc_bazett, qtc_fridericia
+from cardiolens.layer3_measure.measure import _median_ms
 from cardiolens.layer4_findings import detect_findings
 from cardiolens.layer5_causal import analyze
 from cardiolens.safety import scan_critical
@@ -39,6 +40,19 @@ def test_qrs_axis_and_intervals_plausible():
     m, _, _ = _run(generate_synthetic_ecg(heart_rate_bpm=75))
     assert 60 <= m.intervals.qrs_ms <= 110
     assert -30 <= m.axes.qrs_deg <= 90
+
+
+def test_median_ms_rejects_implausible_beats():
+    # Per-beat delineation outliers (a "PR" of ~70 ms, a negative QT) must be
+    # dropped before the median so one bad fiducial can't drag the interval.
+    fs = 500.0  # 1 ms = 0.5 samples
+    good = [150 * fs / 1000, 152 * fs / 1000, 148 * fs / 1000]  # ~150 ms PRs
+    noise = [70 * fs / 1000, -40 * fs / 1000]                   # impossible
+    assert _median_ms(good + noise, fs, lo_ms=80, hi_ms=400) == pytest.approx(150)
+    # Everything out of window -> no estimate rather than a fabricated one.
+    assert _median_ms(noise, fs, lo_ms=80, hi_ms=400) is None
+    # No bounds -> plain median (back-compat): 200 samples at 1 kHz = 200 ms.
+    assert _median_ms([100, 200, 300], 1000.0) == pytest.approx(200)
 
 
 # --- QTc formulas ---

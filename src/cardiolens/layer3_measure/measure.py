@@ -41,11 +41,25 @@ def _pick_rhythm_lead(sig: SignalRepresentation) -> int:
     return 0
 
 
-def _median_ms(values: list[float], fs: float) -> float | None:
-    vals = [v for v in values if v is not None and np.isfinite(v)]
+def _median_ms(
+    values: list[float], fs: float, *, lo_ms: float | None = None, hi_ms: float | None = None
+) -> float | None:
+    """Median of per-beat interval samples, in ms.
+
+    Beat-level delineation on real records throws physiologically impossible
+    values — a P onset landing just before the QRS yields a "PR" of ~70 ms, a
+    missed T offset a negative QT. ``lo_ms``/``hi_ms`` drop per-beat values
+    outside a plausible window before the median, so a handful of bad fiducials
+    on one beat can't drag the whole record's interval down (or up).
+    """
+    vals = [v / fs * 1000.0 for v in values if v is not None and np.isfinite(v)]
+    if lo_ms is not None:
+        vals = [v for v in vals if v >= lo_ms]
+    if hi_ms is not None:
+        vals = [v for v in vals if v <= hi_ms]
     if not vals:
         return None
-    return float(np.median(vals) / fs * 1000.0)
+    return float(np.median(vals))
 
 
 def _delineate(cleaned: np.ndarray, rpeaks: np.ndarray, fs: float):
@@ -114,10 +128,12 @@ def measure(sig: SignalRepresentation) -> Measurements:
                 if np.isfinite(qrs_on[i]) and np.isfinite(t_off[i]):
                     qt_list.append(t_off[i] - qrs_on[i])
 
+            # Physiologic per-beat windows: reject delineation outliers before
+            # the median (PR/QRS/QT can't fall outside these on a real ECG).
             m.intervals = Intervals(
-                pr_ms=_median_ms(pr_list, fs),
-                qrs_ms=_median_ms(qrs_list, fs),
-                qt_ms=_median_ms(qt_list, fs),
+                pr_ms=_median_ms(pr_list, fs, lo_ms=80, hi_ms=400),
+                qrs_ms=_median_ms(qrs_list, fs, lo_ms=40, hi_ms=200),
+                qt_ms=_median_ms(qt_list, fs, lo_ms=200, hi_ms=700),
             )
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
@@ -125,7 +141,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
             # P-wave duration/amplitude for atrial enlargement (P-mitrale/-pulmonale).
             pdur = [(p_off[i] - p_on[i]) for i in range(min(len(p_on), len(p_off)))
                     if np.isfinite(p_on[i]) and np.isfinite(p_off[i]) and p_off[i] > p_on[i]]
-            m.p_wave_duration_ms = _median_ms(pdur, fs)
+            m.p_wave_duration_ms = _median_ms(pdur, fs, lo_ms=40, hi_ms=200)
             m.p_wave_amplitude_uv = _p_amplitude(sig, p_on, p_off)
             # ST measured off QRS offsets (J points), baseline from PR segment.
             _measure_st(sig, qrs_on, qrs_off, m)
