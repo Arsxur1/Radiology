@@ -364,15 +364,21 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
             evidence=_ev(pr_ms=iv.pr_ms, qrs_ms=iv.qrs_ms), confidence=0.7,
         ))
         return
+    # A *complete* bundle-branch block needs a fully widened QRS. Between the
+    # upper norm and the complete-block threshold the QRS is only a nonspecific
+    # (or incomplete) conduction delay — typing it as a full RBBB/LBBB is the main
+    # source of false positives on real records.
+    block_min = norms.get("intervals_ms", {}).get("qrs_complete_block")
     term = m.qrs_v1_terminal_positive
-    if term is True:
+    complete = block_min is not None and iv.qrs_ms >= block_min
+    if complete and term is True:
         fs.findings.append(Finding(
             code="rbbb", group="interval",
             label_ru=f"Полная блокада правой ножки (QRS {iv.qrs_ms} мс, RSR' в V1)",
             label_uz=f"O'ng oyoqcha to'liq blokadasi (QRS {iv.qrs_ms} ms, V1 da RSR')",
             evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="positive"), confidence=0.72,
         ))
-    elif term is False:
+    elif complete and term is False:
         fs.findings.append(Finding(
             code="lbbb", group="interval",
             label_ru=f"Полная блокада левой ножки (QRS {iv.qrs_ms} мс)",
@@ -382,8 +388,8 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
     else:
         fs.findings.append(Finding(
             code="wide_qrs_nonspecific", group="interval",
-            label_ru=f"Расширение QRS ({iv.qrs_ms} мс)",
-            label_uz=f"QRS kengayishi ({iv.qrs_ms} ms)",
+            label_ru=f"Неспецифическое расширение QRS ({iv.qrs_ms} мс)",
+            label_uz=f"Nospetsifik QRS kengayishi ({iv.qrs_ms} ms)",
             evidence=_ev(qrs_ms=iv.qrs_ms, norm_high=qrs_hi), confidence=0.8,
         ))
 

@@ -51,6 +51,17 @@ def test_lbbb_from_negative_v1_terminal():
     assert "lbbb" in codes and "rbbb" not in codes
 
 
+def test_borderline_wide_qrs_is_nonspecific_not_complete_block():
+    # 110–120 ms is a nonspecific/incomplete conduction delay, not a complete
+    # bundle-branch block — the biggest false-positive source on real records.
+    m = Measurements(heart_rate_bpm=75, rhythm_regular=True,
+                     qrs_v1_terminal_positive=False,
+                     intervals=Intervals(pr_ms=160, qrs_ms=114, qt_ms=400, qtc_bazett_ms=430))
+    codes = _find(m).codes()
+    assert "lbbb" not in codes and "rbbb" not in codes
+    assert "wide_qrs_nonspecific" in codes
+
+
 def test_atrial_fibrillation():
     m = Measurements(heart_rate_bpm=95, rhythm_regular=False, rr_cv=0.28,
                      p_wave_ratio=0.1,

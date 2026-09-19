@@ -11,6 +11,9 @@ intervals_ms:
   pr: [120, 200]
   qrs: [70, 110]
   qt: [350, 450]
+  # Complete bundle-branch block requires a fully widened QRS; 110–120 ms is a
+  # nonspecific/incomplete conduction delay, not a complete block.
+  qrs_complete_block: 120
   # QTc thresholds are sex-specific below.
 
 qtc_ms:
