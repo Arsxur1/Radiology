@@ -75,8 +75,20 @@ def _delineate(cleaned: np.ndarray, rpeaks: np.ndarray, fs: float):
         return None
 
 
-def measure(sig: SignalRepresentation) -> Measurements:
-    """Full Layer-3 measurement pass (TZ §6)."""
+def _apply_correction(value: float | None, offset: float) -> float | None:
+    """Re-centre a measured interval by the calibrated fiducial-bias offset (ms)."""
+    if value is None or not offset:
+        return value
+    return round(value + offset, 1)
+
+
+def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
+    """Full Layer-3 measurement pass (TZ §6).
+
+    ``correction`` is an optional object with ``pr_ms``/``qrs_ms``/``qt_ms`` offsets
+    (a ``DelineationCorrection``) that re-centre the measured intervals against the
+    delineator's systematic fiducial bias (DECISIONS.md D15a). None = no correction.
+    """
     import neurokit2 as nk
 
     fs = sig.sampling_rate_hz
@@ -130,11 +142,15 @@ def measure(sig: SignalRepresentation) -> Measurements:
 
             # Physiologic per-beat windows: reject delineation outliers before
             # the median (PR/QRS/QT can't fall outside these on a real ECG).
-            m.intervals = Intervals(
-                pr_ms=_median_ms(pr_list, fs, lo_ms=80, hi_ms=400),
-                qrs_ms=_median_ms(qrs_list, fs, lo_ms=40, hi_ms=200),
-                qt_ms=_median_ms(qt_list, fs, lo_ms=200, hi_ms=700),
-            )
+            pr_ms = _median_ms(pr_list, fs, lo_ms=80, hi_ms=400)
+            qrs_ms = _median_ms(qrs_list, fs, lo_ms=40, hi_ms=200)
+            qt_ms = _median_ms(qt_list, fs, lo_ms=200, hi_ms=700)
+            # Re-centre against the delineator's measured fiducial bias (D15a).
+            if correction is not None:
+                pr_ms = _apply_correction(pr_ms, getattr(correction, "pr_ms", 0.0))
+                qrs_ms = _apply_correction(qrs_ms, getattr(correction, "qrs_ms", 0.0))
+                qt_ms = _apply_correction(qt_ms, getattr(correction, "qt_ms", 0.0))
+            m.intervals = Intervals(pr_ms=pr_ms, qrs_ms=qrs_ms, qt_ms=qt_ms)
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)

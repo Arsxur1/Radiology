@@ -48,6 +48,16 @@ class Preprocessing(BaseModel):
     sqi_accept_threshold: float
 
 
+class DelineationCorrection(BaseModel):
+    """Additive calibration (ms) for Layer-3 intervals — corrects the systematic
+    fiducial bias of the neurokit2 delineator, measured against LUDB expert
+    annotations (see DECISIONS.md D15a). Added to the measured interval; 0 = off.
+    """
+    pr_ms: float = 0.0
+    qrs_ms: float = 0.0
+    qt_ms: float = 0.0
+
+
 class Versions(BaseModel):
     schema_version: str = Field(alias="schema")
     rules_base: str
@@ -62,6 +72,7 @@ class AppConfig(BaseModel):
     confidence: ConfidenceGates
     disclaimers: Disclaimers
     versions: Versions
+    delineation_correction: DelineationCorrection = DelineationCorrection()
 
 
 @functools.lru_cache(maxsize=1)

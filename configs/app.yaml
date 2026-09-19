@@ -16,6 +16,26 @@ preprocessing:
   # Signal Quality Index below this marks a lead as low-quality (0..1).
   sqi_accept_threshold: 0.5
 
+# Additive calibration (ms) for the delineator's systematic fiducial bias,
+# measured against LUDB expert annotations (DECISIONS.md D15a): the dwt
+# delineator places P onset ~34 ms late (PR under-measured) and the QRS
+# boundaries ~8 ms wide. These offsets re-centre the intervals; set to 0 to
+# disable. NOT a clinical threshold change — the thresholds stay put.
+delineation_correction:
+  # PR is under-measured by ~34 ms (LUDB bias -34; the synthetic ground truth
+  # agrees, MAE 41->7 after this offset). Correcting it recovers first-degree
+  # AV block (sens 0.17->0.42 on the PTB-XL subset) without touching the >200 ms
+  # clinical threshold.
+  pr_ms: 34.0
+  # QRS and QT left uncorrected. The QRS bias is smaller (+8 ms) with high
+  # per-record variance (MAE 16), and a global -8 ms offset trims genuinely-wide
+  # complete-RBBB below the block threshold (rbbb sens 0.50->0.37) for little net
+  # gain — BBB specificity is already handled by qrs_complete_block. The LUDB QT
+  # bias (~-11 ms) disagrees with the synthetic ground truth, so a global QT
+  # offset does more harm than good.
+  qrs_ms: 0.0
+  qt_ms: 0.0
+
 # Confidence gating for autonomous mode B (TZ §2, §16).
 confidence:
   # Autonomous report is emitted only if overall confidence >= this.

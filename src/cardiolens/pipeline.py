@@ -77,8 +77,9 @@ def run_pipeline(
     quality_ok = _quality_ok(quality, pp.sqi_accept_threshold)
     audit.append(f"[L2] SQI mean-ok={quality_ok}, flags={quality.flags}")
 
-    # Layer 3 — measurements (TZ §6).
-    m = measure(sig)
+    # Layer 3 — measurements (TZ §6), re-centred by the configured fiducial-bias
+    # correction (DECISIONS.md D15a).
+    m = measure(sig, correction=cfg.delineation_correction)
     audit.append(
         f"[L3] HR={m.heart_rate_bpm} PR={m.intervals.pr_ms} "
         f"QRS={m.intervals.qrs_ms} QTcB={m.intervals.qtc_bazett_ms}"

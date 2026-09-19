@@ -55,6 +55,16 @@ def test_median_ms_rejects_implausible_beats():
     assert _median_ms([100, 200, 300], 1000.0) == pytest.approx(200)
 
 
+def test_delineation_correction_shifts_pr():
+    from cardiolens.config import DelineationCorrection
+
+    sig, _ = _prep(generate_synthetic_ecg(heart_rate_bpm=70, pr_ms=160))
+    base = measure(sig).intervals.pr_ms
+    shifted = measure(sig, correction=DelineationCorrection(pr_ms=34.0)).intervals.pr_ms
+    assert base is not None and shifted is not None
+    assert shifted == pytest.approx(base + 34.0, abs=0.1)
+
+
 # --- QTc formulas ---
 def test_qtc_formulas():
     # QT 400ms at RR 1s -> Bazett == 400, Fridericia == 400.
