@@ -67,6 +67,15 @@ def test_real_dataset_scored_labels_derive_from_maps():
     assert {"rbbb", "lbbb", "atrial_fibrillation", "lvh"} <= set(PTBXL_SCORED_LABELS)
 
 
+def test_ptbxl_st_mapping_uses_st_codes_not_mi_scars():
+    # ST elevation gold must come from the SCP ST-elevation statement, not the
+    # MI-superclass codes (usually chronic Q-wave scars without a current injury
+    # current) — mapping those to acute ST elevation mislabels the benchmark.
+    assert PTBXL_SCP_TO_CODE.get("STE_") == "st_elevation"
+    assert PTBXL_SCP_TO_CODE.get("STD_") == "st_depression"
+    assert "AMI" not in PTBXL_SCP_TO_CODE and "IMI" not in PTBXL_SCP_TO_CODE
+
+
 def test_explicit_labels_override_is_scored():
     # run_validation must score exactly the labels passed, in support order.
     report = run_validation(build_synthetic_dataset(), labels=["st_elevation"])

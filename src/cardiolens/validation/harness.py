@@ -43,9 +43,16 @@ SCORED_LABELS = [
 # so the scored-label set can be derived from it (below) and so tests can assert
 # the mapping directly. Extend as finding coverage grows; codes we don't map are
 # ignored during scoring rather than counted as misses.
+#
+# ST elevation maps from ``STE_`` (the SCP "non-specific ST elevation" statement),
+# NOT from the MI-superclass codes (AMI/IMI/…). Those denote an infarction pattern
+# that is usually chronic — old Q-wave scars without a current injury current — so
+# scoring them as acute ST elevation mislabels the gold and understates the
+# detector. Likewise ``STD_`` -> st_depression. We have no "old MI" finding, so MI
+# codes are intentionally left unmapped (scored as neither elevation nor a miss).
 PTBXL_SCP_TO_CODE = {
     "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
-    "1AVB": "first_degree_av_block", "AMI": "st_elevation", "IMI": "st_elevation",
+    "1AVB": "first_degree_av_block", "STE_": "st_elevation", "STD_": "st_depression",
     "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
 }
 
