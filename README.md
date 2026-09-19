@@ -125,6 +125,9 @@ python -m cardiolens.validate --ecg-arrhythmia <root>  # Chapman/Ningbo (лок�
 python -m cardiolens.validate --ludb <root>   # точность делинеации: bias+MAE PR/QRS/QT vs экспертная разметка
 ```
 
+Сводные результаты по всем датасетам (PTB-XL, Chapman/Ningbo, LUDB),
+методология и ограничения — в [docs/VALIDATION.md](docs/VALIDATION.md).
+
 Синтетический прогон даёт реальные (оптимистичные, помечены как синтетика)
 числа: macro-sensitivity, sens/spec по классам, PR/QT MAE.
 
