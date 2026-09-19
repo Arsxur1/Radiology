@@ -1,6 +1,13 @@
 """Validation harness + metrics tests (TZ §16)."""
 
-from cardiolens.validation import build_synthetic_dataset, run_validation
+from cardiolens.validation import (
+    ECG_ARRHYTHMIA_SCORED_LABELS,
+    PTBXL_SCORED_LABELS,
+    PTBXL_SCP_TO_CODE,
+    SNOMED_TO_CODE,
+    build_synthetic_dataset,
+    run_validation,
+)
 from cardiolens.validation.metrics import (
     ClassMetrics,
     IntervalError,
@@ -48,3 +55,20 @@ def test_synthetic_validation_runs_with_sane_metrics():
 
 def test_macro_recall_none_when_no_support():
     assert macro_recall({"x": ClassMetrics("x")}) is None
+
+
+def test_real_dataset_scored_labels_derive_from_maps():
+    # The scored-label set for a real dataset must be exactly the distinct
+    # finding codes its label map can supply — never an always-zero row for a
+    # code the source can't produce, never a mappable code left unscored.
+    assert PTBXL_SCORED_LABELS == sorted(set(PTBXL_SCP_TO_CODE.values()))
+    assert ECG_ARRHYTHMIA_SCORED_LABELS == sorted(set(SNOMED_TO_CODE.values()))
+    # Codes the pipeline reports (layer4) so scoring is against real predictions.
+    assert {"rbbb", "lbbb", "atrial_fibrillation", "lvh"} <= set(PTBXL_SCORED_LABELS)
+
+
+def test_explicit_labels_override_is_scored():
+    # run_validation must score exactly the labels passed, in support order.
+    report = run_validation(build_synthetic_dataset(), labels=["st_elevation"])
+    assert set(report.per_class) == {"st_elevation"}
+    assert report.per_class["st_elevation"].sensitivity == 1.0

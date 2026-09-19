@@ -1,6 +1,11 @@
 """Validation harness and metrics (TZ §15, §16)."""
 
 from cardiolens.validation.harness import (
+    ECG_ARRHYTHMIA_SCORED_LABELS,
+    PTBXL_SCORED_LABELS,
+    PTBXL_SCP_TO_CODE,
+    SCORED_LABELS,
+    SNOMED_TO_CODE,
     LabeledCase,
     ValidationReport,
     build_ecg_arrhythmia_dataset,
@@ -13,6 +18,11 @@ from cardiolens.validation.harness import (
 from cardiolens.validation.metrics import ClassMetrics, IntervalError, score_findings
 
 __all__ = [
+    "ECG_ARRHYTHMIA_SCORED_LABELS",
+    "PTBXL_SCORED_LABELS",
+    "PTBXL_SCP_TO_CODE",
+    "SCORED_LABELS",
+    "SNOMED_TO_CODE",
     "ClassMetrics",
     "IntervalError",
     "LabeledCase",

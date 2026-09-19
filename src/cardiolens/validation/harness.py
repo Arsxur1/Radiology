@@ -29,11 +29,30 @@ from cardiolens.validation.metrics import (
     score_findings,
 )
 
-# Finding labels scored by the harness.
+# Finding labels scored by the harness on the synthetic dataset — the patterns
+# the offline generator reliably stimulates (an optimistic, clearly-synthetic
+# bound). Real datasets score whatever their label maps can supply, derived
+# below from those maps so scoring never drifts out of sync with the gold codes
+# an adapter can actually produce.
 SCORED_LABELS = [
     "sinus_rhythm", "sinus_bradycardia", "sinus_tachycardia",
     "first_degree_av_block", "st_elevation", "peaked_t_waves",
 ]
+
+# PTB-XL SCP-ECG statement code -> CardioLens finding code. Kept at module scope
+# so the scored-label set can be derived from it (below) and so tests can assert
+# the mapping directly. Extend as finding coverage grows; codes we don't map are
+# ignored during scoring rather than counted as misses.
+PTBXL_SCP_TO_CODE = {
+    "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
+    "1AVB": "first_degree_av_block", "AMI": "st_elevation", "IMI": "st_elevation",
+    "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
+}
+
+# Labels scored on a real dataset are exactly the finding codes its adapter can
+# emit as gold — the distinct values of the code map. This keeps the per-class
+# table free of always-zero rows for labels the source can never supply.
+PTBXL_SCORED_LABELS = sorted(set(PTBXL_SCP_TO_CODE.values()))
 
 
 @dataclass
@@ -148,13 +167,6 @@ def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:
     db = pd.read_csv(root / "ptbxl_database.csv", index_col="ecg_id")
     db.scp_codes = db.scp_codes.apply(ast.literal_eval)
 
-    # Minimal SCP -> our-code mapping (extend as coverage grows).
-    scp_map = {
-        "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
-        "1AVB": "first_degree_av_block", "AMI": "st_elevation", "IMI": "st_elevation",
-        "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
-    }
-
     from cardiolens.layer1_ingestion import load_wfdb
 
     cases: list[LabeledCase] = []
@@ -162,7 +174,7 @@ def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:
         rec = root / str(row["filename_hr"])
         if not rec.with_suffix(".hea").exists():
             continue
-        gold = {scp_map[k] for k in row["scp_codes"] if k in scp_map}
+        gold = {PTBXL_SCP_TO_CODE[k] for k in row["scp_codes"] if k in PTBXL_SCP_TO_CODE}
         sig = load_wfdb(rec)
         sig.patient.age_years = float(row.get("age")) if row.get("age") == row.get("age") else None
         sig.patient.sex = "male" if row.get("sex") == 0 else "female"
@@ -191,6 +203,11 @@ SNOMED_TO_CODE = {
     "251146004": "low_qrs_voltage",
     "111975006": "long_qt",
 }
+
+
+# Labels scored on the ecg-arrhythmia dataset: the distinct finding codes its
+# SNOMED map can supply as gold (same rationale as PTBXL_SCORED_LABELS).
+ECG_ARRHYTHMIA_SCORED_LABELS = sorted(set(SNOMED_TO_CODE.values()))
 
 
 def snomed_dx_to_codes(dx_codes) -> set[str]:
