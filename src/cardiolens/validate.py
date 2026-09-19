@@ -22,6 +22,7 @@ from cardiolens.validation import (
     build_ptbxl_dataset,
     build_synthetic_dataset,
     run_validation,
+    validate_ludb_delineation,
 )
 
 
@@ -30,11 +31,26 @@ def main() -> None:
     ap.add_argument("--ptbxl", help="path to a local PTB-XL checkout")
     ap.add_argument("--ecg-arrhythmia",
                     help="path to a local PhysioNet ecg-arrhythmia (Chapman/Ningbo) checkout")
+    ap.add_argument("--ludb",
+                    help="path to a local LUDB checkout — reports delineation accuracy "
+                         "(PR/QRS/QT bias + MAE vs expert annotations) instead of findings")
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--labels",
                     help="comma-separated finding codes to score (overrides the "
                          "per-source default)")
     args = ap.parse_args()
+
+    # LUDB is a different validation mode: fiducial accuracy, not finding sens/spec.
+    if args.ludb:
+        rep = validate_ludb_delineation(args.ludb, limit=args.limit)
+        print(f"=== CardioLens delineation accuracy — LUDB ({args.ludb}) ===")
+        print(f"records: {rep.n_records}")
+        print("\ninterval (signed bias = measured − gold / MAE / n):")
+        for name, acc in rep.intervals.items():
+            print(f"  {name:4s} bias={acc.bias_ms} ms  MAE={acc.mae_ms} ms  n={acc.n}")
+        print("\nJSON:")
+        print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=2))
+        return
 
     if args.ptbxl:
         cases = build_ptbxl_dataset(args.ptbxl, limit=args.limit)

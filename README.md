@@ -122,6 +122,7 @@ per-class sensitivity/specificity и MAE интервалов.
 python -m cardiolens.validate                 # offline синтетический датасет
 python -m cardiolens.validate --ptbxl <root>  # реальная PTB-XL (локальный чекаут)
 python -m cardiolens.validate --ecg-arrhythmia <root>  # Chapman/Ningbo (локальный чекаут)
+python -m cardiolens.validate --ludb <root>   # точность делинеации: bias+MAE PR/QRS/QT vs экспертная разметка
 ```
 
 Синтетический прогон даёт реальные (оптимистичные, помечены как синтетика)

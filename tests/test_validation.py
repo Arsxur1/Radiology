@@ -5,7 +5,9 @@ from cardiolens.validation import (
     PTBXL_SCORED_LABELS,
     PTBXL_SCP_TO_CODE,
     SNOMED_TO_CODE,
+    IntervalAccuracy,
     build_synthetic_dataset,
+    gold_intervals_ms,
     run_validation,
 )
 from cardiolens.validation.metrics import (
@@ -81,3 +83,24 @@ def test_explicit_labels_override_is_scored():
     report = run_validation(build_synthetic_dataset(), labels=["st_elevation"])
     assert set(report.per_class) == {"st_elevation"}
     assert report.per_class["st_elevation"].sensitivity == 1.0
+
+
+def test_gold_intervals_from_ludb_triplets():
+    # LUDB annotations: onset "(" / peak (p|N|t) / offset ")" triplets, ordered
+    # P, QRS, T per beat. At 1 kHz, one sample = 1 ms.
+    symbols = ["(", "p", ")", "(", "N", ")", "(", "t", ")"]
+    samples = [100, 120, 140, 300, 320, 400, 500, 560, 640]
+    pr, qrs, qt = gold_intervals_ms(symbols, samples, fs=1000.0)
+    assert pr == 200.0   # P onset 100 -> QRS onset 300
+    assert qrs == 100.0  # QRS onset 300 -> offset 400
+    assert qt == 340.0   # QRS onset 300 -> T offset 640
+
+
+def test_interval_accuracy_bias_and_mae():
+    acc = IntervalAccuracy("QRS")
+    acc.add(132, 95)     # +37
+    acc.add(120, 100)    # +20
+    acc.add(None, 90)    # skipped
+    assert acc.n == 2
+    assert acc.bias_ms == 28.5   # median signed error
+    assert acc.mae_ms == 28.5
