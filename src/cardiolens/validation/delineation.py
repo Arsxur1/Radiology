@@ -33,11 +33,14 @@ class IntervalAccuracy:
 
     @property
     def bias_ms(self) -> float | None:
+        # Median signed error — robust central estimate of the systematic offset.
         return round(median(self.signed_errors), 1) if self.signed_errors else None
 
     @property
     def mae_ms(self) -> float | None:
-        return round(median(abs(e) for e in self.signed_errors), 1) if self.signed_errors else None
+        # True mean absolute error, matching metrics.IntervalError.mae.
+        errs = self.signed_errors
+        return round(sum(abs(e) for e in errs) / len(errs), 1) if errs else None
 
     def to_dict(self) -> dict:
         return {"name": self.name, "n": self.n, "bias_ms": self.bias_ms, "mae_ms": self.mae_ms}
@@ -105,9 +108,17 @@ def validate_ludb_delineation(root: str | Path, limit: int = 50) -> DelineationR
     """
     import wfdb
 
+    from cardiolens.config import load_app_config
     from cardiolens.layer1_ingestion import load_wfdb
-    from cardiolens.layer6_interpret import StubProvider
-    from cardiolens.pipeline import run_pipeline
+    from cardiolens.layer2_preprocess import preprocess
+    from cardiolens.layer3_measure import measure
+
+    # Measure the delineator's RAW fiducials: this tool exists to quantify the
+    # bias, so it must bypass cfg.delineation_correction (correction=None) or it
+    # would report the already-corrected error (~0) and hide the very bias a user
+    # runs it to find. Preprocessing mirrors run_pipeline's Layer 2.
+    cfg = load_app_config()
+    pp = cfg.preprocessing
 
     root = Path(root)
     data = root / "data" if (root / "data").is_dir() else root
@@ -120,10 +131,16 @@ def validate_ludb_delineation(root: str | Path, limit: int = 50) -> DelineationR
         try:
             ann = wfdb.rdann(str(rec), "ii")
             g_pr, g_qrs, g_qt = gold_intervals_ms(ann.symbol, ann.sample, ann.fs)
-            result = run_pipeline(load_wfdb(rec), mode="A", provider=StubProvider())
+            sig = preprocess(
+                load_wfdb(rec),
+                mains_frequency_hz=cfg.mains_frequency_hz,
+                bandpass_low_hz=pp.bandpass_low_hz,
+                bandpass_high_hz=pp.bandpass_high_hz,
+                target_sampling_rate_hz=pp.target_sampling_rate_hz,
+            )
+            iv = measure(sig, correction=None).intervals
         except Exception:  # noqa: S112 - skip unreadable records, keep validating the rest
             continue
-        iv = result.measurements.intervals
         pr.add(iv.pr_ms, g_pr)
         qrs.add(iv.qrs_ms, g_qrs)
         qt.add(iv.qt_ms, g_qt)

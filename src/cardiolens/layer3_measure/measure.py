@@ -140,11 +140,18 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
                 if np.isfinite(qrs_on[i]) and np.isfinite(t_off[i]):
                     qt_list.append(t_off[i] - qrs_on[i])
 
-            # Physiologic per-beat windows: reject delineation outliers before
-            # the median (PR/QRS/QT can't fall outside these on a real ECG).
-            pr_ms = _median_ms(pr_list, fs, lo_ms=80, hi_ms=400)
-            qrs_ms = _median_ms(qrs_list, fs, lo_ms=40, hi_ms=200)
-            qt_ms = _median_ms(qt_list, fs, lo_ms=200, hi_ms=700)
+            # Reject per-beat delineation outliers before the median. The lower
+            # bounds catch the common failure (a P onset just before the QRS -> a
+            # "PR" of ~70 ms; a missed T offset -> a negative QT). The UPPER bounds
+            # are deliberately supraphysiologic, not "normal": they must exclude
+            # only impossible spans (a QT that ran into the next beat) while
+            # preserving the extreme-but-real pathology the safety layer exists to
+            # catch — a 720 ms long QT, a 220 ms hyperkalaemic/paced QRS, a 430 ms
+            # PR in high-grade AV block. Capping at normal limits would null the
+            # interval and silently suppress exactly those findings.
+            pr_ms = _median_ms(pr_list, fs, lo_ms=80, hi_ms=600)
+            qrs_ms = _median_ms(qrs_list, fs, lo_ms=40, hi_ms=300)
+            qt_ms = _median_ms(qt_list, fs, lo_ms=200, hi_ms=900)
             # Re-centre against the delineator's measured fiducial bias (D15a).
             if correction is not None:
                 pr_ms = _apply_correction(pr_ms, getattr(correction, "pr_ms", 0.0))

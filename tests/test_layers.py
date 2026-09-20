@@ -55,6 +55,16 @@ def test_median_ms_rejects_implausible_beats():
     assert _median_ms([100, 200, 300], 1000.0) == pytest.approx(200)
 
 
+def test_median_ms_preserves_extreme_pathology():
+    # Upper windows must be supraphysiologic, not "normal": a genuine 720 ms long
+    # QT, 220 ms wide QRS, 430 ms AV-block PR must survive so the safety layer can
+    # fire — capping at normal limits would null the interval.
+    fs = 1000.0
+    assert _median_ms([720, 725, 715], fs, lo_ms=200, hi_ms=900) == pytest.approx(720)
+    assert _median_ms([220, 222, 218], fs, lo_ms=40, hi_ms=300) == pytest.approx(220)
+    assert _median_ms([430, 435, 425], fs, lo_ms=80, hi_ms=600) == pytest.approx(430)
+
+
 def test_delineation_correction_shifts_pr():
     from cardiolens.config import DelineationCorrection
 

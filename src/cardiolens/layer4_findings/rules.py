@@ -372,9 +372,11 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
     # upper norm and the complete-block threshold the QRS is only a nonspecific
     # (or incomplete) conduction delay — typing it as a full RBBB/LBBB is the main
     # source of false positives on real records.
-    block_min = norms.get("intervals_ms", {}).get("qrs_complete_block")
+    # Complete-block threshold; if a norms config omits it, fall back to the
+    # upper QRS norm (prior behaviour) rather than disabling all BBB detection.
+    block_min = norms.get("intervals_ms", {}).get("qrs_complete_block") or qrs_hi
     term = m.qrs_v1_terminal_positive
-    complete = block_min is not None and iv.qrs_ms >= block_min
+    complete = iv.qrs_ms >= block_min
     if complete and term is True:
         fs.findings.append(Finding(
             code="rbbb", group="interval",
