@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from cardiolens.arrhythmia import BeatClassifier, ectopy_findings, summarize_ectopy
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
     AppConfig,
@@ -88,6 +89,17 @@ def run_pipeline(
     # Layer 4 — findings (TZ §7).
     norms = norms_for_patient(sig.patient.age_years, sig.patient.age_days)
     findings = detect_findings(sig, m, norms=norms, la_ra_reversed=la_ra_reversed)
+    # Per-beat ventricular ectopy (TZ §7.1) — needs beat-level morphology, so it
+    # rides the beat classifier rather than a single median interval. No-op until
+    # a model is trained into configs/beat_lda.json.
+    beat_model = BeatClassifier.load(configs_dir() / "beat_lda.json")
+    if beat_model.fitted and m.r_peaks_samples:
+        lead_idx = sig.lead_names.index("II") if "II" in sig.lead_names else 0
+        summary = summarize_ectopy(sig.signal[lead_idx], m.r_peaks_samples,
+                                   sig.sampling_rate_hz, beat_model)
+        findings.findings.extend(ectopy_findings(summary))
+        audit.append(f"[L4] ectopy: {summary.n_ventricular}/{summary.n_beats} VEB "
+                     f"burden={summary.burden}")
     # Apply confidence calibration to each finding (TZ §13).
     for f in findings.findings:
         f.confidence = round(calibrator.apply(f.confidence), 3)

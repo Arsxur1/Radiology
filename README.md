@@ -125,8 +125,17 @@ python -m cardiolens.validate --ecg-arrhythmia <root>  # Chapman/Ningbo (лок�
 python -m cardiolens.validate --ludb <root>   # точность делинеации: bias+MAE PR/QRS/QT vs экспертная разметка
 ```
 
-Сводные результаты по всем датасетам (PTB-XL, Chapman/Ningbo, LUDB),
+Сводные результаты по всем датасетам (PTB-XL, Chapman/Ningbo, LUDB, MIT-BIH),
 методология и ограничения — в [docs/VALIDATION.md](docs/VALIDATION.md).
+
+**Классификатор ударов (желудочковая эктопия).** Находки `ventricular_ectopy` /
+`ventricular_bigeminy` даёт прозрачный LDA-классификатор ударов
+(`configs/beat_lda.json`; ЖЭ ~0.82 sens / 0.97 PPV на межпациентном MIT-BIH).
+Переобучение по локальному чекауту MIT-BIH:
+
+```bash
+python -m cardiolens.train_beats --mitdb <root>   # → configs/beat_lda.json
+```
 
 Синтетический прогон даёт реальные (оптимистичные, помечены как синтетика)
 числа: macro-sensitivity, sens/spec по классам, PR/QT MAE.
