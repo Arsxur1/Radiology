@@ -100,6 +100,15 @@ def run_pipeline(
         findings.findings.extend(ectopy_findings(summary))
         audit.append(f"[L4] ectopy: {summary.n_ventricular}/{summary.n_beats} VEB "
                      f"burden={summary.burden}")
+        # Ventricular bigeminy makes RR irregularly-irregular and mimics AF on RR
+        # alone. When bigeminy is detected, the irregularity is explained by the
+        # ectopy, so suppress a co-emitted atrial_fibrillation (§7.1).
+        if summary.bigeminy:
+            af = findings.by_code("atrial_fibrillation")
+            if af is not None:
+                findings.findings.remove(af)
+                audit.append("[L4] suppressed atrial_fibrillation (RR irregularity "
+                             "explained by ventricular bigeminy)")
     # Pause / dropped beat (TZ §7.1, §10) — R-peak based, as reliable as HR.
     pc = cfg.pause
     if m.max_rr_ms is not None and (m.max_rr_ms >= pc.finding_ms
