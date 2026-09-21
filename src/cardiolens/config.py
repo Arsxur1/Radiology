@@ -58,6 +58,13 @@ class DelineationCorrection(BaseModel):
     qt_ms: float = 0.0
 
 
+class PauseConfig(BaseModel):
+    """Pause / dropped-beat thresholds (TZ §7.1, §10)."""
+    finding_ms: float = 2000.0
+    ratio: float = 1.8
+    critical_ms: float = 3000.0
+
+
 class Versions(BaseModel):
     schema_version: str = Field(alias="schema")
     rules_base: str
@@ -73,6 +80,7 @@ class AppConfig(BaseModel):
     disclaimers: Disclaimers
     versions: Versions
     delineation_correction: DelineationCorrection = DelineationCorrection()
+    pause: PauseConfig = PauseConfig()
 
 
 @functools.lru_cache(maxsize=1)

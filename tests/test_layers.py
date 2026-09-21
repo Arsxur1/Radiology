@@ -94,6 +94,23 @@ def test_la_ra_reversal_detected():
     assert detect_la_ra_reversal(sig) is True
 
 
+def test_pause_measured_and_flagged_critical():
+    # Blank ~1.6 s of every lead in mid-record -> a dropped beat -> long RR gap.
+    sig = generate_synthetic_ecg(heart_rate_bpm=75)
+    fs = int(sig.sampling_rate_hz)
+    a = sig.signal.shape[1] // 2
+    sig.signal[:, a:a + int(1.6 * fs)] = 0.0
+    m, _, _ = _run(sig)
+    assert m.max_rr_ms is not None and m.max_rr_ms >= 1500
+    assert m.pause_ratio is not None and m.pause_ratio >= 1.8
+    # >=3 s would be critical; scan_critical flags it directly from the gap.
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.safety import scan_critical
+    crit = scan_critical(_run(generate_synthetic_ecg(heart_rate_bpm=70))[1],
+                         Measurements(max_rr_ms=3200))
+    assert any(al.code == "ventricular_pause" for al in crit.alerts)
+
+
 # --- Layer 4: findings ---
 def test_bradycardia_finding():
     _, fnd, _ = _run(generate_synthetic_ecg(heart_rate_bpm=44))

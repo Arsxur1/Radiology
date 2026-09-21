@@ -21,7 +21,7 @@ from cardiolens.config import (
 )
 from cardiolens.contracts.causal import CausalGraph
 from cardiolens.contracts.features import Measurements
-from cardiolens.contracts.findings import FindingSet
+from cardiolens.contracts.findings import Evidence, Finding, FindingSet
 from cardiolens.contracts.report import InterpretationReport
 from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer2_preprocess import assess_quality, preprocess
@@ -100,6 +100,18 @@ def run_pipeline(
         findings.findings.extend(ectopy_findings(summary))
         audit.append(f"[L4] ectopy: {summary.n_ventricular}/{summary.n_beats} VEB "
                      f"burden={summary.burden}")
+    # Pause / dropped beat (TZ §7.1, §10) — R-peak based, as reliable as HR.
+    pc = cfg.pause
+    if m.max_rr_ms is not None and (m.max_rr_ms >= pc.finding_ms
+                                    or (m.pause_ratio or 0) >= pc.ratio):
+        findings.findings.append(Finding(
+            code="sinus_pause", group="rhythm",
+            label_ru=f"Пауза ритма {m.max_rr_ms:.0f} мс (RR ×{m.pause_ratio})",
+            label_uz=f"Ritm pauzasi {m.max_rr_ms:.0f} ms (RR ×{m.pause_ratio})",
+            evidence=[Evidence(feature="max_rr_ms", value=f"{m.max_rr_ms:.0f}"),
+                      Evidence(feature="pause_ratio", value=str(m.pause_ratio))],
+            confidence=0.8, critical=m.max_rr_ms >= pc.critical_ms))
+        audit.append(f"[L4] pause: max_rr={m.max_rr_ms} ms ratio={m.pause_ratio}")
     # Apply confidence calibration to each finding (TZ §13).
     for f in findings.findings:
         f.confidence = round(calibrator.apply(f.confidence), 3)

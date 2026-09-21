@@ -36,6 +36,15 @@ delineation_correction:
   qrs_ms: 0.0
   qt_ms: 0.0
 
+# Pause / dropped-beat thresholds (TZ §7.1, §10). A pause is flagged when the
+# longest RR gap exceeds finding_ms OR is >= ratio× the median beat (a dropped
+# beat / sinus arrest / blocked P); >= critical_ms is a must-not-miss (asystole
+# risk). Config, not code (§0).
+pause:
+  finding_ms: 2000       # absolute pause worth reporting
+  ratio: 1.8             # RR >= 1.8× median -> likely dropped beat
+  critical_ms: 3000      # >=3 s -> critical (§10)
+
 # Confidence gating for autonomous mode B (TZ §2, §16).
 confidence:
   # Autonomous report is emitted only if overall confidence >= this.

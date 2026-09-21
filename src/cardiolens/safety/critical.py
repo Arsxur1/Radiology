@@ -74,9 +74,12 @@ def scan_critical(findings: FindingSet, m: Measurements) -> SafetyResult:
             "Тахикардия с широкими комплексами (исключить ЖТ)",
             "Keng kompleksli taxikardiya (JT ni istisno qilish)",
             reason=f"HR {hr} bpm with wide QRS {m.intervals.qrs_ms} ms")
-    # Significant pause: max RR gap > 3 s.
-    if len(m.r_peaks_samples) >= 2:
-        pass  # gap analysis handled where fs is known; see pipeline note.
+    # Significant pause / asystole: longest RR gap >= 3 s (measured in Layer 3).
+    if m.max_rr_ms is not None and m.max_rr_ms >= 3000:
+        add("ventricular_pause",
+            "Значимая пауза / асистолия",
+            "Muhim pauza / asistoliya",
+            reason=f"max RR gap {m.max_rr_ms:.0f} ms >= 3000 ms")
 
     if not result.alerts:
         result.audit_log.append("[safety] no critical findings")

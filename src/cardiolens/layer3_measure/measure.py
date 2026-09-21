@@ -117,6 +117,10 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
         cv = float(np.std(rr) / (np.mean(rr) + 1e-9))
         m.rr_cv = round(cv, 3)
         m.rhythm_regular = bool(cv < 0.10)
+        # Longest RR gap and its ratio to the median beat — pause / dropped-beat
+        # detection (§7.1, §10). Purely R-peak based, so as reliable as HR.
+        m.max_rr_ms = round(float(np.max(rr)) * 1000.0, 1)
+        m.pause_ratio = round(float(np.max(rr) / (np.median(rr) + 1e-9)), 2)
     else:
         m.notes.append("insufficient R-peaks for rhythm analysis (low confidence)")
 
