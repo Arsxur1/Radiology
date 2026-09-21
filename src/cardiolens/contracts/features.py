@@ -66,6 +66,7 @@ class Measurements(BaseModel):
     pr_ms_by_lead: dict = Field(default_factory=dict)
     p_wave_ratio: float | None = None         # fraction of beats with a detected P
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
+    qrs_v1_rs_ratio: float | None = None          # R/S in V1 (dominant R -> RVH, §7.5)
     qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak
     # NOT YET MEASURED (always None): Layer 3 has no robust estimator for these,
     # so the atrial-flutter and complete-AV-block rules that consume them are

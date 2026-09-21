@@ -36,6 +36,11 @@ voltage_uv:
   # Low QRS voltage: limb-lead QRS peak-to-peak below this (µV).
   low_voltage_limb: 500
 
+# Right ventricular hypertrophy: dominant R in V1 (R/S > this), with right-axis
+# support. RBBB also gives a dominant V1 R, so it is excluded in the rule.
+rvh:
+  v1_rs_ratio: 1.0
+
 st_uv:
   # ST deviation thresholds at J+60ms, microvolts.
   elevation_significant: 100

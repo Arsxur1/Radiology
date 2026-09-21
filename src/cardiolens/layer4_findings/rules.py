@@ -228,6 +228,23 @@ def detect_findings(
             confidence=0.8,
         ))
 
+    # Right ventricular hypertrophy: dominant R in V1 (R/S > threshold). A
+    # dominant V1 R also comes from RBBB (excluded here, already typed) and is a
+    # normal infant variant (pediatric norms omit the `rvh` key, so this is
+    # adult-only). Right-axis deviation is supportive and raises confidence (§7.5).
+    rvh_thr = norms.get("rvh", {}).get("v1_rs_ratio")
+    if (rvh_thr and m.qrs_v1_rs_ratio is not None and m.qrs_v1_rs_ratio > rvh_thr
+            and fs.by_code("rbbb") is None):
+        right_axis = fs.by_code("right_axis_deviation") is not None
+        fs.findings.append(Finding(
+            code="rvh", group="hypertrophy",
+            label_ru=f"Гипертрофия ПЖ (доминантный R в V1, R/S {m.qrs_v1_rs_ratio})",
+            label_uz=f"O'ng qorincha gipertrofiyasi (V1 da dominant R, R/S {m.qrs_v1_rs_ratio})",
+            evidence=_ev(v1_rs_ratio=m.qrs_v1_rs_ratio, threshold=rvh_thr,
+                         right_axis="yes" if right_axis else "no"),
+            confidence=0.75 if right_axis else 0.6,
+        ))
+
     # ------------------------------------------------------------------ #
     # Axis deviation (TZ §7.4) and low QRS voltage (TZ §7.5)
     # ------------------------------------------------------------------ #

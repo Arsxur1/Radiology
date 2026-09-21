@@ -222,6 +222,9 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
     # --- V1 terminal QRS sign (RSR' typing for bundle branch block) ---
     m.qrs_v1_terminal_positive = _v1_terminal_positive(sig, rpeaks, fs)
 
+    # --- V1 R/S ratio (dominant R in V1 -> RVH, posterior MI; TZ §7.5) ---
+    m.qrs_v1_rs_ratio = _v1_rs_ratio(sig, rpeaks, fs)
+
     # --- Limb-lead QRS amplitude (for low-voltage detection, TZ §7.5) ---
     m.qrs_amplitude_limb_uv = _limb_qrs_amplitude(sig, rpeaks, fs)
 
@@ -244,6 +247,25 @@ def _qrs_amplitude(row: np.ndarray, rpeaks: np.ndarray, fs: float) -> float:
         # Signed extreme (largest absolute deflection keeps its sign).
         vals.append(seg[np.argmax(np.abs(seg))])
     return float(np.median(vals))
+
+
+def _v1_rs_ratio(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
+    """Median R/S amplitude ratio in V1 (dominant R -> RVH / posterior MI, §7.5)."""
+    if "V1" not in sig.lead_names or len(rpeaks) == 0:
+        return None
+    row = sig.lead("V1").astype(float)
+    base = float(np.median(row))
+    win = int(0.05 * fs)
+    ratios = []
+    for r in rpeaks:
+        a, b = max(0, r - win), min(len(row), r + win)
+        seg = row[a:b] - base
+        if seg.size == 0:
+            continue
+        R = max(float(seg.max()), 1e-6)   # tallest positive (R)
+        S = max(float(-seg.min()), 1e-6)  # deepest negative (S)
+        ratios.append(R / S)
+    return round(float(np.median(ratios)), 2) if ratios else None
 
 
 def _qrs_axis(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:

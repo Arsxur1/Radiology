@@ -54,6 +54,7 @@ PTBXL_SCP_TO_CODE = {
     "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
     "1AVB": "first_degree_av_block", "STE_": "st_elevation", "STD_": "st_depression",
     "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
+    "RVH": "rvh",
 }
 
 # Labels scored on a real dataset are exactly the finding codes its adapter can
@@ -207,6 +208,7 @@ SNOMED_TO_CODE = {
     "39732003": "left_axis_deviation",
     "47665007": "right_axis_deviation",
     "164873001": "lvh",
+    "89792004": "rvh",
     "251146004": "low_qrs_voltage",
     "111975006": "long_qt",
 }

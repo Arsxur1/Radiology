@@ -52,6 +52,27 @@ def test_no_first_degree_av_block_when_only_one_lead_prolonged():
     assert "first_degree_av_block" not in _find(m).codes()
 
 
+def test_rvh_dominant_r_in_v1():
+    m = Measurements(heart_rate_bpm=75, rhythm_regular=True, qrs_v1_rs_ratio=5.0,
+                     intervals=Intervals(pr_ms=150, qrs_ms=90, qt_ms=380, qtc_bazett_ms=415))
+    assert "rvh" in _find(m).codes()
+
+
+def test_no_rvh_when_v1_r_not_dominant():
+    m = Measurements(heart_rate_bpm=75, rhythm_regular=True, qrs_v1_rs_ratio=0.2,
+                     intervals=Intervals(pr_ms=150, qrs_ms=90, qt_ms=380, qtc_bazett_ms=415))
+    assert "rvh" not in _find(m).codes()
+
+
+def test_rvh_excluded_when_rbbb():
+    # A dominant V1 R from RBBB (wide QRS + positive V1 terminal) must not be RVH.
+    m = Measurements(heart_rate_bpm=75, rhythm_regular=True, qrs_v1_rs_ratio=5.0,
+                     qrs_v1_terminal_positive=True,
+                     intervals=Intervals(pr_ms=150, qrs_ms=140, qt_ms=400, qtc_bazett_ms=430))
+    codes = _find(m).codes()
+    assert "rbbb" in codes and "rvh" not in codes
+
+
 def test_wpw_short_pr_wide_qrs():
     m = Measurements(heart_rate_bpm=75, rhythm_regular=True,
                      intervals=Intervals(pr_ms=95, qrs_ms=130, qt_ms=380, qtc_bazett_ms=420))
