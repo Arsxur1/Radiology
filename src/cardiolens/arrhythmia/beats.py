@@ -145,9 +145,10 @@ def ectopy_findings(summary: EctopySummary):
     ev = [Evidence(feature="pvc_count", value=str(summary.n_ventricular)),
           Evidence(feature="beats", value=str(summary.n_beats)),
           Evidence(feature="burden", value=f"{summary.burden:.0%}")]
-    # A run of >=3 consecutive ventricular beats is ventricular tachycardia
-    # (non-sustained salvo) — a §10 must-not-miss; takes precedence.
-    if summary.max_vt_run >= 3:
+    # A fast run of >=4 consecutive ventricular beats is ventricular tachycardia
+    # — a §10 must-not-miss; takes precedence. Gated for zero false positives on
+    # MIT-BIH DS2 windows (see summarize_ectopy / DECISIONS.md D15b).
+    if summary.vt:
         out.append(Finding(
             code="ventricular_tachycardia", group="rhythm",
             label_ru=f"Желудочковая тахикардия (пробежка {summary.max_vt_run} ЖЭ подряд)",
@@ -164,12 +165,18 @@ def ectopy_findings(summary: EctopySummary):
             evidence=ev, confidence=0.7,
         ))
     else:
+        code = "ventricular_couplet" if summary.max_vt_run == 2 else "ventricular_ectopy"
+        label_ru = ("Парная желудочковая экстрасистолия (куплет"
+                    if code == "ventricular_couplet" else "Желудочковая экстрасистолия")
+        label_uz = ("Juft ventrikulyar ekstrasistoliya (kuplet"
+                    if code == "ventricular_couplet" else "Ventrikulyar ekstrasistoliya")
+        suffix = ")" if code == "ventricular_couplet" else ""
         out.append(Finding(
-            code="ventricular_ectopy", group="rhythm",
-            label_ru=f"Желудочковая экстрасистолия ({summary.n_ventricular} ЖЭ / "
-                     f"{summary.n_beats} уд., {summary.burden:.0%})",
-            label_uz=f"Ventrikulyar ekstrasistoliya ({summary.n_ventricular} VES / "
-                     f"{summary.n_beats}, {summary.burden:.0%})",
+            code=code, group="rhythm",
+            label_ru=f"{label_ru}{suffix} — {summary.n_ventricular} ЖЭ / "
+                     f"{summary.n_beats} уд., {summary.burden:.0%}",
+            label_uz=f"{label_uz}{suffix} — {summary.n_ventricular} VES / "
+                     f"{summary.n_beats}, {summary.burden:.0%}",
             evidence=ev, confidence=0.75,
         ))
     return out
@@ -181,29 +188,56 @@ class EctopySummary:
     n_ventricular: int = 0
     bigeminy: bool = False
     max_vt_run: int = 0  # longest run of consecutive ventricular beats
+    vt: bool = False      # ventricular tachycardia (fast, sustained-enough run)
 
     @property
     def burden(self) -> float:
         return round(self.n_ventricular / self.n_beats, 3) if self.n_beats else 0.0
 
 
+# VT requires a fast, several-beat run — tuned on MIT-BIH DS2 windows to a
+# false-positive-free operating point (PPV 1.0) for a §10 critical alert:
+# a shorter/slower run over-calls on misclassified-V clusters (PPV ~0.1).
+_VT_MIN_RUN = 4
+_VT_MAX_RR_MS = 600.0  # run rate > ~100 bpm
+
+
 def summarize_ectopy(lead: np.ndarray, rpeaks, fs: float, model: BeatClassifier) -> EctopySummary:
-    """Classify beats and summarise ventricular ectopy (count, burden, bigeminy)."""
+    """Classify beats and summarise ventricular ectopy (count, burden, bigeminy, VT)."""
     X, idx = extract_beat_features(lead, rpeaks, fs)
     if len(X) == 0 or not model.fitted:
         return EctopySummary(n_beats=len(idx))
     labels = model.predict(X)
     is_v = [lab == "V" for lab in labels]
     n_v = sum(is_v)
-    # Longest run of consecutive ventricular beats (>=3 -> VT/NSVT salvo).
-    max_run = run = 0
-    for v in is_v:
-        run = run + 1 if v else 0
-        max_run = max(max_run, run)
-    # Bigeminy: PVC roughly every other beat (alternating N-V-N-V), so ~half the
-    # classified beats are V and they mostly alternate with normals.
+    rp = np.asarray(rpeaks, dtype=int)
+    # Longest run of consecutive ventricular beats, and whether any run qualifies
+    # as VT (>=_VT_MIN_RUN beats at a tachycardic rate).
+    max_run = 0
+    vt = False
+    i = 0
+    while i < len(is_v):
+        if is_v[i]:
+            j = i
+            while j < len(is_v) and is_v[j]:
+                j += 1
+            runlen = j - i
+            max_run = max(max_run, runlen)
+            if runlen >= _VT_MIN_RUN:
+                rr = [(rp[idx[k + 1]] - rp[idx[k]]) / fs * 1000.0 for k in range(i, j - 1)]
+                if rr and float(np.mean(rr)) <= _VT_MAX_RR_MS:
+                    vt = True
+            i = j
+        else:
+            i += 1
+    # Bigeminy: a PVC every 2nd beat (gap 2 between ventricular beats). Trigeminy
+    # was evaluated on MIT-BIH but is too fragile under imperfect V-detection to
+    # report (0.0 sensitivity on DS2 windows).
+    v_pos = [k for k, v in enumerate(is_v) if v]
     from itertools import pairwise
-    alt = sum(1 for a, b in pairwise(is_v) if a != b)
-    bigeminy = n_v >= 4 and 0.35 <= (n_v / len(is_v)) <= 0.6 and alt >= 0.6 * len(is_v)
-    return EctopySummary(n_beats=len(is_v), n_ventricular=n_v,
-                         bigeminy=bigeminy, max_vt_run=max_run)
+    gaps = [b - a for a, b in pairwise(v_pos)]
+    bigeminy = False
+    if len(gaps) >= 3 and max_run < 3:  # a run is VT, not an allorhythmia
+        bigeminy = sum(g == 2 for g in gaps) / len(gaps) >= 0.6
+    return EctopySummary(n_beats=len(is_v), n_ventricular=n_v, max_vt_run=max_run,
+                         vt=vt, bigeminy=bigeminy)

@@ -27,10 +27,17 @@ def test_ectopy_findings_thresholds():
     assert [f.code for f in fs] == ["ventricular_ectopy"]
     big = ectopy_findings(EctopySummary(n_beats=12, n_ventricular=6, bigeminy=True))
     assert [f.code for f in big] == ["ventricular_bigeminy"]
-    # A run of >=3 consecutive ventricular beats -> VT, critical, takes precedence.
-    vt = ectopy_findings(EctopySummary(n_beats=12, n_ventricular=5, max_vt_run=4))
+    # VT fires only on the gated vt flag (fast, >=4-beat run), critical, first.
+    vt = ectopy_findings(EctopySummary(n_beats=12, n_ventricular=5, max_vt_run=4, vt=True))
     assert [f.code for f in vt] == ["ventricular_tachycardia"]
     assert vt[0].critical is True
+    # A bare run count without the vt gate must NOT raise a critical VT (a slow or
+    # short V cluster is not VT) — guards against false §10 alerts.
+    not_vt = ectopy_findings(EctopySummary(n_beats=12, n_ventricular=3, max_vt_run=3, vt=False))
+    assert "ventricular_tachycardia" not in [f.code for f in not_vt]
+    # Exactly two consecutive V beats -> couplet.
+    cpl = ectopy_findings(EctopySummary(n_beats=12, n_ventricular=2, max_vt_run=2))
+    assert [f.code for f in cpl] == ["ventricular_couplet"]
 
 
 def test_unfitted_classifier_is_noop():
