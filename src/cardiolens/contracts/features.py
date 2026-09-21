@@ -61,6 +61,9 @@ class Measurements(BaseModel):
     hrv_sdnn_ms: float | None = None
     max_rr_ms: float | None = None            # longest RR gap (pause detection, §7.1/§10)
     pause_ratio: float | None = None          # longest RR / median RR (dropped-beat cue)
+    # Calibrated PR per lead — multi-lead PR agreement improves first-degree AV
+    # block detection (a single lead under-measures PR; §7.3).
+    pr_ms_by_lead: dict = Field(default_factory=dict)
     p_wave_ratio: float | None = None         # fraction of beats with a detected P
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
     qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak

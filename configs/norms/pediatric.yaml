@@ -18,6 +18,7 @@ intervals_ms:
   qrs: [50, 90]
   qt: [300, 440]
   qrs_complete_block: 100   # narrower QRS in children (age-dependent)
+  pr_prolonged_min_leads: 2
 
 qtc_ms:
   upper: 460

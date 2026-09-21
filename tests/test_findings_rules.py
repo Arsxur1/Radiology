@@ -29,6 +29,29 @@ def _find(m, **over):
     return detect_findings(_sig(**over), m, norms=norms, la_ra_reversed=False)
 
 
+def test_first_degree_av_block_single_lead_fallback():
+    # No per-lead PR data -> falls back to the single measured PR > 200.
+    m = Measurements(heart_rate_bpm=70,
+                     intervals=Intervals(pr_ms=240, qrs_ms=90, qt_ms=380, qtc_bazett_ms=415))
+    assert "first_degree_av_block" in _find(m).codes()
+
+
+def test_first_degree_av_block_multilead_agreement():
+    # Lead II alone under-measures (190), but >=2 leads agree PR > 200 -> block.
+    m = Measurements(heart_rate_bpm=70,
+                     intervals=Intervals(pr_ms=190, qrs_ms=90, qt_ms=380, qtc_bazett_ms=415),
+                     pr_ms_by_lead={"II": 190, "V1": 212, "V2": 208})
+    assert "first_degree_av_block" in _find(m).codes()
+
+
+def test_no_first_degree_av_block_when_only_one_lead_prolonged():
+    # A single prolonged lead (likely artefact) with normal II must NOT trigger.
+    m = Measurements(heart_rate_bpm=70,
+                     intervals=Intervals(pr_ms=180, qrs_ms=90, qt_ms=380, qtc_bazett_ms=415),
+                     pr_ms_by_lead={"II": 180, "V1": 215, "V2": 175})
+    assert "first_degree_av_block" not in _find(m).codes()
+
+
 def test_wpw_short_pr_wide_qrs():
     m = Measurements(heart_rate_bpm=75, rhythm_regular=True,
                      intervals=Intervals(pr_ms=95, qrs_ms=130, qt_ms=380, qtc_bazett_ms=420))

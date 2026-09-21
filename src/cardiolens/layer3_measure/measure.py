@@ -82,6 +82,19 @@ def _apply_correction(value: float | None, offset: float) -> float | None:
     return round(value + offset, 1)
 
 
+def _pr_on_lead(lead: np.ndarray, rpeaks: np.ndarray, fs: float) -> float | None:
+    """Median PR (ms, raw) on one lead, reusing shared R-peaks (§7.3 multi-lead PR)."""
+    waves = _delineate(lead, rpeaks, fs)
+    if waves is None:
+        return None
+    p_on = np.asarray(waves.get("ECG_P_Onsets", []), dtype=float)
+    qrs_on = np.asarray(waves.get("ECG_R_Onsets", []), dtype=float)
+    n = min(len(p_on), len(qrs_on))
+    pr = [qrs_on[i] - p_on[i] for i in range(n)
+          if np.isfinite(p_on[i]) and np.isfinite(qrs_on[i])]
+    return _median_ms(pr, fs, lo_ms=80, hi_ms=600)
+
+
 def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
     """Full Layer-3 measurement pass (TZ §6).
 
@@ -162,6 +175,21 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
                 qrs_ms = _apply_correction(qrs_ms, getattr(correction, "qrs_ms", 0.0))
                 qt_ms = _apply_correction(qt_ms, getattr(correction, "qt_ms", 0.0))
             m.intervals = Intervals(pr_ms=pr_ms, qrs_ms=qrs_ms, qt_ms=qt_ms)
+            # Multi-lead PR (§7.3): a single lead under-measures PR, so first-degree
+            # AV block is called on agreement across leads (layer 4). Reuse the
+            # already-detected R-peaks; only PR is recomputed per lead.
+            pr_by_lead: dict[str, float] = {}
+            if pr_ms is not None:
+                pr_by_lead["II"] = pr_ms
+            pr_corr = getattr(correction, "pr_ms", 0.0) if correction is not None else 0.0
+            for lead_name in ("V1", "V2", "aVF"):
+                if lead_name not in sig.lead_names:
+                    continue
+                lead_pr = _pr_on_lead(sig.signal[sig.lead_names.index(lead_name)]
+                                      .astype(np.float64), rpeaks, fs)
+                if lead_pr is not None:
+                    pr_by_lead[lead_name] = round(lead_pr + pr_corr, 1)
+            m.pr_ms_by_lead = pr_by_lead
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)

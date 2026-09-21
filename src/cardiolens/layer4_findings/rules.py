@@ -118,13 +118,29 @@ def detect_findings(
     # Intervals / QT (TZ §7.3)
     # ------------------------------------------------------------------ #
     iv = m.intervals
-    _, pr_hi = norms.get("intervals_ms", {}).get("pr", [None, None])
-    if iv.pr_ms is not None and pr_hi and iv.pr_ms > pr_hi:
+    intervals_norm = norms.get("intervals_ms", {})
+    _, pr_hi = intervals_norm.get("pr", [None, None])
+    # First-degree AV block: prefer multi-lead agreement (a single lead under-
+    # measures PR, missing ~half of true blocks). Fires when >=min_leads agree
+    # PR > upper norm; falls back to the single measured PR if no per-lead data.
+    min_leads = intervals_norm.get("pr_prolonged_min_leads")
+    prolonged_leads = [ld for ld, v in (m.pr_ms_by_lead or {}).items()
+                       if pr_hi and v > pr_hi]
+    single = iv.pr_ms is not None and pr_hi and iv.pr_ms > pr_hi
+    # Union: the primary lead II prolonged, OR >=min_leads leads agree. The union
+    # never loses a lead-II detection and adds cases II alone under-measures.
+    multi = bool(pr_hi and min_leads and len(prolonged_leads) >= min_leads)
+    prolonged = single or multi
+    if prolonged:
+        pr_repr = iv.pr_ms if iv.pr_ms is not None else max(
+            (m.pr_ms_by_lead or {}).values(), default=None)
+        leads_txt = ",".join(prolonged_leads) if prolonged_leads else "II"
         fs.findings.append(Finding(
             code="first_degree_av_block", group="interval",
-            label_ru=f"АВ-блокада I степени (PR {iv.pr_ms} мс)",
-            label_uz=f"I darajali AV blokada (PR {iv.pr_ms} ms)",
-            evidence=_ev(pr_ms=iv.pr_ms, norm_high=pr_hi), confidence=0.85,
+            label_ru=f"АВ-блокада I степени (PR {pr_repr} мс; отведения {leads_txt})",
+            label_uz=f"I darajali AV blokada (PR {pr_repr} ms; {leads_txt})",
+            evidence=_ev(pr_ms=pr_repr, norm_high=pr_hi,
+                         prolonged_leads=leads_txt), confidence=0.85,
         ))
 
     _conduction_findings(m, norms, fs)

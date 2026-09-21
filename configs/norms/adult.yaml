@@ -14,6 +14,9 @@ intervals_ms:
   # Complete bundle-branch block requires a fully widened QRS; 110–120 ms is a
   # nonspecific/incomplete conduction delay, not a complete block.
   qrs_complete_block: 120
+  # First-degree AV block is called when >=this many leads agree PR > upper norm
+  # (a single lead under-measures PR; multi-lead agreement filters artefacts).
+  pr_prolonged_min_leads: 2
   # QTc thresholds are sex-specific below.
 
 qtc_ms:
