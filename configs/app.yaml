@@ -45,6 +45,13 @@ pause:
   ratio: 1.8             # RR >= 1.8× median -> likely dropped beat
   critical_ms: 3000      # >=3 s -> critical (§10)
 
+# Paced rhythm: a pacemaker spike is an extreme slope outlier on the raw signal.
+# spike_ratio = max|diff| / p99|diff|; >= this flags paced rhythm. Tuned on
+# PTB-XL (60 PACE vs 60 SR): 5.5 is the knee — sens 0.83 / spec 0.95 / PPV 0.94,
+# the highest sensitivity that still holds specificity at 0.95 (DECISIONS.md).
+pacing:
+  spike_ratio_min: 5.5
+
 # Confidence gating for autonomous mode B (TZ §2, §16).
 confidence:
   # Autonomous report is emitted only if overall confidence >= this.

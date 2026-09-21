@@ -65,6 +65,11 @@ class PauseConfig(BaseModel):
     critical_ms: float = 3000.0
 
 
+class PacingConfig(BaseModel):
+    """Paced-rhythm spike-detection threshold (TZ §7.1)."""
+    spike_ratio_min: float = 5.5
+
+
 class Versions(BaseModel):
     schema_version: str = Field(alias="schema")
     rules_base: str
@@ -81,6 +86,7 @@ class AppConfig(BaseModel):
     versions: Versions
     delineation_correction: DelineationCorrection = DelineationCorrection()
     pause: PauseConfig = PauseConfig()
+    pacing: PacingConfig = PacingConfig()
 
 
 @functools.lru_cache(maxsize=1)

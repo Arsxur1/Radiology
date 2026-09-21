@@ -34,6 +34,27 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 _RHYTHM_LEAD_PREFERENCE = ["II", "V5", "V2", "I"]
 
 
+def pacing_spike_ratio(sig: SignalRepresentation) -> float:
+    """Pacing-spike prominence on the RAW signal (§7.1).
+
+    A pacemaker spike is a very narrow, high-slew deflection. Bandpass filtering
+    (Layer 2) removes it, so this runs on the raw signal. Returns the max across
+    leads of (largest single-sample |diff|) / (99th-percentile |diff|): a pacer
+    spike is an extreme outlier in the slope distribution (~9 for paced records
+    vs ~2.6 for normal on PTB-XL). 0 when not computable.
+    """
+    best = 0.0
+    for name in sig.lead_names:
+        x = sig.lead(name).astype(np.float64)
+        d = np.abs(np.diff(x))
+        if d.size < 10:
+            continue
+        p99 = float(np.percentile(d, 99))
+        if p99 > 0:
+            best = max(best, float(d.max()) / p99)
+    return round(best, 2)
+
+
 def _pick_rhythm_lead(sig: SignalRepresentation) -> int:
     for name in _RHYTHM_LEAD_PREFERENCE:
         if name in sig.lead_names:

@@ -26,6 +26,7 @@ from cardiolens.contracts.report import InterpretationReport
 from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer2_preprocess import assess_quality, preprocess
 from cardiolens.layer3_measure import measure
+from cardiolens.layer3_measure.measure import pacing_spike_ratio
 from cardiolens.layer4_findings import detect_findings
 from cardiolens.layer5_causal import analyze
 from cardiolens.layer6_interpret import InterpretationInput, interpret
@@ -64,6 +65,10 @@ def run_pipeline(
     if calibrator is None:
         calibrator = TemperatureScaler.load(configs_dir() / "calibrator.json")
     audit: list[str] = []
+
+    # Pacing-spike detection runs on the RAW signal (§7.1): the narrow, high-slew
+    # pacer spike is removed by the Layer-2 bandpass, so measure it before that.
+    pacing_ratio = pacing_spike_ratio(sig)
 
     # Layer 2 — preprocess + quality (TZ §5).
     pp = cfg.preprocessing
@@ -121,6 +126,16 @@ def run_pipeline(
                       Evidence(feature="pause_ratio", value=str(m.pause_ratio))],
             confidence=0.8, critical=m.max_rr_ms >= pc.critical_ms))
         audit.append(f"[L4] pause: max_rr={m.max_rr_ms} ms ratio={m.pause_ratio}")
+    # Paced rhythm (TZ §7.1) — the pacer spike is an extreme slope outlier on the
+    # RAW signal (measured above, before the bandpass that would erase it).
+    if pacing_ratio >= cfg.pacing.spike_ratio_min:
+        findings.findings.append(Finding(
+            code="paced_rhythm", group="rhythm",
+            label_ru=f"Ритм электрокардиостимулятора (спайк ×{pacing_ratio})",
+            label_uz=f"Kardiostimulyator ritmi (spike ×{pacing_ratio})",
+            evidence=[Evidence(feature="pacing_spike_ratio", value=str(pacing_ratio))],
+            confidence=0.8))
+        audit.append(f"[L4] paced rhythm: spike_ratio={pacing_ratio}")
     # Apply confidence calibration to each finding (TZ §13).
     for f in findings.findings:
         f.confidence = round(calibrator.apply(f.confidence), 3)

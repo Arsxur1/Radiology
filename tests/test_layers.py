@@ -1,5 +1,6 @@
 """Per-layer tests (TZ §16)."""
 
+import numpy as np
 import pytest
 
 from cardiolens.config import load_rule_base, norms_for_patient
@@ -109,6 +110,22 @@ def test_pause_measured_and_flagged_critical():
     crit = scan_critical(_run(generate_synthetic_ecg(heart_rate_bpm=70))[1],
                          Measurements(max_rr_ms=3200))
     assert any(al.code == "ventricular_pause" for al in crit.alerts)
+
+
+def test_pacing_spike_ratio_separates_paced_from_clean():
+    from cardiolens.layer3_measure.measure import pacing_spike_ratio
+    # Clean sinus (no pacer) -> low slope-outlier ratio, below the 6.0 gate.
+    clean = generate_synthetic_ecg(heart_rate_bpm=72)
+    assert pacing_spike_ratio(clean) < 6.0
+    # Inject narrow single-sample spikes (a pacer stimulus) into lead II -> the
+    # max |diff| dwarfs the p99, so the ratio jumps well past the gate.
+    paced = generate_synthetic_ecg(heart_rate_bpm=72)
+    fs = int(paced.sampling_rate_hz)
+    ii = paced.lead_names.index("II")
+    amp = float(np.max(np.abs(paced.signal[ii]))) * 8.0
+    for t in range(fs // 2, paced.signal.shape[1], fs):
+        paced.signal[ii, t] += amp
+    assert pacing_spike_ratio(paced) >= 6.0
 
 
 # --- Layer 4: findings ---
