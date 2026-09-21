@@ -27,6 +27,10 @@ def test_ectopy_findings_thresholds():
     assert [f.code for f in fs] == ["ventricular_ectopy"]
     big = ectopy_findings(EctopySummary(n_beats=12, n_ventricular=6, bigeminy=True))
     assert [f.code for f in big] == ["ventricular_bigeminy"]
+    # A run of >=3 consecutive ventricular beats -> VT, critical, takes precedence.
+    vt = ectopy_findings(EctopySummary(n_beats=12, n_ventricular=5, max_vt_run=4))
+    assert [f.code for f in vt] == ["ventricular_tachycardia"]
+    assert vt[0].critical is True
 
 
 def test_unfitted_classifier_is_noop():
@@ -65,4 +69,4 @@ def test_feature_matrix_shape():
     _, info = nk.ecg_peaks(lead, sampling_rate=sig.sampling_rate_hz)
     X, idx = extract_beat_features(lead, info["ECG_R_Peaks"], sig.sampling_rate_hz)
     assert X.shape[0] == len(idx)
-    assert X.shape[1] == 8
+    assert X.shape[1] == len(FEATURES)

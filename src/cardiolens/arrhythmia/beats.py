@@ -24,11 +24,14 @@ from pathlib import Path
 
 import numpy as np
 
-FEATURES = ["pre_rr_ratio", "post_rr_ratio", "local_rr_ms",
-            "qrs_width_ms", "amp_ratio", "template_corr", "prematurity", "comp_ratio"]
-
 # QRS half-window for morphology features (~70 ms each side).
 _HALF_MS = 70.0
+# Number of normalized QRS-shape samples (scale/rate-invariant morphology).
+_SHAPE_K = 10
+
+FEATURES = (["pre_rr_ratio", "post_rr_ratio", "local_rr_ms",
+             "qrs_width_ms", "amp_ratio", "template_corr", "prematurity", "comp_ratio"]
+            + [f"shape_{i}" for i in range(_SHAPE_K)])
 
 
 def extract_beat_features(lead: np.ndarray, rpeaks, fs: float) -> tuple[np.ndarray, list[int]]:
@@ -69,8 +72,14 @@ def extract_beat_features(lead: np.ndarray, rpeaks, fs: float) -> tuple[np.ndarr
         width = (above[-1] - above[0]) / fs * 1000.0 if len(above) >= 2 else 0.0
         denom = (np.std(seg) * np.std(tmpl))
         corr = float(np.mean((seg - seg.mean()) * (tmpl - tmpl.mean())) / denom) if denom else 0.0
+        # Normalized QRS shape (baseline-removed, unit-amplitude, resampled to K):
+        # scale/rate-invariant morphology that separates wide ectopic beats.
+        norm = (seg - base)
+        peak = np.max(np.abs(norm)) or 1.0
+        shape = np.interp(np.linspace(0, len(norm)-1, _SHAPE_K),
+                          np.arange(len(norm)), norm / peak)
         rows.append([pre / loc, post / loc, loc, width, amp, corr,
-                     (loc - pre) / loc, post / loc])
+                     (loc - pre) / loc, post / loc, *shape.tolist()])
         idx.append(i)
     return np.asarray(rows), idx
 
@@ -134,6 +143,17 @@ def ectopy_findings(summary: EctopySummary):
     ev = [Evidence(feature="pvc_count", value=str(summary.n_ventricular)),
           Evidence(feature="beats", value=str(summary.n_beats)),
           Evidence(feature="burden", value=f"{summary.burden:.0%}")]
+    # A run of >=3 consecutive ventricular beats is ventricular tachycardia
+    # (non-sustained salvo) — a §10 must-not-miss; takes precedence.
+    if summary.max_vt_run >= 3:
+        out.append(Finding(
+            code="ventricular_tachycardia", group="rhythm",
+            label_ru=f"Желудочковая тахикардия (пробежка {summary.max_vt_run} ЖЭ подряд)",
+            label_uz=f"Ventrikulyar taxikardiya ({summary.max_vt_run} ta ketma-ket VES)",
+            evidence=[*ev, Evidence(feature="run", value=str(summary.max_vt_run))],
+            confidence=0.8, critical=True,
+        ))
+        return out
     if summary.bigeminy:
         out.append(Finding(
             code="ventricular_bigeminy", group="rhythm",
@@ -158,6 +178,7 @@ class EctopySummary:
     n_beats: int = 0
     n_ventricular: int = 0
     bigeminy: bool = False
+    max_vt_run: int = 0  # longest run of consecutive ventricular beats
 
     @property
     def burden(self) -> float:
@@ -172,9 +193,15 @@ def summarize_ectopy(lead: np.ndarray, rpeaks, fs: float, model: BeatClassifier)
     labels = model.predict(X)
     is_v = [lab == "V" for lab in labels]
     n_v = sum(is_v)
+    # Longest run of consecutive ventricular beats (>=3 -> VT/NSVT salvo).
+    max_run = run = 0
+    for v in is_v:
+        run = run + 1 if v else 0
+        max_run = max(max_run, run)
     # Bigeminy: PVC roughly every other beat (alternating N-V-N-V), so ~half the
     # classified beats are V and they mostly alternate with normals.
     from itertools import pairwise
     alt = sum(1 for a, b in pairwise(is_v) if a != b)
     bigeminy = n_v >= 4 and 0.35 <= (n_v / len(is_v)) <= 0.6 and alt >= 0.6 * len(is_v)
-    return EctopySummary(n_beats=len(is_v), n_ventricular=n_v, bigeminy=bigeminy)
+    return EctopySummary(n_beats=len(is_v), n_ventricular=n_v,
+                         bigeminy=bigeminy, max_vt_run=max_run)
