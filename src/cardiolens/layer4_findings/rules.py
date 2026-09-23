@@ -439,21 +439,31 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
     depr = thr.get("depression_significant")
     if not (elev and depr):
         return
-    # STEMI is clinically defined by J-POINT elevation. Keying on the J point
-    # (not J+60) avoids false positives from T-wave encroachment at high rates.
+    # ST elevation is measured at J+60 ms (SCP-ECG ST-amplitude convention). The
+    # J point alone under-reads the elevation and misses most true STE (sens
+    # 0.14 vs 0.29 on PTB-XL, D15j). Precordial V2-V3 take a higher threshold —
+    # early-repolarisation routinely lifts them 0.1-0.2 mV in healthy hearts, so
+    # ACC/ESC require 0.2 mV there. Depression stays on the J point (its own
+    # branch below), where it validated best.
+    elev_v2v3 = thr.get("elevation_significant_v2v3", elev)
     elevated, depressed = [], []
     for st in m.morphology.st:
-        if st.j_point_uv is None:
-            continue
-        if st.j_point_uv >= elev:
-            elevated.append(st.lead)
-        elif st.j_point_uv <= -depr:
+        if st.j60_uv is not None:
+            lead_thr = elev_v2v3 if st.lead in ("V2", "V3") else elev
+            if st.j60_uv >= lead_thr:
+                elevated.append(st.lead)
+        if st.j_point_uv is not None and st.j_point_uv <= -depr:
             depressed.append(st.lead)
-    if len(elevated) >= 2:
+    # STEMI requires CONTIGUOUS elevation — >=2 leads within one coronary
+    # territory. Scattered single-lead elevation is early-repol / noise, not
+    # infarction; the old "any >=2 leads" gate was the main false-positive source
+    # (spec 0.64 -> 0.75, D15j).
+    terr_hits = [leads for _, _, leads, _ in _TERRITORIES if len(set(elevated) & leads) >= 2]
+    if terr_hits:
         # Diffuse ST elevation across >=2 coronary territories (and no single
         # reciprocal territory) points to pericarditis, not a focal STEMI — a
         # classic mimic distinction (ecglibrary / 150 ECG Problems).
-        n_terr = sum(1 for _, _, leads, _ in _TERRITORIES if len(set(elevated) & leads) >= 2)
+        n_terr = len(terr_hits)
         if n_terr >= 2 and len(depressed) == 0:
             fs.findings.append(Finding(
                 code="pericarditis", group="other",

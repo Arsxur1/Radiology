@@ -42,8 +42,14 @@ rvh:
   v1_rs_ratio: 1.0
 
 st_uv:
-  # ST deviation thresholds at J+60ms, microvolts.
-  elevation_significant: 100
+  # ST deviation thresholds, microvolts, measured at J+60 ms (the SCP-ECG
+  # ST-amplitude convention — the J point alone under-reads elevation and misses
+  # most true STE; keying elevation on J+60 lifts sensitivity 0.14->0.29 while
+  # the lead-specific precordial threshold below holds specificity, see D15j).
+  elevation_significant: 100          # general limb / precordial leads (0.1 mV)
+  # V2-V3 sit over the anterior wall where early-repolarisation routinely lifts
+  # the ST 0.1-0.2 mV in healthy hearts; ACC/ESC require 0.2 mV there for STEMI.
+  elevation_significant_v2v3: 200
   depression_significant: 100
 
 # P-wave criteria for atrial enlargement (ecglibrary / 150 ECG Problems).

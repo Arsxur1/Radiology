@@ -173,7 +173,9 @@ def test_infarct_territory_rule_is_critical():
     m = Measurements(heart_rate_bpm=70, rhythm_regular=True,
                      intervals=Intervals(pr_ms=150, qrs_ms=90),
                      morphology=Morphology(st=[
-                         STMeasurement(lead=l, j_point_uv=(180 if l in ("II", "III", "aVF") else 0))
+                         STMeasurement(lead=l,
+                                       j_point_uv=(180 if l in ("II", "III", "aVF") else 0),
+                                       j60_uv=(180 if l in ("II", "III", "aVF") else 0))
                          for l in STANDARD_12_LEADS
                      ]))
     fnd = _find(m)

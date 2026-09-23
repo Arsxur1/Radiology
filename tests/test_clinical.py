@@ -33,7 +33,11 @@ def _codes(m, sig=None):
 
 
 def _st(elevated_leads):
-    return Morphology(st=[STMeasurement(lead=l, j_point_uv=(180 if l in elevated_leads else 0))
+    # Elevation is read at J+60 (see _st_findings); set both points. 250 uV clears
+    # the higher V2-V3 precordial threshold (200) as well as the 100 limb one.
+    v = 250
+    return Morphology(st=[STMeasurement(lead=l, j_point_uv=(v if l in elevated_leads else 0),
+                                        j60_uv=(v if l in elevated_leads else 0))
                           for l in STANDARD_12_LEADS])
 
 
