@@ -136,6 +136,23 @@ def run_pipeline(
             evidence=[Evidence(feature="pacing_spike_ratio", value=str(pacing_ratio))],
             confidence=0.8))
         audit.append(f"[L4] paced rhythm: spike_ratio={pacing_ratio}")
+    # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
+    # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
+    # are unreliable, so withhold every R-peak-derived finding and report the poor
+    # quality instead of, e.g., a bradycardia read off noise. Real ECG (incl. AFib)
+    # stays well above the gate. quality_ok is forced low so mode B also escalates.
+    tc = m.qrs_template_consistency
+    if tc is not None and tc < cfg.quality.beat_consistency_min:
+        findings.findings = [Finding(
+            code="poor_quality_signal", group="quality",
+            label_ru=f"Сигнал непригоден для надёжной интерпретации "
+                     f"(консистентность QRS {tc} < {cfg.quality.beat_consistency_min})",
+            label_uz=f"Signal ishonchli talqin uchun yaroqsiz (QRS konsistentligi {tc})",
+            evidence=[Evidence(feature="qrs_template_consistency", value=str(tc))],
+            confidence=0.9)]
+        quality_ok = False
+        audit.append(f"[L2] signal disorganized (beat consistency {tc}) — "
+                     f"R-peak findings withheld")
     # Apply confidence calibration to each finding (TZ §13).
     for f in findings.findings:
         f.confidence = round(calibrator.apply(f.confidence), 3)

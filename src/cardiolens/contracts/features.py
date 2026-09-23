@@ -87,4 +87,8 @@ class Measurements(BaseModel):
     morphology: Morphology = Field(default_factory=Morphology)
     # Sokolow-Lyon voltage sum for LVH assessment (µV).
     sokolow_lyon_uv: float | None = None
+    # Beat-template consistency in [0,1]: median correlation of each QRS complex
+    # to the median beat. High for real ECG (incl. AFib); low for artifact/noise
+    # where "R-peaks" are spurious — a signal-organization quality gate (§5).
+    qrs_template_consistency: float | None = None
     notes: list[str] = Field(default_factory=list)  # TODO / low-confidence markers

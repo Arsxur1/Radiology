@@ -253,6 +253,9 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
     # --- Frontal QRS axis ---
     m.axes = Axes(qrs_deg=_qrs_axis(sig, rpeaks, fs))
 
+    # --- Beat-template consistency (signal-organization quality gate, §5) ---
+    m.qrs_template_consistency = _qrs_template_consistency(sig, rpeaks, fs)
+
     # --- Sokolow-Lyon voltage (LVH) ---
     m.sokolow_lyon_uv = _sokolow_lyon(sig, rpeaks, fs)
 
@@ -270,6 +273,38 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
     _measure_t_morphology(sig, rpeaks, fs, m)
 
     return m
+
+
+def _qrs_template_consistency(
+    sig: SignalRepresentation, rpeaks: np.ndarray, fs: float,
+) -> float | None:
+    """Median correlation of each QRS complex to the median beat, in [0,1] (§5).
+
+    Real ECG has a self-consistent QRS shape from beat to beat — even in atrial
+    fibrillation, where timing is irregular but morphology is stable — so this
+    stays high (~0.98). Band-limited noise and artifact have no repeatable beat,
+    so spurious "R-peaks" correlate poorly (~0.6-0.75). It is the organization
+    signal a plain SNR/HF quality index misses once the band-pass has smoothed
+    broadband noise into the ECG band. ``None`` if too few beats to judge.
+    """
+    if len(rpeaks) < 3:
+        return None
+    li = sig.lead_names.index("II") if "II" in sig.lead_names else 0
+    row = sig.signal[li].astype(np.float64)
+    # +-90 ms captures the full QRS even for wide (BBB/paced) complexes, and the
+    # wider window also drives noise correlation down (a random signal decorrelates
+    # over a longer span) — sharpening the separation from real ECG.
+    w = int(0.09 * fs)
+    beats = [row[int(r) - w:int(r) + w] for r in rpeaks
+             if int(r) - w >= 0 and int(r) + w < len(row)]
+    if len(beats) < 3:
+        return None
+    m = np.vstack(beats)
+    templ = np.median(m, axis=0)
+    if np.std(templ) < 1e-9:
+        return 0.0
+    cors = [float(np.corrcoef(b, templ)[0, 1]) if np.std(b) > 1e-9 else 0.0 for b in m]
+    return round(float(np.median(cors)), 3)
 
 
 def _qrs_amplitude(row: np.ndarray, rpeaks: np.ndarray, fs: float) -> float:

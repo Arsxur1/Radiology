@@ -70,6 +70,14 @@ class PacingConfig(BaseModel):
     spike_ratio_min: float = 5.5
 
 
+class QualityConfig(BaseModel):
+    """Signal-organization quality gate (TZ §5). Below beat_consistency_min the
+    QRS complexes are not self-consistent (artifact/noise), so the R-peak-derived
+    findings are withheld rather than reported as confident garbage.
+    """
+    beat_consistency_min: float = 0.8
+
+
 class Versions(BaseModel):
     schema_version: str = Field(alias="schema")
     rules_base: str
@@ -87,6 +95,7 @@ class AppConfig(BaseModel):
     delineation_correction: DelineationCorrection = DelineationCorrection()
     pause: PauseConfig = PauseConfig()
     pacing: PacingConfig = PacingConfig()
+    quality: QualityConfig = QualityConfig()
 
 
 @functools.lru_cache(maxsize=1)

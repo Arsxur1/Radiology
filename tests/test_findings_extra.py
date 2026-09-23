@@ -64,6 +64,22 @@ def test_atrial_flutter():
                      intervals=Intervals(qrs_ms=90)))
 
 
+def test_disorganized_signal_withholds_findings():
+    # Pure band-limited noise must not yield a confident bradycardia read off
+    # spurious R-peaks — the §5 organization gate withholds and flags it instead.
+    rng = np.random.RandomState(0)
+    noise = SignalRepresentation(
+        signal=rng.normal(0, 300, (12, 5000)).astype("float32"), sampling_rate_hz=500,
+        lead_names=list(STANDARD_12_LEADS), duration_s=10, source="synthetic",
+        patient=Patient(age_years=50, sex="male"))
+    codes = run_pipeline(noise, mode="A").findings.codes()
+    assert "poor_quality_signal" in codes
+    assert not ({"sinus_bradycardia", "sinus_rhythm", "sinus_tachycardia"} & codes)
+    # A clean signal is never gated.
+    clean = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=72), mode="A").findings.codes()
+    assert "poor_quality_signal" not in clean
+
+
 def test_wide_complex_tachycardia_critical_from_140():
     # A wide-complex regular tachy at 145 (the SVT-narrow band) must raise the
     # §10 "exclude VT" alert, not fall through — thresholds aligned at 140.
