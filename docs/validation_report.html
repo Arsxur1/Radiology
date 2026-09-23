@@ -144,7 +144,7 @@ a{color:var(--accent)}
 <section>
   <h2>At a glance</h2>
   <div class="kpis">
-    <div class="kpi"><div class="n tnum">0.72</div><div class="l">Macro-sensitivity, PTB-XL 704 (was 0.47)</div></div>
+    <div class="kpi"><div class="n tnum">0.71</div><div class="l">Macro-sensitivity, PTB-XL 704 (was 0.47)</div></div>
     <div class="kpi"><div class="n tnum">0.72</div><div class="l">Macro-sensitivity, Chapman 607 (cross-dataset)</div></div>
     <div class="kpi"><div class="n tnum">13</div><div class="l">Arrhythmia / finding classes validated</div></div>
     <div class="kpi"><div class="n tnum">13<span style="font-size:16px">ms</span></div><div class="l">QRS-width MAE vs LUDB gold (was 23)</div></div>
@@ -248,13 +248,13 @@ function metricTable(el, rows){
   document.getElementById(el).innerHTML = h;
 }
 metricTable('ptbxl', [
-  {c:'sinus_tachycardia',se:1.00,sp:0.92,n:87},
-  {c:'lbbb',se:0.97,sp:0.93,n:90},
-  {c:'sinus_rhythm',se:0.88,sp:0.68,n:378},
+  {c:'sinus_tachycardia',se:0.99,sp:0.93,n:87},
+  {c:'lbbb',se:0.96,sp:0.93,n:90},
+  {c:'sinus_rhythm',se:0.88,sp:0.70,n:378},
   {c:'sinus_bradycardia',se:0.87,sp:0.91,n:85},
-  {c:'rbbb',se:0.82,sp:0.98,n:90},
-  {c:'atrial_fibrillation',se:0.79,sp:0.84,n:112},
-  {c:'first_degree_av_block',se:0.71,sp:0.66,n:101},
+  {c:'rbbb',se:0.79,sp:0.98,n:90},
+  {c:'atrial_fibrillation',se:0.76,sp:0.84,n:112},
+  {c:'first_degree_av_block',se:0.71,sp:0.67,n:101},
   {c:'lvh',se:0.46,sp:0.97,n:123},
   {c:'st_depression',se:0.38,sp:0.71,n:121},
   {c:'st_elevation',se:0.29,sp:0.78,n:28},
@@ -309,6 +309,7 @@ covCards('cov-ok', [
   {n:'LVH / RVH',m:'0.46–0.84',p:'p-ok',t:'validated'},
   {n:'WPW pre-excitation',m:'short PR + wide QRS',p:'p-ok',t:'validated'},
   {n:'Paced rhythm',m:'0.83 / 0.95',p:'p-ok',t:'validated'},
+  {n:'Signal-quality gate',m:'noise → withhold (§5)',p:'p-ok',t:'validated'},
 ]);
 covCards('cov-wall', [
   {n:'Atrial flutter',m:'atrial decomposition',p:'p-wall',t:'v2'},
