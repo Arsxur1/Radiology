@@ -1,0 +1,329 @@
+<title>CardioLens Validation Dossier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#f6f8fa; --surface:#ffffff; --surface-2:#eef2f6;
+  --ink:#152029; --muted:#5b6b7a; --faint:#8494a3;
+  --line:#dde4ec; --line-strong:#c6d0da;
+  --accent:#0e7c86; --accent-soft:#0e7c8622;
+  --good:#2f7d55; --warn:#a9761a; --crit:#b23b3b;
+  --bar-track:#e7edf3; --bar-sens:#0e7c86; --bar-spec:#5b8bb0;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0d131a; --surface:#141d26; --surface-2:#1b2732;
+  --ink:#e7eef4; --muted:#96a6b5; --faint:#6d7e8d;
+  --line:#24303c; --line-strong:#32414f;
+  --accent:#41b8c2; --accent-soft:#41b8c229;
+  --good:#57b37e; --warn:#d3a24a; --crit:#e07070;
+  --bar-track:#22303c; --bar-sens:#41b8c2; --bar-spec:#7fa8c9;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --ground:#0d131a; --surface:#141d26; --surface-2:#1b2732;
+  --ink:#e7eef4; --muted:#96a6b5; --faint:#6d7e8d;
+  --line:#24303c; --line-strong:#32414f;
+  --accent:#41b8c2; --accent-soft:#41b8c229;
+  --good:#57b37e; --warn:#d3a24a; --crit:#e07070;
+  --bar-track:#22303c; --bar-sens:#41b8c2; --bar-spec:#7fa8c9;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  line-height:1.55; margin:0;
+}
+.wrap{max-width:920px; margin:0 auto; padding-block:0 72px; padding-inline:20px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* header */
+header.top{padding-block:44px 26px; border-bottom:1px solid var(--line-strong)}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 12px}
+h1{font-size:clamp(30px,6vw,46px); line-height:1.05; font-weight:700; margin:0;
+  letter-spacing:-.02em; text-wrap:balance}
+.sub{color:var(--muted); font-size:16px; margin:14px 0 0; max-width:62ch}
+.meta{display:flex; flex-wrap:wrap; gap:8px 22px; margin-top:20px;
+  font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--muted)}
+.meta b{color:var(--ink); font-weight:600}
+
+/* disclaimer */
+.disc{margin-top:24px; border:1px solid var(--line-strong); border-left:3px solid var(--warn);
+  background:var(--surface); border-radius:8px; padding:16px 18px}
+.disc .t{font-weight:600; font-size:13px; letter-spacing:.02em; color:var(--warn);
+  text-transform:uppercase; font-family:"IBM Plex Mono",monospace; margin-bottom:6px}
+.disc p{margin:0; font-size:14px; color:var(--muted)}
+
+section{padding-block:38px; border-bottom:1px solid var(--line)}
+h2{font-size:13px; font-family:"IBM Plex Mono",monospace; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--faint); font-weight:600; margin:0 0 4px}
+.h2big{font-size:24px; font-family:"IBM Plex Sans"; letter-spacing:-.01em; color:var(--ink);
+  font-weight:600; margin:0 0 18px; text-transform:none}
+.lede{color:var(--muted); font-size:15px; max-width:66ch; margin:0 0 22px}
+
+/* KPI row */
+.kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+.kpi{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px}
+.kpi .n{font-family:"IBM Plex Mono",monospace; font-size:30px; font-weight:600;
+  letter-spacing:-.02em; color:var(--accent); line-height:1}
+.kpi .l{font-size:12.5px; color:var(--muted); margin-top:8px}
+@media(max-width:640px){.kpis{grid-template-columns:repeat(2,1fr)}}
+
+/* metric table */
+.tbl{background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden}
+.trow{display:grid; grid-template-columns:1.6fr 2.2fr 2.2fr 42px; align-items:center;
+  gap:12px; padding:9px 16px; border-top:1px solid var(--line)}
+.trow:first-child{border-top:none}
+.thead{background:var(--surface-2); font-family:"IBM Plex Mono",monospace;
+  font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint)}
+.thead .lab{font-weight:600}
+.cls{font-size:13.5px; font-weight:500}
+.metric{display:flex; align-items:center; gap:10px}
+.track{flex:1; height:9px; border-radius:5px; background:var(--bar-track);
+  box-shadow:inset 0 0 0 1px var(--line); overflow:hidden; min-width:44px}
+.fill{height:100%; border-radius:5px; min-width:3px}
+.fill.sens{background:var(--bar-sens)} .fill.spec{background:var(--bar-spec)}
+.val{font-family:"IBM Plex Mono",monospace; font-size:12.5px; width:34px; text-align:right;
+  font-variant-numeric:tabular-nums}
+.n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--faint); text-align:right}
+.tnote{font-size:12.5px; color:var(--muted); margin:10px 2px 0}
+
+/* coverage map */
+.cov{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px}
+.grp-title{font-size:13px; font-weight:600; margin:22px 0 10px; display:flex; align-items:center; gap:9px}
+.dot{width:9px; height:9px; border-radius:50%}
+.item{background:var(--surface); border:1px solid var(--line); border-radius:8px;
+  padding:10px 12px; font-size:13px; display:flex; flex-direction:column; gap:3px}
+.item .nm{font-weight:500}
+.item .mx{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted)}
+.pill{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+  padding:1px 7px; border-radius:20px; letter-spacing:.03em}
+.p-ok{background:var(--accent-soft); color:var(--accent)}
+.p-wall{background:#a9761a22; color:var(--warn)}
+.p-rej{background:var(--surface-2); color:var(--faint)}
+
+ul.clean{margin:0; padding-left:0; list-style:none; display:flex; flex-direction:column; gap:12px}
+ul.clean li{display:flex; gap:12px; font-size:14.5px; color:var(--ink)}
+ul.clean .k{font-family:"IBM Plex Mono",monospace; color:var(--accent); font-weight:600;
+  flex:0 0 auto; min-width:118px; font-size:12.5px; padding-top:2px}
+ul.clean .v{color:var(--muted)}
+.two{display:grid; grid-template-columns:1fr 1fr; gap:26px}
+@media(max-width:640px){.two{grid-template-columns:1fr}}
+h3{font-size:15px; margin:0 0 12px; font-weight:600}
+footer{padding-block:30px 8px; color:var(--faint); font-size:12.5px;
+  font-family:"IBM Plex Mono",monospace}
+a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <p class="eyebrow">Validation Dossier · v0.1</p>
+  <h1>CardioLens ECG Interpretation</h1>
+  <p class="sub">Engineering validation of the 12-lead resting-ECG finding detectors and
+  interval measurements, scored against expert-labelled open datasets. Every number here is
+  reproducible from the source harness; every gap is stated, not hidden.</p>
+  <div class="meta">
+    <span>SUBSETS · <b>PTB-XL 704</b> · <b>Chapman/Ningbo 607</b> · <b>MIT-BIH</b> · <b>LUDB 37</b></span>
+    <span>LEADS · <b>12 · resting · 500 Hz</b></span>
+    <span>MODE · <b>decision support (A)</b></span>
+  </div>
+  <div class="disc">
+    <div class="t">Not a clinical validation</div>
+    <p>All figures come from a synthetic generator and small, pathology-enriched subsets of
+    open datasets — this is engineering validation of the pipeline (finding detection +
+    measurement accuracy), not a clinical study. Subset specificity is <em>understated</em>
+    (subsets are enriched with pathology). CardioLens is a decision-support tool, not a
+    medical device. Critical findings always escalate to a physician.</p>
+  </div>
+</header>
+
+<section>
+  <h2>At a glance</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="n tnum">0.72</div><div class="l">Macro-sensitivity, PTB-XL 704 (was 0.47)</div></div>
+    <div class="kpi"><div class="n tnum">0.72</div><div class="l">Macro-sensitivity, Chapman 607 (cross-dataset)</div></div>
+    <div class="kpi"><div class="n tnum">13</div><div class="l">Arrhythmia / finding classes validated</div></div>
+    <div class="kpi"><div class="n tnum">13<span style="font-size:16px">ms</span></div><div class="l">QRS-width MAE vs LUDB gold (was 23)</div></div>
+  </div>
+  <p class="tnote">Headline lift this cycle came from replacing the unstable per-lead
+  fiducial QRS width with a slope-energy estimator — it fixed both bundle branch blocks at once
+  (RBBB 0.42→0.82, LBBB 0.62/0.61→0.97/0.93).</p>
+</section>
+
+<section>
+  <h2>Per-class performance</h2>
+  <p class="h2big">PTB-XL — 704 records</p>
+  <p class="lede">Sensitivity and specificity per finding, sorted by sensitivity. Specificity is
+  scored against all other records in the subset, so secondary ST-T changes from LVH/BBB count
+  against ST classes even when clinically real.</p>
+  <div class="tbl" id="ptbxl"></div>
+  <p class="tnote">ST classes read at J+60 ms (SCP-ECG convention); st_depression specificity is
+  understated — 83% of its false positives are LVH/BBB strain, contextualised downstream by the
+  causal layer, not primary ischemia.</p>
+
+  <p class="h2big" style="margin-top:34px">Chapman/Ningbo — 607 records</p>
+  <p class="lede">Independent second source (SNOMED-CT labels). The robust QRS width generalises:
+  LBBB 0.54/0.62→0.80/0.93, RBBB 0.50/0.99→0.70/0.99.</p>
+  <div class="tbl" id="chapman"></div>
+  <p class="tnote">Atrial flutter 0/132 — the rule is inert: reliable flutter detection needs
+  atrial-signal decomposition Layer 3 does not compute (investigated over 3 stages incl. PCA
+  QRST cancellation; documented wall).</p>
+</section>
+
+<section>
+  <h2>Targeted &amp; cross-dataset studies</h2>
+  <p class="lede">Rare or safety-critical classes validated on dedicated balanced samples rather
+  than the stratified subset.</p>
+  <div class="tbl" id="targeted"></div>
+</section>
+
+<section>
+  <h2>Arrhythmia coverage map</h2>
+  <p class="lede">What the system detects, what is walled pending v2 infrastructure, and what was
+  investigated and honestly rejected under the no-fabrication discipline (§0).</p>
+
+  <div class="grp-title"><span class="dot" style="background:var(--good)"></span>Detected &amp; validated</div>
+  <div class="cov" id="cov-ok"></div>
+
+  <div class="grp-title"><span class="dot" style="background:var(--warn)"></span>Walls — need v2 (data / modality / decomposition)</div>
+  <div class="cov" id="cov-wall"></div>
+
+  <div class="grp-title"><span class="dot" style="background:var(--faint)"></span>Investigated &amp; rejected (§0)</div>
+  <div class="cov" id="cov-rej"></div>
+</section>
+
+<section>
+  <h2>Delineation accuracy — LUDB expert gold (lead II, n=37)</h2>
+  <p class="lede">Interval bias (measured − gold) and mean absolute error against per-beat expert
+  wave-boundary annotations.</p>
+  <div class="tbl" id="delin"></div>
+  <p class="tnote">PR raw bias −34 ms drives a pipeline calibration of +34 ms (not a threshold
+  change). QRS is the energy estimator. QT is bounded near ~32 ms by the physiological
+  ambiguity of the T-offset — the tangent method did not beat it.</p>
+</section>
+
+<section>
+  <h2>Method</h2>
+  <div class="two">
+    <ul class="clean">
+      <li><span class="k">Harness</span><span class="v">Source-agnostic: a labelled case = signal + gold findings (+ gold intervals) run through the full pipeline; per-class sens/spec computed.</span></li>
+      <li><span class="k">Scoring</span><span class="v">Each dataset scores only the finding codes its label map can supply — no always-zero rows.</span></li>
+      <li><span class="k">Subsets</span><span class="v">Stratified by SCP/SNOMED, up to ~90/class; pathology-enriched, so specificity is a lower bound.</span></li>
+    </ul>
+    <ul class="clean">
+      <li><span class="k">Beats</span><span class="v">Ventricular ectopy from a transparent LDA on the MIT-BIH inter-patient split (de Chazal DS1→DS2), JSON coefficients, no runtime ML.</span></li>
+      <li><span class="k">Delineation</span><span class="v">Accuracy measured on LUDB; PR calibrated from it; QRS width replaced with a slope-energy estimator.</span></li>
+      <li><span class="k">Honesty (§0)</span><span class="v">Detectors that don't separate on real data are documented and dropped, never shipped to pad coverage.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section style="border-bottom:none">
+  <h2>Roadmap — v2</h2>
+  <ul class="clean">
+    <li><span class="k">Atrial DSP</span><span class="v">Ventricular-activity suppression + F-wave organisation for atrial flutter (needs longer records / joint multi-lead decomposition).</span></li>
+    <li><span class="k">AV dissociation</span><span class="v">Layer-3 measurement to activate the complete-AV-block rule (near-absent in open resting data).</span></li>
+    <li><span class="k">Telemetry mode</span><span class="v">A monitoring modality where a proper multi-feature VF detector belongs (out of the 12-lead resting scope).</span></li>
+    <li><span class="k">ST typing</span><span class="v">Horizontal / down- / up-sloping ST plus sex-specific V2–V3 thresholds for graded ischemia.</span></li>
+  </ul>
+</section>
+
+<footer>CardioLens · decision-support · figures reproducible via <span class="mono">python -m cardiolens.validate</span> · not for clinical use</footer>
+</div>
+
+<script>
+const pct = v => Math.round(v*100);
+function bar(v, cls){
+  return `<div class="metric"><span class="track"><span class="fill ${cls}" style="width:${pct(v)}%"></span></span><span class="val tnum">${v.toFixed(2)}</span></div>`;
+}
+function metricTable(el, rows){
+  let h = `<div class="trow thead"><span class="lab">Finding</span><span class="lab">Sensitivity</span><span class="lab">Specificity</span><span class="lab" style="text-align:right">n</span></div>`;
+  for(const r of rows){
+    h += `<div class="trow"><span class="cls">${r.c}</span>${bar(r.se,'sens')}${bar(r.sp,'spec')}<span class="n tnum">${r.n}</span></div>`;
+  }
+  document.getElementById(el).innerHTML = h;
+}
+metricTable('ptbxl', [
+  {c:'sinus_tachycardia',se:1.00,sp:0.92,n:87},
+  {c:'lbbb',se:0.97,sp:0.93,n:90},
+  {c:'sinus_rhythm',se:0.88,sp:0.68,n:378},
+  {c:'sinus_bradycardia',se:0.87,sp:0.91,n:85},
+  {c:'rbbb',se:0.82,sp:0.98,n:90},
+  {c:'atrial_fibrillation',se:0.79,sp:0.84,n:112},
+  {c:'first_degree_av_block',se:0.71,sp:0.66,n:101},
+  {c:'lvh',se:0.46,sp:0.97,n:123},
+  {c:'st_depression',se:0.38,sp:0.71,n:121},
+  {c:'st_elevation',se:0.29,sp:0.78,n:28},
+]);
+metricTable('chapman', [
+  {c:'sinus_rhythm',se:0.97,sp:0.71,n:90},
+  {c:'sinus_tachycardia',se:0.97,sp:0.83,n:87},
+  {c:'sinus_bradycardia',se:0.93,sp:0.97,n:198},
+  {c:'left_axis_deviation',se:0.91,sp:0.87,n:34},
+  {c:'lvh',se:0.84,sp:0.90,n:49},
+  {c:'atrial_fibrillation',se:0.83,sp:0.81,n:59},
+  {c:'first_degree_av_block',se:0.80,sp:0.72,n:50},
+  {c:'lbbb',se:0.80,sp:0.93,n:50},
+  {c:'rbbb',se:0.70,sp:0.99,n:50},
+  {c:'low_qrs_voltage',se:0.67,sp:0.88,n:45},
+  {c:'long_qt',se:0.67,sp:0.69,n:12},
+  {c:'st_depression',se:0.64,sp:0.85,n:52},
+  {c:'right_axis_deviation',se:0.56,sp:0.95,n:18},
+  {c:'st_elevation',se:0.50,sp:0.77,n:16},
+  {c:'atrial_flutter',se:0.00,sp:1.00,n:132},
+]);
+metricTable('targeted', [
+  {c:'paced_rhythm (PTB-XL 60/60)',se:0.83,sp:0.95,n:120},
+  {c:'ventricular ectopy (MIT-BIH DS2)',se:0.67,sp:0.99,n:3219},
+  {c:'ventricular ectopy (PTB-XL PVC, cross)',se:0.31,sp:0.97,n:136},
+  {c:'supraventricular_tachycardia (pooled)',se:0.47,sp:1.00,n:169},
+]);
+
+// delineation table (bias / MAE, not sens/spec)
+(function(){
+  const rows=[['PR','−34 ms (raw fiducial)','39 ms'],['QRS','+4.5 ms (energy)','13 ms'],['QT','−11 ms (fiducial)','~32 ms']];
+  let h=`<div class="trow thead" style="grid-template-columns:1fr 2fr 1fr"><span class="lab">Interval</span><span class="lab">Bias (measured − gold)</span><span class="lab" style="text-align:right">MAE</span></div>`;
+  for(const r of rows) h+=`<div class="trow" style="grid-template-columns:1fr 2fr 1fr"><span class="cls mono">${r[0]}</span><span class="mono" style="font-size:12.5px;color:var(--muted)">${r[1]}</span><span class="n tnum">${r[2]}</span></div>`;
+  document.getElementById('delin').innerHTML=h;
+})();
+
+function covCards(el, items){
+  document.getElementById(el).innerHTML = items.map(i =>
+    `<div class="item"><span class="nm">${i.n}</span><span class="mx">${i.m}</span><span><span class="pill ${i.p}">${i.t}</span></span></div>`
+  ).join('');
+}
+covCards('cov-ok', [
+  {n:'Sinus rhythm / brady / tachy',m:'rate + regularity',p:'p-ok',t:'validated'},
+  {n:'Atrial fibrillation',m:'0.79 / 0.83',p:'p-ok',t:'validated'},
+  {n:'Supraventricular tachycardia',m:'0.47 / 1.00',p:'p-ok',t:'validated'},
+  {n:'Sinus pause / arrest',m:'RR gap · §10',p:'p-ok',t:'validated'},
+  {n:'Ventricular ectopy / couplet',m:'0.67 / 0.99',p:'p-ok',t:'validated'},
+  {n:'Ventricular tachycardia',m:'PPV 1.00 · §10',p:'p-ok',t:'validated'},
+  {n:'Ventricular bigeminy',m:'beat classifier',p:'p-ok',t:'validated'},
+  {n:'AV block, 1st degree',m:'0.71 / 0.80',p:'p-ok',t:'validated'},
+  {n:'RBBB / LBBB',m:'0.82 / 0.97',p:'p-ok',t:'validated'},
+  {n:'LVH / RVH',m:'0.46–0.84',p:'p-ok',t:'validated'},
+  {n:'WPW pre-excitation',m:'short PR + wide QRS',p:'p-ok',t:'validated'},
+  {n:'Paced rhythm',m:'0.83 / 0.95',p:'p-ok',t:'validated'},
+]);
+covCards('cov-wall', [
+  {n:'Atrial flutter',m:'atrial decomposition',p:'p-wall',t:'v2'},
+  {n:'Complete AV block',m:'AV-dissociation + data',p:'p-wall',t:'v2'},
+  {n:'Ventricular fibrillation',m:'telemetry modality',p:'p-wall',t:'v2'},
+  {n:'Junctional / MAT',m:'P-wave dependent',p:'p-wall',t:'v2'},
+]);
+covCards('cov-rej', [
+  {n:'SVEB / atrial ectopy',m:'not separable inter-patient',p:'p-rej',t:'rejected'},
+  {n:'Ventricular trigeminy',m:'sens 0.00',p:'p-rej',t:'rejected'},
+  {n:'AV block, 2nd degree',m:'unreliable on 10 s',p:'p-rej',t:'rejected'},
+  {n:'Pathological Q',m:'spec 0.85 marginal',p:'p-rej',t:'rejected'},
+  {n:'LVH Cornell voltage',m:'spec regression',p:'p-rej',t:'rejected'},
+  {n:'Diagnostic bandwidth',m:'no gain, adds noise',p:'p-rej',t:'rejected'},
+  {n:'ST shape typing',m:'FPs are real strain',p:'p-rej',t:'rejected'},
+  {n:'QT tangent method',m:'T-end wall',p:'p-rej',t:'rejected'},
+]);
+</script>
