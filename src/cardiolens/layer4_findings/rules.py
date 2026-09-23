@@ -439,20 +439,22 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
     depr = thr.get("depression_significant")
     if not (elev and depr):
         return
-    # ST elevation is measured at J+60 ms (SCP-ECG ST-amplitude convention). The
-    # J point alone under-reads the elevation and misses most true STE (sens
-    # 0.14 vs 0.29 on PTB-XL, D15j). Precordial V2-V3 take a higher threshold —
-    # early-repolarisation routinely lifts them 0.1-0.2 mV in healthy hearts, so
-    # ACC/ESC require 0.2 mV there. Depression stays on the J point (its own
-    # branch below), where it validated best.
+    # Both ST deviations are read at J+60 ms (SCP-ECG ST-amplitude convention).
+    # The J point alone under-reads elevation (sens 0.14 vs 0.29) and, sitting in
+    # the S-wave / junctional dip, over-reads depression on normals (spec 0.47 vs
+    # 0.70 at J+60) — junctional (upsloping) depression is benign, ischaemic
+    # depression persists to J+60/J+80 (D15j/D15k). Precordial V2-V3 take a higher
+    # elevation threshold — early-repolarisation routinely lifts them 0.1-0.2 mV
+    # in healthy hearts, so ACC/ESC require 0.2 mV there.
     elev_v2v3 = thr.get("elevation_significant_v2v3", elev)
     elevated, depressed = [], []
     for st in m.morphology.st:
-        if st.j60_uv is not None:
-            lead_thr = elev_v2v3 if st.lead in ("V2", "V3") else elev
-            if st.j60_uv >= lead_thr:
-                elevated.append(st.lead)
-        if st.j_point_uv is not None and st.j_point_uv <= -depr:
+        if st.j60_uv is None:
+            continue
+        lead_thr = elev_v2v3 if st.lead in ("V2", "V3") else elev
+        if st.j60_uv >= lead_thr:
+            elevated.append(st.lead)
+        elif st.j60_uv <= -depr:
             depressed.append(st.lead)
     # STEMI requires CONTIGUOUS elevation — >=2 leads within one coronary
     # territory. Scattered single-lead elevation is early-repol / noise, not
