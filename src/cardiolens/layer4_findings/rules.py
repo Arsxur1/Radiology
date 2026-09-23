@@ -92,12 +92,34 @@ def detect_findings(
                 evidence=_ev(heart_rate_bpm=hr, norm_low=lo), confidence=0.9,
             ))
         elif hr > hi:
-            fs.findings.append(Finding(
-                code="sinus_tachycardia", group="rhythm",
-                label_ru=f"Тахикардия (ЧСС {hr}/мин)",
-                label_uz=f"Taxikardiya (YUT {hr}/daq)",
-                evidence=_ev(heart_rate_bpm=hr, norm_high=hi), confidence=0.9,
-            ))
+            # A regular narrow-complex tachycardia at/above svt_rate_min is SVT
+            # (or atrial tachycardia / flutter with 2:1), NOT sinus tachycardia —
+            # resting sinus tachy rarely exceeds ~140/min (§7.1). The narrow gate
+            # keeps a wide-complex tachy in VT territory (§10, handled by the beat
+            # classifier); the regular gate keeps AFib-RVR out (it fires
+            # atrial_fibrillation instead). Adult-only (svt_rate_min absent from
+            # the pediatric norms, where high rates are physiologic).
+            svt_min = norms.get("svt_rate_min")
+            block = norms.get("intervals_ms", {}).get("qrs_complete_block") or 120
+            qrs = m.intervals.qrs_ms
+            narrow = qrs is not None and qrs < block
+            if (not is_pediatric and svt_min and hr >= svt_min
+                    and m.rhythm_regular is not False and narrow):
+                fs.findings.append(Finding(
+                    code="supraventricular_tachycardia", group="rhythm",
+                    label_ru=f"Суправентрикулярная тахикардия (ЧСС {hr}/мин, "
+                             f"регулярная узкокомплексная)",
+                    label_uz=f"Supraventrikulyar taxikardiya (YUT {hr}/daq)",
+                    evidence=_ev(heart_rate_bpm=hr, svt_rate_min=svt_min,
+                                 qrs_ms=qrs, regular="yes"), confidence=0.7,
+                ))
+            else:
+                fs.findings.append(Finding(
+                    code="sinus_tachycardia", group="rhythm",
+                    label_ru=f"Тахикардия (ЧСС {hr}/мин)",
+                    label_uz=f"Taxikardiya (YUT {hr}/daq)",
+                    evidence=_ev(heart_rate_bpm=hr, norm_high=hi), confidence=0.9,
+                ))
         else:
             fs.findings.append(Finding(
                 code="sinus_rhythm", group="rhythm",

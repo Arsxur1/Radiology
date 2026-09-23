@@ -129,6 +129,17 @@ def test_pacing_spike_ratio_separates_paced_from_clean():
 
 
 # --- Layer 4: findings ---
+def test_svt_vs_sinus_tachycardia():
+    # A regular narrow-complex tachy >=140/min is SVT, not sinus tachycardia.
+    _, fast, _ = _run(generate_synthetic_ecg(heart_rate_bpm=155))
+    assert "supraventricular_tachycardia" in fast.codes()
+    assert "sinus_tachycardia" not in fast.codes()
+    # A moderate tachy stays sinus tachycardia.
+    _, mod, _ = _run(generate_synthetic_ecg(heart_rate_bpm=115))
+    assert "sinus_tachycardia" in mod.codes()
+    assert "supraventricular_tachycardia" not in mod.codes()
+
+
 def test_bradycardia_finding():
     _, fnd, _ = _run(generate_synthetic_ecg(heart_rate_bpm=44))
     assert "sinus_bradycardia" in fnd.codes()

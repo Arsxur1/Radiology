@@ -36,6 +36,7 @@ from cardiolens.validation.metrics import (
 # an adapter can actually produce.
 SCORED_LABELS = [
     "sinus_rhythm", "sinus_bradycardia", "sinus_tachycardia",
+    "supraventricular_tachycardia",
     "first_degree_av_block", "st_elevation", "peaked_t_waves",
 ]
 
@@ -55,6 +56,7 @@ PTBXL_SCP_TO_CODE = {
     "1AVB": "first_degree_av_block", "STE_": "st_elevation", "STD_": "st_depression",
     "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
     "RVH": "rvh", "PACE": "paced_rhythm",
+    "SVTAC": "supraventricular_tachycardia", "PSVT": "supraventricular_tachycardia",
 }
 
 # Labels scored on a real dataset are exactly the finding codes its adapter can
@@ -106,11 +108,15 @@ def build_synthetic_dataset() -> list[LabeledCase]:
             generate_synthetic_ecg(heart_rate_bpm=hr, pr_ms=160, seed=20 + i),
             {"sinus_bradycardia"}, gold_pr_ms=160, name=f"brady_{hr}"))
 
-    # Tachycardia.
-    for i, hr in enumerate((110, 125, 140)):
+    # Sinus tachycardia (below the SVT rate threshold).
+    for i, hr in enumerate((110, 125, 135)):
         cases.append(LabeledCase(
             generate_synthetic_ecg(heart_rate_bpm=hr, pr_ms=150, seed=30 + i),
             {"sinus_tachycardia"}, gold_pr_ms=150, name=f"tachy_{hr}"))
+    # SVT: a regular narrow-complex tachycardia at/above svt_rate_min.
+    cases.append(LabeledCase(
+        generate_synthetic_ecg(heart_rate_bpm=165, pr_ms=140, seed=41),
+        {"supraventricular_tachycardia"}, gold_pr_ms=140, name="svt_165"))
 
     # First-degree AV block.
     for i, pr in enumerate((240, 280, 300)):
@@ -197,6 +203,7 @@ SNOMED_TO_CODE = {
     "426783006": "sinus_rhythm",
     "426177001": "sinus_bradycardia",
     "427084000": "sinus_tachycardia",
+    "426761007": "supraventricular_tachycardia",
     "164889003": "atrial_fibrillation",
     "164890007": "atrial_flutter",
     "270492004": "first_degree_av_block",

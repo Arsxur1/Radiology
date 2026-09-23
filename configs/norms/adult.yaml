@@ -7,6 +7,15 @@ applies_when:
 
 heart_rate_bpm: [60, 100]
 
+# Above this rate a REGULAR NARROW-complex tachycardia is flagged as
+# supraventricular tachycardia (SVT) rather than sinus tachycardia: resting
+# sinus tachycardia rarely exceeds ~140/min, so a regular narrow tachy at/above
+# this rate is SVT/AT/flutter-2:1 until proven otherwise (guideline threshold).
+# Validated on PTB-XL SVTAC/PSVT + Chapman SVT vs sinus tach (55 vs 114):
+# sens 0.47 / spec 1.00. Adult-only key — children have high physiologic rates
+# (the pediatric norm table omits it, so the rule never fires for them).
+svt_rate_min: 140
+
 intervals_ms:
   pr: [120, 200]
   qrs: [70, 110]
