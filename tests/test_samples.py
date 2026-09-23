@@ -22,3 +22,16 @@ def test_csv_sample_parses():
                    sampling_rate_hz=500, unit="uv")
     assert sig.n_leads == 12
     assert sig.lead_names[0] == "I"
+
+
+def test_lead_names_canonicalized():
+    # Sources spell the augmented leads in mixed case (PTB-XL WFDB loads "AVL").
+    # Lead lookups and _TERRITORIES key on the canonical aVR/aVL/aVF casing, so
+    # every parser must normalise — otherwise axis / ST-territory / reciprocal
+    # logic silently drops those leads on real data.
+    from cardiolens.layer1_ingestion.parsers import canonicalize_lead_names
+
+    assert canonicalize_lead_names(["I", "AVR", "avl", "AvF", "v1", "V6"]) == [
+        "I", "aVR", "aVL", "aVF", "V1", "V6"]
+    # Unknown / non-standard labels (e.g. MIT-BIH "MLII") pass through untouched.
+    assert canonicalize_lead_names(["MLII", "ch3"]) == ["MLII", "ch3"]

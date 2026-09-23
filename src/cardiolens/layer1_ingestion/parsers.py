@@ -13,9 +13,22 @@ from pathlib import Path
 import numpy as np
 
 from cardiolens.contracts.signal import (
+    STANDARD_12_LEADS,
     Provenance,
     SignalRepresentation,
 )
+
+# Canonical spelling per uppercase key — sources spell aVR/aVL/aVF and the
+# precordials in mixed case (PTB-XL loads "AVL", others "avl"). Downstream code
+# and _TERRITORIES key on the canonical STANDARD_12_LEADS casing, and lead
+# lookups are case-sensitive, so a mis-cased name silently drops that lead from
+# axis / ST-territory / reciprocal logic. Normalise every parser's output here.
+_CANONICAL_LEAD = {name.upper(): name for name in STANDARD_12_LEADS}
+
+
+def canonicalize_lead_names(names: list[str]) -> list[str]:
+    """Map lead names to the canonical 12-lead casing; leave unknowns untouched."""
+    return [_CANONICAL_LEAD.get(n.strip().upper(), n) for n in names]
 
 
 def _mv_to_uv(x: np.ndarray) -> np.ndarray:
@@ -42,6 +55,7 @@ def load_wfdb(record_path: str | Path) -> SignalRepresentation:
         out[i] = sig[i] * 1000.0 if unit in ("mv", "millivolt") else sig[i]
 
     lead_names = list(rec.sig_name) if rec.sig_name else [f"ch{i}" for i in range(sig.shape[0])]
+    lead_names = canonicalize_lead_names(lead_names)
     return SignalRepresentation(
         signal=out,
         sampling_rate_hz=float(rec.fs),
@@ -68,7 +82,7 @@ def load_edf(path: str | Path) -> SignalRepresentation:
     return SignalRepresentation(
         signal=sig,
         sampling_rate_hz=fs,
-        lead_names=list(labels),
+        lead_names=canonicalize_lead_names(list(labels)),
         duration_s=float(min_len / fs),
         source="edf",
         provenance=Provenance(digitized=False, confidence=1.0),
@@ -105,7 +119,7 @@ def load_csv(
     return SignalRepresentation(
         signal=sig.astype(np.float32),
         sampling_rate_hz=float(sampling_rate_hz),
-        lead_names=list(names),
+        lead_names=canonicalize_lead_names(list(names)),
         duration_s=float(sig.shape[1] / sampling_rate_hz),
         source="csv",
         provenance=Provenance(digitized=False, confidence=1.0),
