@@ -69,7 +69,11 @@ def scan_critical(findings: FindingSet, m: Measurements) -> SafetyResult:
     if hr is not None and hr < 40:
         add("severe_bradycardia", "Тяжёлая брадикардия", "Og'ir bradikardiya",
             reason=f"HR {hr} bpm < 40")
-    if hr is not None and hr > 150 and (m.intervals.qrs_ms or 0) > 120:
+    # A regular narrow tachy >=140 is called SVT (Layer 4); a WIDE one at the
+    # same rate is VT-until-proven-otherwise (§10). Use the same 140 threshold so
+    # the narrow->SVT / wide->VT-suspect split is consistent and nothing in the
+    # 140-150 band falls through to a benign sinus_tachycardia label.
+    if hr is not None and hr >= 140 and (m.intervals.qrs_ms or 0) > 120:
         add("wide_complex_tachycardia",
             "Тахикардия с широкими комплексами (исключить ЖТ)",
             "Keng kompleksli taxikardiya (JT ni istisno qilish)",

@@ -4,6 +4,7 @@ import numpy as np
 
 from cardiolens.config import load_norms
 from cardiolens.contracts.features import Axes, Intervals, Measurements
+from cardiolens.contracts.findings import FindingSet
 from cardiolens.contracts.signal import STANDARD_12_LEADS, Patient, SignalRepresentation
 from cardiolens.layer1_ingestion import generate_synthetic_ecg
 from cardiolens.layer4_findings import detect_findings
@@ -61,6 +62,18 @@ def test_atrial_flutter():
     assert "atrial_flutter" in _codes(
         Measurements(heart_rate_bpm=75, atrial_rate_bpm=300,
                      intervals=Intervals(qrs_ms=90)))
+
+
+def test_wide_complex_tachycardia_critical_from_140():
+    # A wide-complex regular tachy at 145 (the SVT-narrow band) must raise the
+    # §10 "exclude VT" alert, not fall through — thresholds aligned at 140.
+    m = Measurements(heart_rate_bpm=145, intervals=Intervals(qrs_ms=150))
+    saf = scan_critical(FindingSet(), m)
+    assert any(a.code == "wide_complex_tachycardia" for a in saf.alerts)
+    # A narrow tachy at the same rate does NOT (it is SVT, handled in Layer 4).
+    saf2 = scan_critical(FindingSet(), Measurements(heart_rate_bpm=145,
+                                                    intervals=Intervals(qrs_ms=90)))
+    assert not any(a.code == "wide_complex_tachycardia" for a in saf2.alerts)
 
 
 def test_low_qrs_voltage_end_to_end():
