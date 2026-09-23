@@ -33,6 +33,13 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # Lead preferred for rhythm/delineation.
 _RHYTHM_LEAD_PREFERENCE = ["II", "V5", "V2", "I"]
 
+# Slope-energy QRS-width estimator: fraction of the local envelope peak that
+# bounds the contiguous complex. Calibrated on LUDB expert gold (D15o): 0.05
+# gives bias +4 ms / MAE 14 (fiducial: -5 / 12) yet separates normals
+# (median 86 ms, 1% >=120) from complete blocks (CRBBB 136/89%, CLBBB 153/100%),
+# where the fiducial offset over-reads normals (40% >=120) and under-reads RBBB.
+_QRS_ENERGY_FRACTION = 0.05
+
 
 def pacing_spike_ratio(sig: SignalRepresentation) -> float:
     """Pacing-spike prominence on the RAW signal (§7.1).
@@ -195,6 +202,15 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
                 pr_ms = _apply_correction(pr_ms, getattr(correction, "pr_ms", 0.0))
                 qrs_ms = _apply_correction(qrs_ms, getattr(correction, "qrs_ms", 0.0))
                 qt_ms = _apply_correction(qt_ms, getattr(correction, "qt_ms", 0.0))
+            # Prefer the robust slope-energy QRS width (D15o): the fiducial QRS
+            # offset is unstable in BOTH directions — it under-reads wide blocks
+            # (RBBB) and over-reads normals (false LBBB). The energy width, gold-
+            # calibrated on LUDB, fixes both. Fiducial value stands only if the
+            # envelope is not computable. The PR fiducials / QRS onsets used for
+            # ST and PR are left untouched.
+            qrs_energy = _qrs_width_energy(sig, rpeaks, fs)
+            if qrs_energy is not None:
+                qrs_ms = qrs_energy
             m.intervals = Intervals(pr_ms=pr_ms, qrs_ms=qrs_ms, qt_ms=qt_ms)
             # Multi-lead PR (§7.3): a single lead under-measures PR, so first-degree
             # AV block is called on agreement across leads (layer 4). Reuse the
@@ -295,6 +311,52 @@ def _qrs_axis(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float
     i_amp = _qrs_amplitude(sig.lead("I"), rpeaks, fs)
     f_amp = _qrs_amplitude(sig.lead("aVF"), rpeaks, fs)
     return round(float(np.degrees(np.arctan2(f_amp, i_amp))), 1)
+
+
+def _qrs_width_energy(
+    sig: SignalRepresentation, rpeaks: np.ndarray, fs: float,
+    frac: float = _QRS_ENERGY_FRACTION,
+) -> float | None:
+    """Robust QRS duration (ms) from a multi-lead slope-energy envelope (D15o).
+
+    The QRS is the burst of high slew shared across leads, so sum ``|derivative|``
+    over all leads, smooth (~12 ms), and take the span around each R peak where
+    the envelope exceeds ``frac`` of its local peak; median across beats. This
+    avoids the per-lead fiducial QRS-offset instability that under-reads wide
+    complexes (RBBB) and over-reads normals (false LBBB). ``None`` if not
+    computable. Uses a +-110 ms search window to admit genuinely wide blocks.
+    """
+    if len(rpeaks) == 0:
+        return None
+    x = np.asarray(sig.signal, dtype=np.float64)
+    if x.ndim != 2 or x.shape[0] == 0 or x.shape[1] < 5:
+        return None
+    env = np.abs(np.diff(x, axis=1)).sum(axis=0)
+    k = max(1, int(0.012 * fs))
+    env = np.convolve(env, np.ones(k) / k, mode="same")
+    half = int(0.11 * fs)
+    widths: list[float] = []
+    for r in rpeaks:
+        a, b = max(0, int(r) - half), min(len(env), int(r) + half)
+        seg = env[a:b]
+        if seg.size < 5:
+            continue
+        pk = float(seg.max())
+        if pk <= 0:
+            continue
+        mask = seg >= frac * pk
+        # Take the CONTIGUOUS run around the QRS peak, not first-to-last of all
+        # above-threshold samples — otherwise a nearby T/P shoulder that pokes
+        # above the threshold balloons the span across the gap between complexes.
+        c = int(np.argmax(seg))
+        lo = c
+        while lo > 0 and mask[lo - 1]:
+            lo -= 1
+        hi = c
+        while hi < len(mask) - 1 and mask[hi + 1]:
+            hi += 1
+        widths.append((hi - lo) / fs * 1000.0)
+    return round(float(np.median(widths)), 1) if widths else None
 
 
 def _sokolow_lyon(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
