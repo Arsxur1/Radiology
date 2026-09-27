@@ -178,7 +178,8 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
 
 # PTB-XL SCP code (and the fetch script's AXIS_* pseudo-labels) -> finding code.
 PTBXL_SCP_MAP = {
-    "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
+    "SR": "sinus_rhythm", "SARRH": "sinus_rhythm",   # sinus arrhythmia is a sinus rhythm
+    "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
     "AFIB": "atrial_fibrillation", "AFLT": "atrial_flutter",
     "1AVB": "first_degree_av_block", "LPR": "first_degree_av_block",
     "3AVB": "complete_av_block",
