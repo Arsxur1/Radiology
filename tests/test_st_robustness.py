@@ -108,7 +108,25 @@ def test_bundle_branch_block_raises_no_primary_st_codes():
         assert not any(a.code == "st_elevation" for a in r.safety.alerts)
 
 
+def test_st_elevation_any_is_descriptive_and_never_critical():
+    # Discordant anterior elevation under LVH: descriptor present, no STEMI alert.
+    m = _base(morphology=_st({"V1": 200, "V2": 300, "V3": 300},
+                             qrs_net={"V1": -1500, "V2": -1800, "V3": -1200}),
+              sokolow_lyon_uv=4000)
+    sig = generate_synthetic_ecg(age_years=45)
+    fs = detect_findings(sig, m, norms=norms_for_patient(45, None))
+    codes = fs.codes()
+    assert "st_elevation_any" in codes and "st_elevation" not in codes
+    assert not any(a.code == "st_elevation" for a in scan_critical(fs, m).alerts)
+    # A single non-contiguous lead: descriptor only.
+    m2 = _base(morphology=_st({"V4": 150}))
+    assert _codes(m2) & {"st_elevation_any"} and "st_elevation" not in _codes(m2)
+    # Inferior STEMI carries both the alert and the descriptor.
+    m3 = _base(morphology=_st({"II": 180, "III": 180, "aVF": 180}))
+    assert {"st_elevation", "st_elevation_any"} <= _codes(m3)
+
+
 def test_normal_has_no_st_codes():
     r = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=75, seed=9), mode="A", provider=StubProvider())
     assert not r.findings.codes() & {"st_elevation", "st_elevation_nonspecific", "st_depression",
-                                     "secondary_st_t_change", "pericarditis"}
+                                     "secondary_st_t_change", "pericarditis", "st_elevation_any"}

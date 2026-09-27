@@ -456,10 +456,12 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
     # With a bundle branch block, pre-excitation or LVH the expected repolarisation
     # is discordant to the QRS; only concordant deviations count as primary.
     secondary_ctx = bool(fs.codes() & _SECONDARY_ST_CONTEXT)
-    elevated, depressed, discordant = [], [], []
+    elevated, depressed, discordant, any_elevated = [], [], [], []
     for st in m.morphology.st:
         elev, depr = _st_thresholds(norms, patient, st.lead)
         j, j60, j80 = st.j_point_uv, st.j60_uv, st.j80_uv
+        if st.lead != "aVR" and ((j is not None and j >= elev) or (j60 is not None and j60 >= elev)):
+            any_elevated.append(st.lead)
         dev = 0
         # STEMI is defined by J-POINT elevation that persists into the ST segment.
         if j is not None and j >= elev and (j60 is None or j60 >= plateau * elev):
@@ -511,6 +513,16 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
             evidence=_ev(leads=",".join(depressed), threshold_uv=thr.get("depression_significant"),
                          discordant=",".join(disc) or "none"),
             confidence=0.55 if disc else 0.75,
+        ))
+    # Neutral descriptor: any lead with ST elevation at its threshold (contiguous or
+    # not, primary or discordant). Never critical; matches the broad "ST elevation"
+    # labels of the public datasets while the STEMI-grade alert stays strict.
+    if any_elevated:
+        fs.findings.append(Finding(
+            code="st_elevation_any", group="ischemia",
+            label_ru=f"Элевация ST в отведениях {', '.join(any_elevated)} (описательно)",
+            label_uz=f"{', '.join(any_elevated)} tarmoqlarida ST elevatsiyasi (tavsifiy)",
+            evidence=_ev(leads=",".join(any_elevated)), confidence=0.5,
         ))
     if len(discordant) >= 2:
         fs.findings.append(Finding(
