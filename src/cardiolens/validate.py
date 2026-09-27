@@ -14,6 +14,7 @@ from cardiolens.validation import (
     build_ecg_arrhythmia_dataset,
     build_ptbxl_dataset,
     build_synthetic_dataset,
+    filter_by_age,
     run_validation,
 )
 
@@ -24,6 +25,8 @@ def main() -> None:
     ap.add_argument("--ecg-arrhythmia",
                     help="path to a local PhysioNet ecg-arrhythmia (Chapman/Ningbo) checkout")
     ap.add_argument("--limit", type=int, default=50)
+    ap.add_argument("--age-min", type=float, help="keep patients at least this old (years)")
+    ap.add_argument("--age-max", type=float, help="keep patients at most this old (years)")
     args = ap.parse_args()
 
     if args.ptbxl:
@@ -36,6 +39,9 @@ def main() -> None:
         cases = build_synthetic_dataset()
         source = "synthetic (offline)"
 
+    if args.age_min is not None or args.age_max is not None:
+        cases = filter_by_age(cases, args.age_min, args.age_max)
+        source += f" [age {args.age_min or 0}-{args.age_max or '∞'}]"
     report = run_validation(cases)
     print(f"=== CardioLens validation — {source} ===")
     print(f"cases: {report.n_cases}")
@@ -43,6 +49,9 @@ def main() -> None:
     print(f"PR MAE: {report.pr_mae_ms} ms | QT MAE: {report.qt_mae_ms} ms")
     print("\nper-class (sensitivity / specificity / support):")
     for lbl, m in report.per_class.items():
+        print(f"  {lbl:24s} sens={m.sensitivity} spec={m.specificity} n={m.support}")
+    print("\nfamilies (any-of prediction vs any-of gold):")
+    for lbl, m in report.families.items():
         print(f"  {lbl:24s} sens={m.sensitivity} spec={m.specificity} n={m.support}")
     print("\nJSON:")
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))

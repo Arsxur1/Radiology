@@ -52,10 +52,24 @@ class LabeledCase:
     name: str = ""
 
 
+# Derived "family" scores: a prediction of any code in the first set against a gold
+# label of any code in the second. AF and flutter with an irregular response are one
+# clinical family (the rule set cannot always tell them apart); "any ST elevation"
+# matches the broad dataset labels (ST tilt up / non-specific ST elevation) that the
+# STEMI-grade alert deliberately does not.
+FAMILIES: dict[str, tuple[set[str], set[str]]] = {
+    "af_or_flutter": ({"atrial_fibrillation", "atrial_flutter"},
+                      {"atrial_fibrillation", "atrial_flutter"}),
+    "st_elevation_any": ({"st_elevation", "st_elevation_nonspecific", "st_elevation_any"},
+                         {"st_elevation"}),
+}
+
+
 @dataclass
 class ValidationReport:
     n_cases: int
     per_class: dict = field(default_factory=dict)
+    families: dict = field(default_factory=dict)
     macro_sensitivity: float | None = None
     pr_mae_ms: float | None = None
     qt_mae_ms: float | None = None
@@ -67,7 +81,21 @@ class ValidationReport:
             "pr_mae_ms": self.pr_mae_ms,
             "qt_mae_ms": self.qt_mae_ms,
             "per_class": {k: v.to_dict() for k, v in self.per_class.items()},
+            "families": {k: v.to_dict() for k, v in self.families.items()},
         }
+
+
+def filter_by_age(cases: list[LabeledCase], age_min: float | None = None,
+                  age_max: float | None = None) -> list[LabeledCase]:
+    """Keep cases whose patient age is known and inside [age_min, age_max]."""
+    out = []
+    for c in cases:
+        age = getattr(c.signal.patient, "age_years", None)
+        if age is None:
+            continue
+        if (age_min is None or age >= age_min) and (age_max is None or age <= age_max):
+            out.append(c)
+    return out
 
 
 def build_synthetic_dataset() -> list[LabeledCase]:
@@ -133,45 +161,79 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
         qt_err.add(result.measurements.intervals.qt_ms, case.gold_qt_ms)
 
     per_class = score_findings(preds, gold, labels)
+    families = {}
+    for name, (pred_codes, gold_codes) in FAMILIES.items():
+        fam_pred = [{name} if p & pred_codes else set() for p in preds]
+        fam_gold = [{name} if g & gold_codes else set() for g in gold]
+        families[name] = score_findings(fam_pred, fam_gold, [name])[name]
     return ValidationReport(
         n_cases=len(cases),
         per_class=per_class,
+        families=families,
         macro_sensitivity=macro_recall(per_class),
         pr_mae_ms=pr_err.mae,
         qt_mae_ms=qt_err.mae,
     )
 
 
-def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:  # pragma: no cover
-    """Load real PTB-XL records + SCP labels from a local checkout (TZ §15).
+# PTB-XL SCP code (and the fetch script's AXIS_* pseudo-labels) -> finding code.
+PTBXL_SCP_MAP = {
+    "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
+    "AFIB": "atrial_fibrillation", "AFLT": "atrial_flutter",
+    "1AVB": "first_degree_av_block", "LPR": "first_degree_av_block",
+    "3AVB": "complete_av_block",
+    "CRBBB": "rbbb", "CLBBB": "lbbb", "WPW": "wpw_preexcitation",
+    "LVH": "lvh", "VCLVH": "lvh", "LNGQT": "long_qt", "LVOLT": "low_qrs_voltage",
+    "STE_": "st_elevation", "STD_": "st_depression",
+    "LAO/LAE": "left_atrial_enlargement", "RAO/RAE": "right_atrial_enlargement",
+    "AXIS_LAD": "left_axis_deviation", "AXIS_RAD": "right_axis_deviation",
+}
 
-    Expects ``ptbxl_database.csv`` and ``scp_statements.csv`` at ``root`` and the
-    WFDB records under ``records500/``. Maps a subset of SCP codes to our finding
-    codes. Runs only when the dataset is present locally.
+
+def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:  # pragma: no cover
+    """Load PTB-XL records from a local checkout (TZ §15).
+
+    With a ``manifest.json`` from ``fetch_ptbxl`` the selection, labels (SCP codes
+    with likelihood >= 50), axis and patient age/sex come from the manifest.
+    Without one, falls back to ``ptbxl_database.csv`` + whatever ``records500/``
+    files exist. Runs only when the data is present locally.
     """
+    import json
+
+    from cardiolens.layer1_ingestion import load_wfdb
+
+    root = Path(root)
+    manifest = root / "manifest.json"
+    cases: list[LabeledCase] = []
+    if manifest.exists():
+        for rec in json.loads(manifest.read_text(encoding="utf-8"))["records"][:limit]:
+            path = root / rec["filename_hr"]
+            if not path.with_suffix(".hea").exists() or not path.with_suffix(".dat").exists():
+                continue
+            gold = {PTBXL_SCP_MAP[k] for k in rec.get("labels", []) if k in PTBXL_SCP_MAP}
+            try:
+                sig = load_wfdb(path)
+            except Exception:  # noqa: S112 - skip unreadable records
+                continue
+            sig.patient.age_years = rec.get("age")
+            sex = rec.get("sex")
+            sig.patient.sex = ("female" if str(sex) in ("1", "1.0", "female")
+                               else "male" if str(sex) in ("0", "0.0", "male") else None)
+            cases.append(LabeledCase(sig, gold, name=f"ptbxl_{rec['ecg_id']}"))
+        return cases
+
     import ast
 
     import pandas as pd
 
-    root = Path(root)
     db = pd.read_csv(root / "ptbxl_database.csv", index_col="ecg_id")
     db.scp_codes = db.scp_codes.apply(ast.literal_eval)
-
-    # Minimal SCP -> our-code mapping (extend as coverage grows).
-    scp_map = {
-        "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
-        "1AVB": "first_degree_av_block", "AMI": "st_elevation", "IMI": "st_elevation",
-        "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
-    }
-
-    from cardiolens.layer1_ingestion import load_wfdb
-
-    cases: list[LabeledCase] = []
     for ecg_id, row in db.head(limit).iterrows():
         rec = root / str(row["filename_hr"])
         if not rec.with_suffix(".hea").exists():
             continue
-        gold = {scp_map[k] for k in row["scp_codes"] if k in scp_map}
+        gold = {PTBXL_SCP_MAP[k] for k, v in row["scp_codes"].items()
+                if k in PTBXL_SCP_MAP and (float(v) >= 50 or float(v) == 0)}
         sig = load_wfdb(rec)
         sig.patient.age_years = float(row.get("age")) if row.get("age") == row.get("age") else None
         sig.patient.sex = "male" if row.get("sex") == 0 else "female"

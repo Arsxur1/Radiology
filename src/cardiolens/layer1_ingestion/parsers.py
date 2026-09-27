@@ -15,6 +15,7 @@ import numpy as np
 from cardiolens.contracts.signal import (
     Provenance,
     SignalRepresentation,
+    canonical_lead_name,
 )
 
 
@@ -41,7 +42,7 @@ def load_wfdb(record_path: str | Path) -> SignalRepresentation:
         unit = units[i] if i < len(units) else "mv"
         out[i] = sig[i] * 1000.0 if unit in ("mv", "millivolt") else sig[i]
 
-    lead_names = list(rec.sig_name) if rec.sig_name else [f"ch{i}" for i in range(sig.shape[0])]
+    lead_names = [canonical_lead_name(n) for n in rec.sig_name] if rec.sig_name else [f"ch{i}" for i in range(sig.shape[0])]
     return SignalRepresentation(
         signal=out,
         sampling_rate_hz=float(rec.fs),
@@ -68,7 +69,7 @@ def load_edf(path: str | Path) -> SignalRepresentation:
     return SignalRepresentation(
         signal=sig,
         sampling_rate_hz=fs,
-        lead_names=list(labels),
+        lead_names=[canonical_lead_name(n) for n in labels],
         duration_s=float(min_len / fs),
         source="edf",
         provenance=Provenance(digitized=False, confidence=1.0),
@@ -105,7 +106,7 @@ def load_csv(
     return SignalRepresentation(
         signal=sig.astype(np.float32),
         sampling_rate_hz=float(sampling_rate_hz),
-        lead_names=list(names),
+        lead_names=[canonical_lead_name(n) for n in names],
         duration_s=float(sig.shape[1] / sampling_rate_hz),
         source="csv",
         provenance=Provenance(digitized=False, confidence=1.0),

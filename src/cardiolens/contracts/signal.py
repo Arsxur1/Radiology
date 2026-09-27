@@ -17,6 +17,30 @@ STANDARD_12_LEADS = [
     "V1", "V2", "V3", "V4", "V5", "V6",
 ]
 
+# Vendors and datasets spell the augmented leads differently (PTB-XL WFDB headers
+# say AVR/AVL/AVF; some exports use MLII, ECG_I, "Lead V1"). Everything downstream
+# keys on the canonical spellings above, so parsers normalise names on ingestion.
+_LEAD_ALIASES = {
+    "AVR": "aVR", "AVL": "aVL", "AVF": "aVF", "VR": "aVR", "VL": "aVL", "VF": "aVF",
+    "MLII": "II", "MLI": "I", "MLIII": "III",
+    "LEAD1": "I", "LEAD2": "II", "LEAD3": "III",
+}
+
+
+def canonical_lead_name(name: str) -> str:
+    """Map a raw lead label to the canonical spelling when it is a standard lead."""
+    raw = str(name).strip()
+    key = raw.upper().replace(" ", "").replace("_", "").replace("-", "")
+    for prefix in ("LEAD", "ECG"):
+        if key.startswith(prefix) and len(key) > len(prefix):
+            key = key[len(prefix):]
+    if key in _LEAD_ALIASES:
+        return _LEAD_ALIASES[key]
+    for std in STANDARD_12_LEADS:
+        if key == std.upper():
+            return std
+    return raw
+
 
 class PatientContext(BaseModel):
     """Optional clinical context feeding the causal analysis (TZ §3, §8)."""
