@@ -62,7 +62,7 @@ rules:
   - id: "lvh_strain_chain"
     label_ru: "ГЛЖ с вторичными изменениями (strain)"
     label_uz: "CHQG ikkilamchi o'zgarishlar bilan (strain)"
-    trigger_findings: ["lvh", "st_depression", "t_inversion"]
+    trigger_findings: ["lvh", "st_depression", "t_inversion", "secondary_st_t_change"]
     physiologic: "pathologic"
     critical: false
     nodes:
@@ -70,10 +70,12 @@ rules:
       - { id: "strain_st_t", kind: "mechanism", label_ru: "Вторичные ST-T изменения (strain)", label_uz: "Ikkilamchi ST-T o'zgarishlar (strain)" }
       - { id: "st_depression", kind: "finding", label_ru: "Депрессия ST", label_uz: "ST depressiyasi" }
       - { id: "t_inversion", kind: "finding", label_ru: "Инверсия T", label_uz: "T inversiyasi" }
+      - { id: "secondary_st_t_change", kind: "finding", label_ru: "Дискордантные ST-T изменения", label_uz: "Diskordant ST-T o'zgarishlar" }
     edges:
       - { from: "lvh", to: "strain_st_t", relation: "causes" }
       - { from: "strain_st_t", to: "st_depression", relation: "progresses_to" }
       - { from: "strain_st_t", to: "t_inversion", relation: "progresses_to" }
+      - { from: "strain_st_t", to: "secondary_st_t_change", relation: "progresses_to" }
     explanation_ru: "ST-T изменения объясняются перегрузкой при ГЛЖ (strain), а не первичной ишемией."
     explanation_uz: "ST-T o'zgarishlari CHQG dagi strain bilan izohlanadi, birlamchi ishemiya emas."
 
@@ -94,7 +96,7 @@ rules:
   - id: "bbb_explains_wide_qrs"
     label_ru: "Блокада ножки пучка Гиса"
     label_uz: "Hisning oyoqcha blokadasi"
-    trigger_findings: ["rbbb", "lbbb"]
+    trigger_findings: ["rbbb", "lbbb", "secondary_st_t_change"]
     physiologic: "pathologic"
     critical: false
     nodes:
@@ -102,11 +104,13 @@ rules:
       - { id: "rbbb", kind: "finding", label_ru: "БПНПГ", label_uz: "O'ng oyoqcha blokadasi" }
       - { id: "lbbb", kind: "finding", label_ru: "БЛНПГ", label_uz: "Chap oyoqcha blokadasi" }
       - { id: "secondary_st_t", kind: "mechanism", label_ru: "Вторичные ST-T изменения", label_uz: "Ikkilamchi ST-T o'zgarishlar" }
+      - { id: "secondary_st_t_change", kind: "finding", label_ru: "Дискордантные ST-T изменения", label_uz: "Diskordant ST-T o'zgarishlar" }
     edges:
       - { from: "bundle_branch_block", to: "rbbb", relation: "causes" }
       - { from: "bundle_branch_block", to: "lbbb", relation: "causes" }
       - { from: "rbbb", to: "secondary_st_t", relation: "progresses_to" }
       - { from: "lbbb", to: "secondary_st_t", relation: "progresses_to" }
+      - { from: "secondary_st_t", to: "secondary_st_t_change", relation: "progresses_to" }
     explanation_ru: "Широкий QRS объяснён блокадой ножки; связанные ST-T изменения вторичны, а не первичная ишемия."
     explanation_uz: "Keng QRS oyoqcha blokadasi bilan izohlanadi; ST-T o'zgarishlar ikkilamchi, birlamchi ishemiya emas."
 

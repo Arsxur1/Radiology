@@ -7,6 +7,10 @@ applies_when:
 
 heart_rate_bpm: [60, 100]
 
+rhythm:
+  # Regular atrial (F-wave) rate band for atrial flutter (bpm).
+  atrial_flutter_bpm: [200, 350]
+
 intervals_ms:
   pr: [120, 200]
   qrs: [70, 110]
@@ -31,9 +35,18 @@ voltage_uv:
   low_voltage_limb: 500
 
 st_uv:
-  # ST deviation thresholds at J+60ms, microvolts.
+  # ST deviation thresholds (µV). Elevation is judged at the J point (STEMI
+  # definition) and must persist at J+60 (elevation_plateau_fraction of the
+  # threshold) — an S-wave tail or T-wave encroachment fails that. V2-V3 use the
+  # sex/age-specific STEMI thresholds (ESC/ACC: 2 mm men >=40, 2.5 mm men <40,
+  # 1.5 mm women). Depression is judged at J+60 and J+80 (horizontal/downsloping);
+  # upsloping depression (J+80 rising by depression_upsloping_uv over J+60) is not
+  # called.
   elevation_significant: 100
+  elevation_v2_v3: { male_under_40: 250, male: 200, female: 150 }
+  elevation_plateau_fraction: 0.8
   depression_significant: 100
+  depression_upsloping_uv: 50
 
 # P-wave criteria for atrial enlargement (ecglibrary / 150 ECG Problems).
 p_wave:

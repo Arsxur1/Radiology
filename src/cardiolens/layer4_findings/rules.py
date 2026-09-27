@@ -110,19 +110,6 @@ def detect_findings(
     # ------------------------------------------------------------------ #
     # Intervals / QT (TZ §7.3)
     # ------------------------------------------------------------------ #
-    iv = m.intervals
-    _, pr_hi = norms.get("intervals_ms", {}).get("pr", [None, None])
-    if iv.pr_ms is not None and pr_hi and iv.pr_ms > pr_hi:
-        fs.findings.append(Finding(
-            code="first_degree_av_block", group="interval",
-            label_ru=f"АВ-блокада I степени (PR {iv.pr_ms} мс)",
-            label_uz=f"I darajali AV blokada (PR {iv.pr_ms} ms)",
-            evidence=_ev(pr_ms=iv.pr_ms, norm_high=pr_hi), confidence=0.85,
-        ))
-
-    _conduction_findings(m, norms, fs)
-    _qt_findings(iv, norms, is_pediatric, sig, fs)
-
     # Atrial fibrillation: irregularly-irregular rhythm with absent P waves (§7.1).
     if (m.rhythm_regular is False and (m.rr_cv or 0) > 0.15
             and m.p_wave_ratio is not None and m.p_wave_ratio < 0.3):
@@ -132,6 +119,25 @@ def detect_findings(
             label_uz="Bo'lmachalar fibrillyatsiyasi (notekis ritm, P yo'q)",
             evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio), confidence=0.7,
         ))
+
+    iv = m.intervals
+    _, pr_hi = norms.get("intervals_ms", {}).get("pr", [None, None])
+    # A PR interval needs P waves: organised P (AF gate) or a refined P onset on
+    # most beats; and it is meaningless in atrial fibrillation.
+    p_present = (m.p_wave_ratio is None or m.p_wave_ratio >= 0.5
+                 or (m.p_onset_ratio or 0.0) >= 0.5)
+    in_af = "atrial_fibrillation" in fs.codes()
+    if (iv.pr_ms is not None and pr_hi and iv.pr_ms > pr_hi and p_present
+            and not in_af and m.av_dissociation is not True):
+        fs.findings.append(Finding(
+            code="first_degree_av_block", group="interval",
+            label_ru=f"АВ-блокада I степени (PR {iv.pr_ms} мс)",
+            label_uz=f"I darajali AV blokada (PR {iv.pr_ms} ms)",
+            evidence=_ev(pr_ms=iv.pr_ms, norm_high=pr_hi), confidence=0.85,
+        ))
+
+    _conduction_findings(m, norms, fs)
+    _qt_findings(iv, norms, is_pediatric, sig, fs)
 
     # Complete (third-degree) AV block: atrioventricular dissociation (§7.1, §10).
     if m.av_dissociation is True:
@@ -144,7 +150,8 @@ def detect_findings(
         ))
 
     # Atrial flutter: regular atrial rate ~250-350/min (sawtooth) (§7.1).
-    if m.atrial_rate_bpm is not None and 240 <= m.atrial_rate_bpm <= 360:
+    fl_lo, fl_hi = norms.get("rhythm", {}).get("atrial_flutter_bpm", [240, 350])
+    if m.atrial_rate_bpm is not None and fl_lo <= m.atrial_rate_bpm <= fl_hi:
         fs.findings.append(Finding(
             code="atrial_flutter", group="rhythm",
             label_ru=f"Трепетание предсердий (частота предсердий {m.atrial_rate_bpm}/мин)",
@@ -152,10 +159,29 @@ def detect_findings(
             evidence=_ev(atrial_rate_bpm=m.atrial_rate_bpm), confidence=0.65,
         ))
 
+    # A detected non-sinus rhythm (AF / flutter) replaces the sinus_* rate codes:
+    # "sinus rhythm at 80" is wrong in AF, and the rate qualifier belongs to the
+    # arrhythmia label instead (rapid/slow ventricular response).
+    _replace_sinus_codes_if_non_sinus(fs, hr, hr_range)
+
     # ------------------------------------------------------------------ #
-    # Ischemia — ST / T (TZ §7.2)
+    # Hypertrophy — LVH (TZ §7.4)
     # ------------------------------------------------------------------ #
-    _st_findings(m, norms, fs)
+    lvh_thr = norms.get("voltage_uv", {}).get("sokolow_lyon_lvh")
+    if m.sokolow_lyon_uv is not None and lvh_thr and m.sokolow_lyon_uv > lvh_thr:
+        fs.findings.append(Finding(
+            code="lvh", group="hypertrophy",
+            label_ru=f"Гипертрофия ЛЖ (Соколов-Лайон {m.sokolow_lyon_uv} мкВ)",
+            label_uz=f"Chap qorincha gipertrofiyasi (Sokolow-Lyon {m.sokolow_lyon_uv} µV)",
+            evidence=_ev(sokolow_lyon_uv=m.sokolow_lyon_uv, threshold=lvh_thr),
+            confidence=0.8,
+        ))
+
+    # ------------------------------------------------------------------ #
+    # Ischemia — ST / T (TZ §7.2). Runs after conduction + LVH so secondary
+    # (discordant) ST-T changes can be told from primary ischemia.
+    # ------------------------------------------------------------------ #
+    _st_findings(m, norms, fs, sig.patient)
     _t_inversion_findings(m, is_pediatric, fs)
 
     # Peaked T-waves feed the hyperkalemia causal chain.
@@ -182,19 +208,6 @@ def detect_findings(
         ))
 
     # ------------------------------------------------------------------ #
-    # Hypertrophy — LVH (TZ §7.4)
-    # ------------------------------------------------------------------ #
-    lvh_thr = norms.get("voltage_uv", {}).get("sokolow_lyon_lvh")
-    if m.sokolow_lyon_uv is not None and lvh_thr and m.sokolow_lyon_uv > lvh_thr:
-        fs.findings.append(Finding(
-            code="lvh", group="hypertrophy",
-            label_ru=f"Гипертрофия ЛЖ (Соколов-Лайон {m.sokolow_lyon_uv} мкВ)",
-            label_uz=f"Chap qorincha gipertrofiyasi (Sokolow-Lyon {m.sokolow_lyon_uv} µV)",
-            evidence=_ev(sokolow_lyon_uv=m.sokolow_lyon_uv, threshold=lvh_thr),
-            confidence=0.8,
-        ))
-
-    # ------------------------------------------------------------------ #
     # Axis deviation (TZ §7.4) and low QRS voltage (TZ §7.5)
     # ------------------------------------------------------------------ #
     _axis_findings(m, norms, fs)
@@ -213,6 +226,28 @@ def detect_findings(
         ))
 
     return fs
+
+
+_SINUS_CODES = {"sinus_rhythm", "sinus_bradycardia", "sinus_tachycardia"}
+_NON_SINUS_CODES = {"atrial_fibrillation", "atrial_flutter", "complete_av_block"}
+
+
+def _replace_sinus_codes_if_non_sinus(fs: FindingSet, hr, hr_range) -> None:
+    codes = fs.codes()
+    if not (codes & _NON_SINUS_CODES):
+        return
+    fs.findings = [f for f in fs.findings if f.code not in _SINUS_CODES]
+    if hr is None or hr_range is None:
+        return
+    lo, hi = hr_range
+    qual_ru = " с быстрым желудочковым ответом" if hr > hi else (
+        " с медленным желудочковым ответом" if hr < lo else "")
+    qual_uz = " tez qorincha javobi bilan" if hr > hi else (
+        " sekin qorincha javobi bilan" if hr < lo else "")
+    for f in fs.findings:
+        if f.code in _NON_SINUS_CODES and qual_ru:
+            f.label_ru += f"{qual_ru} (ЧСС {hr}/мин)"
+            f.label_uz += f"{qual_uz} (YUT {hr}/daq)"
 
 
 def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
@@ -258,16 +293,21 @@ def _territorial_st_elevation(elevated, depressed, elev, fs: FindingSet) -> None
                          reciprocal=",".join(recip_present) or "none"), confidence=0.8,
         ))
     else:
+        # Elevation without two contiguous leads of one territory is not a STEMI
+        # pattern (early repolarisation, baseline, single-lead artefact): reported
+        # for the physician, never critical.
         fs.findings.append(Finding(
-            code="st_elevation", group="ischemia",
-            label_ru=f"Элевация ST ({', '.join(elevated)})",
-            label_uz=f"ST elevatsiyasi ({', '.join(elevated)})",
-            evidence=_ev(leads=",".join(elevated), threshold_uv=elev), confidence=0.75,
+            code="st_elevation_nonspecific", group="ischemia",
+            label_ru=f"Элевация ST без территориальной картины ({', '.join(elevated)})",
+            label_uz=f"Hududiy manzarasiz ST elevatsiyasi ({', '.join(elevated)})",
+            evidence=_ev(leads=",".join(elevated), threshold_uv=elev), confidence=0.5,
         ))
 
 
 def _atrial_enlargement_findings(m: Measurements, norms, fs: FindingSet) -> None:
     """Left/right atrial enlargement from P-wave duration/amplitude (TZ §7.4)."""
+    if fs.codes() & _NON_SINUS_CODES:
+        return  # no true P waves to measure in AF / flutter
     pw = norms.get("p_wave", {})
     dur_hi, amp_hi = pw.get("duration_upper_ms"), pw.get("amplitude_upper_uv")
     if dur_hi and m.p_wave_duration_ms is not None and m.p_wave_duration_ms > dur_hi:
@@ -350,20 +390,26 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
             evidence=_ev(pr_ms=iv.pr_ms, qrs_ms=iv.qrs_ms), confidence=0.7,
         ))
         return
-    term = m.qrs_v1_terminal_positive
+    # BBB typing from the terminal QRS forces in V1 (R' -> RBBB, QS/rS -> LBBB).
+    # V6 is only a fallback when V1 is missing: on real LBBB the discordant ST
+    # segment leaks into the terminal window and flips the V6 sign.
+    v1, v6 = m.qrs_v1_terminal_positive, m.qrs_v6_terminal_positive
+    term = v1 if v1 is not None else (None if v6 is None else (not v6))
     if term is True:
         fs.findings.append(Finding(
             code="rbbb", group="interval",
             label_ru=f"Полная блокада правой ножки (QRS {iv.qrs_ms} мс, RSR' в V1)",
             label_uz=f"O'ng oyoqcha to'liq blokadasi (QRS {iv.qrs_ms} ms, V1 da RSR')",
-            evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="positive"), confidence=0.72,
+            evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="positive", v6_terminal=str(v6)),
+            confidence=0.72,
         ))
     elif term is False:
         fs.findings.append(Finding(
             code="lbbb", group="interval",
             label_ru=f"Полная блокада левой ножки (QRS {iv.qrs_ms} мс)",
             label_uz=f"Chap oyoqcha to'liq blokadasi (QRS {iv.qrs_ms} ms)",
-            evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="negative"), confidence=0.72,
+            evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="negative", v6_terminal="positive"),
+            confidence=0.72,
         ))
     else:
         fs.findings.append(Finding(
@@ -374,22 +420,64 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
         ))
 
 
-def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
+_SECONDARY_ST_CONTEXT = {"rbbb", "lbbb", "wpw_preexcitation", "lvh"}
+
+
+def _st_thresholds(norms, patient, lead: str) -> tuple[float | None, float | None]:
+    """(elevation, depression) thresholds for one lead from the norm table."""
     thr = norms.get("st_uv", {})
-    elev = thr.get("elevation_significant")
-    depr = thr.get("depression_significant")
-    if not (elev and depr):
+    elev, depr = thr.get("elevation_significant"), thr.get("depression_significant")
+    v23 = thr.get("elevation_v2_v3")
+    if lead in ("V2", "V3") and isinstance(v23, dict) and elev:
+        sex = (getattr(patient, "sex", None) or "male").lower()
+        age = getattr(patient, "age_years", None)
+        if sex == "female":
+            elev = v23.get("female", elev)
+        elif age is not None and age < 40:
+            elev = v23.get("male_under_40", v23.get("male", elev))
+        else:
+            elev = v23.get("male", elev)
+    return elev, depr
+
+
+def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
+    thr = norms.get("st_uv", {})
+    if not (thr.get("elevation_significant") and thr.get("depression_significant")):
         return
-    # STEMI is clinically defined by J-POINT elevation. Keying on the J point
-    # (not J+60) avoids false positives from T-wave encroachment at high rates.
-    elevated, depressed = [], []
+    plateau = float(thr.get("elevation_plateau_fraction", 0.8))
+    upsloping = float(thr.get("depression_upsloping_uv", 50))
+    # With a bundle branch block, pre-excitation or LVH the expected repolarisation
+    # is discordant to the QRS; only concordant deviations count as primary.
+    secondary_ctx = bool(fs.codes() & _SECONDARY_ST_CONTEXT)
+    elevated, depressed, discordant = [], [], []
     for st in m.morphology.st:
-        if st.j_point_uv is None:
+        elev, depr = _st_thresholds(norms, patient, st.lead)
+        j, j60, j80 = st.j_point_uv, st.j60_uv, st.j80_uv
+        dev = 0
+        # STEMI is defined by J-POINT elevation that persists into the ST segment.
+        if j is not None and j >= elev and (j60 is None or j60 >= plateau * elev):
+            dev = 1
+        # Depression is judged in the ST segment (J+60 / J+80), horizontal or
+        # downsloping; an upsloping segment (J+80 rising over J+60) is not called.
+        elif j60 is not None:
+            low = min(j60, j80) if j80 is not None else j60
+            if low <= -depr and not (j80 is not None and j80 - j60 >= upsloping):
+                dev = -1
+        elif j is not None and j <= -depr:
+            dev = -1
+        if dev == 0:
             continue
-        if st.j_point_uv >= elev:
-            elevated.append(st.lead)
-        elif st.j_point_uv <= -depr:
-            depressed.append(st.lead)
+        if (secondary_ctx and st.qrs_net_uv is not None
+                and (st.qrs_net_uv > 0) != (dev > 0)):
+            discordant.append(st.lead)
+            # Discordant ELEVATION is the expected repolarisation of a BBB/LVH and
+            # must not raise a STEMI alert. Discordant DEPRESSION is still ST
+            # depression (strain pattern) — reported, and explained by the
+            # LVH-strain / BBB causal chains rather than as primary ischemia.
+            if dev > 0:
+                continue
+        (elevated if dev > 0 else depressed).append(st.lead)
+
     if len(elevated) >= 2:
         # Diffuse ST elevation across >=2 coronary territories (and no single
         # reciprocal territory) points to pericarditis, not a focal STEMI — a
@@ -404,13 +492,27 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
                              reciprocal="none"), confidence=0.6,
             ))
         else:
-            _territorial_st_elevation(elevated, depressed, elev, fs)
+            _territorial_st_elevation(elevated, depressed, thr.get("elevation_significant"), fs)
     if len(depressed) >= 2:
+        disc = sorted(set(depressed) & set(discordant))
         fs.findings.append(Finding(
             code="st_depression", group="ischemia",
-            label_ru=f"Депрессия ST ({', '.join(depressed)})",
-            label_uz=f"ST depressiyasi ({', '.join(depressed)})",
-            evidence=_ev(leads=",".join(depressed), threshold_uv=depr), confidence=0.75,
+            label_ru=f"Депрессия ST ({', '.join(depressed)})"
+                     + (" — дискордантная (вторичная?)" if disc else ""),
+            label_uz=f"ST depressiyasi ({', '.join(depressed)})"
+                     + (" — diskordant (ikkilamchi?)" if disc else ""),
+            evidence=_ev(leads=",".join(depressed), threshold_uv=thr.get("depression_significant"),
+                         discordant=",".join(disc) or "none"),
+            confidence=0.55 if disc else 0.75,
+        ))
+    if len(discordant) >= 2:
+        fs.findings.append(Finding(
+            code="secondary_st_t_change", group="ischemia",
+            label_ru=f"Вторичные (дискордантные) ST-T изменения ({', '.join(discordant)})",
+            label_uz=f"Ikkilamchi (diskordant) ST-T o'zgarishlar ({', '.join(discordant)})",
+            evidence=_ev(leads=",".join(discordant),
+                         context=",".join(sorted(fs.codes() & _SECONDARY_ST_CONTEXT))),
+            confidence=0.6,
         ))
 
 

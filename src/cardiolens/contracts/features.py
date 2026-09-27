@@ -37,6 +37,7 @@ class STMeasurement(BaseModel):
     j_point_uv: float | None = None
     j60_uv: float | None = None
     j80_uv: float | None = None
+    qrs_net_uv: float | None = None   # signed net QRS deflection (concordance checks)
 
 
 class Morphology(BaseModel):
@@ -59,8 +60,10 @@ class Measurements(BaseModel):
     rr_std_ms: float | None = None            # RR interval variability
     rr_cv: float | None = None                # RR coefficient of variation
     hrv_sdnn_ms: float | None = None
-    p_wave_ratio: float | None = None         # fraction of beats with a detected P
-    qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
+    p_wave_ratio: float | None = None         # fraction of beats with an organised P (AF gate)
+    p_onset_ratio: float | None = None        # fraction of beats with a refined P onset (PR)
+    qrs_v1_terminal_positive: bool | None = None  # terminal forces in V1 (R' -> RBBB)
+    qrs_v6_terminal_positive: bool | None = None  # terminal forces in V6 (broad R -> LBBB)
     qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak
     atrial_rate_bpm: float | None = None          # P/flutter-wave rate (TZ §7.1)
     av_dissociation: bool | None = None           # complete AV block signal (TZ §7.1)

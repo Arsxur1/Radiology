@@ -13,6 +13,9 @@ heart_rate_bpm_by_age:
   - { age_years_max: 8, range: [70, 120] }
   - { age_years_max: 15, range: [60, 110] }
 
+rhythm:
+  atrial_flutter_bpm: [200, 350]
+
 intervals_ms:
   pr: [90, 170]        # shorter than adult
   qrs: [50, 90]
@@ -31,6 +34,14 @@ axis_deg:
 
 voltage_uv:
   low_voltage_limb: 400
+
+st_uv:
+  # Same J-point/plateau logic as adults; V2-V3 use a single 150 µV threshold.
+  elevation_significant: 100
+  elevation_v2_v3: { male_under_40: 150, male: 150, female: 150 }
+  elevation_plateau_fraction: 0.8
+  depression_significant: 100
+  depression_upsloping_uv: 50
 
 # Clinically important pediatric caveat (TZ §7.2):
 # T-wave inversion in V1-V4 is NORMAL in children ("juvenile T-wave pattern").

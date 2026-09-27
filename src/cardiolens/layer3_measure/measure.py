@@ -22,6 +22,14 @@ from cardiolens.contracts.features import (
     STMeasurement,
 )
 from cardiolens.contracts.signal import SignalRepresentation
+from cardiolens.layer3_measure.atrial import atrial_activity
+from cardiolens.layer3_measure.delineation import (
+    P_ONSET_MIN_FRACTION,
+    P_ONSET_MIN_UV,
+    qrs_bounds_envelope,
+    refine_p_onsets,
+    terminal_qrs_sign,
+)
 from cardiolens.layer3_measure.intervals import (
     qtc_bazett,
     qtc_framingham,
@@ -39,12 +47,58 @@ _RHYTHM_LEAD_PREFERENCE = ["II", "V5", "V2", "I"]
 # Calibrated on the PhysioNet ecg-arrhythmia set (sinus P/R ~0.21 vs AF ~0.10).
 P_PRESENCE_FRACTION = 0.15
 
+# PR-segment window used as the ST baseline: [onset-50 ms, onset-10 ms].
+ST_BASELINE_MS = (50.0, 10.0)
+
+# T-wave over-sensing filter: a detection below this fraction of the R reference
+# that arrives sooner than this fraction of the median RR is a T wave.
+T_OVERSENSE_AMP_FRACTION = 0.6
+T_OVERSENSE_RR_FRACTION = 0.6
+T_OVERSENSE_MAX_S = 0.5            # a T wave never lies further than this after R
+# ... and a detection below this fraction of the R reference is never a QRS on the
+# rhythm lead (P waves accepted after a long pause in complete AV block).
+OVERSENSE_ABS_FRACTION = 0.4
+
 
 def _pick_rhythm_lead(sig: SignalRepresentation) -> int:
     for name in _RHYTHM_LEAD_PREFERENCE:
         if name in sig.lead_names:
             return sig.lead_names.index(name)
     return 0
+
+
+def _suppress_t_oversensing(x: np.ndarray, rpeaks: np.ndarray, fs: float) -> np.ndarray:
+    """Drop detections that are a T (or P) wave, not a QRS.
+
+    At slow rates the peak detector's adaptive threshold accepts a tall T wave as a
+    beat. A detection well below the R amplitude reference that also falls far
+    too soon after the previous beat is removed.
+    """
+    if len(rpeaks) < 3:
+        return rpeaks
+    amp = np.abs(x[rpeaks] - float(np.median(x)))
+    ref = float(np.percentile(amp, 90))
+    # RR reference from the certain (large) beats only — false detections would
+    # otherwise halve the median RR and hide themselves.
+    certain = rpeaks[amp >= T_OVERSENSE_AMP_FRACTION * ref]
+    med_rr = float(np.median(np.diff(certain))) if len(certain) >= 2 else float(np.median(np.diff(rpeaks)))
+    t_window = min(T_OVERSENSE_RR_FRACTION * med_rr, T_OVERSENSE_MAX_S * fs)
+    keep = np.ones(len(rpeaks), dtype=bool)
+    for i in range(len(rpeaks)):
+        too_small = amp[i] < OVERSENSE_ABS_FRACTION * ref
+        t_like = (i > 0 and amp[i] < T_OVERSENSE_AMP_FRACTION * ref
+                  and (rpeaks[i] - rpeaks[i - 1]) < t_window)
+        if too_small or t_like:
+            keep[i] = False
+    return rpeaks[keep]
+
+
+def _aligned(values, n: int) -> np.ndarray:
+    """neurokit wave marks as a float array of length ``n`` (NaN-padded)."""
+    arr = np.full(n, np.nan)
+    vals = np.asarray(list(values)[:n], dtype=float)
+    arr[:len(vals)] = vals
+    return arr
 
 
 def _median_ms(values: list[float], fs: float) -> float | None:
@@ -83,6 +137,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
     except Exception:
         rpeaks = np.array([], dtype=int)
 
+    rpeaks = _suppress_t_oversensing(cleaned, rpeaks, fs)
     m.r_peaks_samples = rpeaks.tolist()
     m.n_beats = len(rpeaks)
 
@@ -100,56 +155,92 @@ def measure(sig: SignalRepresentation) -> Measurements:
     else:
         m.notes.append("insufficient R-peaks for rhythm analysis (low confidence)")
 
-    # --- Delineation -> intervals ---
-    if len(rpeaks) >= 3:
+    # --- QRS bounds from the multi-lead envelope + dwt for P/T ---
+    # The spatial-velocity envelope gives QRS onsets/offsets that hold up on real
+    # BBB morphology (dwt under-estimates width); dwt still supplies P and T marks.
+    n_beats = len(rpeaks)
+    qrs_on = np.full(n_beats, np.nan)
+    qrs_off = np.full(n_beats, np.nan)
+    t_off: np.ndarray | None = None
+    if n_beats >= 3:
+        qrs_on, qrs_off = qrs_bounds_envelope(sig.signal, rpeaks, fs)
+        p_on = p_off = None
         waves = _delineate(cleaned, rpeaks, fs)
         if waves is not None:
-            p_on = np.asarray(waves.get("ECG_P_Onsets", []), dtype=float)
-            p_off = np.asarray(waves.get("ECG_P_Offsets", []), dtype=float)
-            qrs_on = np.asarray(waves.get("ECG_R_Onsets", []), dtype=float)
-            qrs_off = np.asarray(waves.get("ECG_R_Offsets", []), dtype=float)
-            t_off = np.asarray(waves.get("ECG_T_Offsets", []), dtype=float)
+            p_on = _aligned(waves.get("ECG_P_Onsets", []), n_beats)
+            p_off = _aligned(waves.get("ECG_P_Offsets", []), n_beats)
+            dwt_on = _aligned(waves.get("ECG_R_Onsets", []), n_beats)
+            dwt_off = _aligned(waves.get("ECG_R_Offsets", []), n_beats)
+            t_off = _aligned(waves.get("ECG_T_Offsets", []), n_beats)
+            # Fall back to dwt bounds only where the envelope found nothing.
+            qrs_on = np.where(np.isfinite(qrs_on), qrs_on, dwt_on)
+            qrs_off = np.where(np.isfinite(qrs_off), qrs_off, dwt_off)
+        else:
+            m.notes.append("delineation failed (P/T marks unavailable, low confidence)")
 
-            n = min(len(qrs_on), len(qrs_off), len(t_off))
-            pr_list, qrs_list, qt_list = [], [], []
-            for i in range(n):
-                if i < len(p_on) and np.isfinite(p_on[i]) and np.isfinite(qrs_on[i]):
-                    pr_list.append(qrs_on[i] - p_on[i])
-                if np.isfinite(qrs_on[i]) and np.isfinite(qrs_off[i]):
-                    qrs_list.append(qrs_off[i] - qrs_on[i])
-                if np.isfinite(qrs_on[i]) and np.isfinite(t_off[i]):
-                    qt_list.append(t_off[i] - qrs_on[i])
+        base = float(np.median(cleaned))
+        r_ref = float(np.percentile(np.abs(cleaned - base), 99)) or 1.0
 
-            m.intervals = Intervals(
-                pr_ms=_median_ms(pr_list, fs),
-                qrs_ms=_median_ms(qrs_list, fs),
-                qt_ms=_median_ms(qt_list, fs),
-            )
+        # PR from amplitude-refined P onsets: dwt onsets land late on real signals,
+        # which under-estimates PR and hides first-degree AV block.
+        p_on_ref = refine_p_onsets(
+            cleaned, qrs_on, t_off, fs, max(P_ONSET_MIN_UV, P_ONSET_MIN_FRACTION * r_ref))
+        pr_list = [qrs_on[i] - p_on_ref[i] for i in range(n_beats)
+                   if np.isfinite(p_on_ref[i]) and np.isfinite(qrs_on[i])]
+        m.p_onset_ratio = round(len(pr_list) / max(1, n_beats), 2)
+        if len(pr_list) < 0.5 * n_beats:
+            pr_list = ([qrs_on[i] - p_on[i] for i in range(n_beats)
+                        if np.isfinite(p_on[i]) and np.isfinite(qrs_on[i])]
+                       if p_on is not None else [])
+            if pr_list:
+                m.notes.append("PR from dwt P onsets (refined P on <50% of beats)")
+        qrs_list = [qrs_off[i] - qrs_on[i] for i in range(n_beats)
+                    if np.isfinite(qrs_on[i]) and np.isfinite(qrs_off[i])
+                    and qrs_off[i] > qrs_on[i]]
+        qt_list = ([t_off[i] - qrs_on[i] for i in range(n_beats)
+                    if np.isfinite(t_off[i]) and np.isfinite(qrs_on[i])]
+                   if t_off is not None else [])
+        m.intervals = Intervals(
+            pr_ms=_median_ms(pr_list, fs),
+            qrs_ms=_median_ms(qrs_list, fs),
+            qt_ms=_median_ms(qt_list, fs),
+        )
+
+        if p_on is not None and p_off is not None:
             # Fraction of beats with an *organized* P wave, by amplitude (low ->
             # suspect AF, §7.1). neurokit's delineation interpolates a P onset for
             # nearly every beat, so an onset-only ratio saturates at 1.0 even in AF
             # (where P waves are replaced by fibrillatory waves). Gate on the P-region
             # deflection instead: a peak-to-peak below ~15% of the R reference counts
             # as an absent/disorganized P.
-            base = float(np.median(cleaned))
-            r_ref = float(np.percentile(np.abs(cleaned - base), 99)) or 1.0
             p_present = 0
-            for i in range(min(len(p_on), len(p_off))):
+            for i in range(n_beats):
                 a, b = p_on[i], p_off[i]
                 if np.isfinite(a) and np.isfinite(b) and 0 <= a < b < len(cleaned):
                     seg = cleaned[int(a):int(b)] - base
                     if seg.size and float(seg.max() - seg.min()) >= P_PRESENCE_FRACTION * r_ref:
                         p_present += 1
-            m.p_wave_ratio = round(p_present / max(1, len(rpeaks)), 2)
+            m.p_wave_ratio = round(p_present / max(1, n_beats), 2)
             # P-wave duration/amplitude for atrial enlargement (P-mitrale/-pulmonale).
-            pdur = [(p_off[i] - p_on[i]) for i in range(min(len(p_on), len(p_off)))
+            pdur = [(p_off[i] - p_on[i]) for i in range(n_beats)
                     if np.isfinite(p_on[i]) and np.isfinite(p_off[i]) and p_off[i] > p_on[i]]
             m.p_wave_duration_ms = _median_ms(pdur, fs)
             m.p_wave_amplitude_uv = _p_amplitude(sig, p_on, p_off)
-            # ST measured off QRS offsets (J points), baseline from PR segment.
-            _measure_st(sig, qrs_on, qrs_off, m)
-        else:
-            m.notes.append("delineation failed (low confidence intervals)")
+
+        # ST measured off the envelope QRS offsets (J points), PR-segment baseline.
+        _measure_st(sig, rpeaks, qrs_on, qrs_off, m)
+
+        # Atrial activity independent of the QRS: flutter / AV dissociation (§7.1).
+        atrial_leads = {ln: sig.lead(ln).astype(np.float64)
+                        for ln in ("II", "V1") if ln in sig.lead_names}
+        if not atrial_leads:
+            atrial_leads = {sig.lead_names[lead_idx]: cleaned}
+        rate, av, notes = atrial_activity(
+            atrial_leads, rpeaks, fs,
+            heart_rate_bpm=m.heart_rate_bpm, rr_cv=m.rr_cv, r_ref=r_ref,
+        )
+        m.atrial_rate_bpm, m.av_dissociation = rate, av
+        m.notes.extend(notes)
 
     # --- QTc ---
     if m.intervals.qt_ms is not None and rr_s_mean:
@@ -167,8 +258,10 @@ def measure(sig: SignalRepresentation) -> Measurements:
     # --- Sokolow-Lyon voltage (LVH) ---
     m.sokolow_lyon_uv = _sokolow_lyon(sig, rpeaks, fs)
 
-    # --- V1 terminal QRS sign (RSR' typing for bundle branch block) ---
-    m.qrs_v1_terminal_positive = _v1_terminal_positive(sig, rpeaks, fs)
+    # --- Terminal QRS forces in V1/V6 (RSR' / broad-S typing for BBB) ---
+    for lead, attr in (("V1", "qrs_v1_terminal_positive"), ("V6", "qrs_v6_terminal_positive")):
+        if lead in sig.lead_names:
+            setattr(m, attr, terminal_qrs_sign(sig.lead(lead), rpeaks, qrs_off, fs))
 
     # --- Limb-lead QRS amplitude (for low-voltage detection, TZ §7.5) ---
     m.qrs_amplitude_limb_uv = _limb_qrs_amplitude(sig, rpeaks, fs)
@@ -227,28 +320,6 @@ def _sokolow_lyon(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> f
     return round(deep_s("V1") + max(tall_r("V5"), tall_r("V6")), 1)
 
 
-def _v1_terminal_positive(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> bool | None:
-    """Sign of the terminal QRS deflection in V1 (~40 ms after R).
-
-    Positive terminal force (R') -> RBBB pattern; negative -> LBBB pattern.
-    """
-    if "V1" not in sig.lead_names or len(rpeaks) == 0:
-        return None
-    row = sig.lead("V1")
-    baseline = float(np.median(row))
-    off = int(0.04 * fs)
-    win = int(0.02 * fs)
-    vals = []
-    for r in rpeaks:
-        a, b = r + off - win, r + off + win
-        if 0 <= a and b < len(row):
-            seg = row[a:b] - baseline
-            vals.append(seg[np.argmax(np.abs(seg))])
-    if not vals:
-        return None
-    return bool(np.median(vals) > 0)
-
-
 def _p_amplitude(sig: SignalRepresentation, p_on: np.ndarray, p_off: np.ndarray) -> float | None:
     """Median P-wave amplitude in lead II (µV) — P-pulmonale if tall."""
     if "II" not in sig.lead_names:
@@ -284,33 +355,32 @@ def _limb_qrs_amplitude(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float
 
 def _measure_st(
     sig: SignalRepresentation,
+    rpeaks: np.ndarray,
     qrs_on: np.ndarray,
     qrs_off: np.ndarray,
     m: Measurements,
 ) -> None:
     """ST deviation at J, J+60, J+80 ms per lead (TZ §6).
 
-    Baseline is the PR segment (isoelectric point just before QRS onset),
-    measured per beat — far more robust than a global median.
+    J = envelope QRS offset. Baseline = median of the PR segment
+    ([onset-50, onset-10] ms) per beat — a single sample is too noisy on real
+    recordings and produced spurious ST calls. Also records the net QRS
+    deflection per lead so Layer 4 can judge concordance (secondary ST-T changes).
     """
     fs = sig.sampling_rate_hz
-    n = min(len(qrs_on), len(qrs_off))
-    onsets = np.asarray(qrs_on[:n], dtype=float)
-    offsets = np.asarray(qrs_off[:n], dtype=float)
-    pairs = [(int(a), int(b)) for a, b in zip(onsets, offsets)
-             if np.isfinite(a) and np.isfinite(b)]
+    pairs = [(int(a), int(b)) for a, b in zip(qrs_on, qrs_off)
+             if np.isfinite(a) and np.isfinite(b) and b > a]
     if not pairs:
         return
-    s60 = int(0.06 * fs)
-    s80 = int(0.08 * fs)
-    pr_off = int(0.02 * fs)  # 20 ms before QRS onset = PR-segment baseline
+    s60, s80 = int(0.06 * fs), int(0.08 * fs)
+    b_lo, b_hi = int(ST_BASELINE_MS[0] / 1000.0 * fs), int(ST_BASELINE_MS[1] / 1000.0 * fs)
     st_list: list[STMeasurement] = []
     for li, lead in enumerate(sig.lead_names):
         row = sig.signal[li]
         j_vals, j60_vals, j80_vals = [], [], []
         for on, j in pairs:
-            base_idx = max(0, on - pr_off)
-            baseline = float(row[base_idx])
+            lo, hi = max(0, on - b_lo), max(1, on - b_hi)
+            baseline = float(np.median(row[lo:hi])) if hi > lo else float(row[max(0, on - 1)])
             if j < len(row):
                 j_vals.append(row[j] - baseline)
             if j + s60 < len(row):
@@ -323,6 +393,7 @@ def _measure_st(
                 j_point_uv=round(float(np.median(j_vals)), 1) if j_vals else None,
                 j60_uv=round(float(np.median(j60_vals)), 1) if j60_vals else None,
                 j80_uv=round(float(np.median(j80_vals)), 1) if j80_vals else None,
+                qrs_net_uv=round(_qrs_amplitude(row, rpeaks, fs), 1),
             )
         )
     m.morphology.st = st_list
