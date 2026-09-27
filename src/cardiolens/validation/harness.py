@@ -38,6 +38,7 @@ SCORED_LABELS = [
     "atrial_fibrillation", "atrial_flutter", "first_degree_av_block",
     "complete_av_block", "rbbb", "lbbb",
     "left_axis_deviation", "right_axis_deviation", "low_qrs_voltage",
+    "wpw_preexcitation",
     "st_elevation", "st_depression", "long_qt", "peaked_t_waves",
 ]
 
@@ -73,11 +74,13 @@ def build_synthetic_dataset() -> list[LabeledCase]:
     """A labelled synthetic dataset over reliably-stimulated patterns (TZ §15)."""
     cases: list[LabeledCase] = []
 
-    # Sinus rhythm at several normal rates (explicit QT for interval MAE).
+    # Sinus rhythm at several normal rates (rate-appropriate QT so QTc stays normal;
+    # a fixed 380 ms at 88 bpm is a Bazett long-QT by definition).
     for i, hr in enumerate((62, 70, 78, 88)):
+        qt = round(400.0 * (60.0 / hr) ** 0.5)
         cases.append(LabeledCase(
-            generate_synthetic_ecg(heart_rate_bpm=hr, pr_ms=150, qt_ms=380, seed=10 + i),
-            {"sinus_rhythm"}, gold_pr_ms=150, gold_qt_ms=380, name=f"sinus_{hr}"))
+            generate_synthetic_ecg(heart_rate_bpm=hr, pr_ms=150, qt_ms=qt, seed=10 + i),
+            {"sinus_rhythm"}, gold_pr_ms=150, gold_qt_ms=qt, name=f"sinus_{hr}"))
 
     # Bradycardia.
     for i, hr in enumerate((40, 46, 52)):
@@ -86,7 +89,7 @@ def build_synthetic_dataset() -> list[LabeledCase]:
             {"sinus_bradycardia"}, gold_pr_ms=160, name=f"brady_{hr}"))
 
     # Tachycardia.
-    for i, hr in enumerate((110, 125, 140)):
+    for i, hr in enumerate((110, 120, 130)):
         cases.append(LabeledCase(
             generate_synthetic_ecg(heart_rate_bpm=hr, pr_ms=150, seed=30 + i),
             {"sinus_tachycardia"}, gold_pr_ms=150, name=f"tachy_{hr}"))
@@ -177,8 +180,10 @@ def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:
 
 
 # SNOMED-CT concept id -> CardioLens finding code, for the PhysioNet
-# ecg-arrhythmia (Chapman-Shaoxing / Ningbo) 12-lead database. Extend as
-# finding coverage grows; unmapped codes are ignored during scoring.
+# ecg-arrhythmia (Chapman-Shaoxing / Ningbo) 12-lead database, following the
+# dataset's ConditionNames_SNOMED-CT.csv. Extend as finding coverage grows;
+# unmapped codes are ignored during scoring. Label-noise caveat: the dataset maps
+# the fascicular blocks (LFBBB/LBBBB, narrow QRS) to the same code as complete LBBB.
 SNOMED_TO_CODE = {
     "426783006": "sinus_rhythm",
     "426177001": "sinus_bradycardia",
@@ -186,15 +191,20 @@ SNOMED_TO_CODE = {
     "164889003": "atrial_fibrillation",
     "164890007": "atrial_flutter",
     "270492004": "first_degree_av_block",
+    "164947007": "first_degree_av_block",   # "PR interval extension"
     "27885002": "complete_av_block",
     "733534002": "lbbb", "164909002": "lbbb",
     "713427006": "rbbb", "59118001": "rbbb",
-    "164931005": "st_elevation",
+    "164931005": "st_elevation",           # "ST tilt up"
+    "164930006": "st_elevation",           # "ST extension"
     "429622005": "st_depression",
     "39732003": "left_axis_deviation",
     "47665007": "right_axis_deviation",
     "164873001": "lvh",
-    "251146004": "low_qrs_voltage",
+    "251146004": "low_qrs_voltage",        # all leads
+    "251147008": "low_qrs_voltage",        # limb leads (what the detector measures)
+    "74390002": "wpw_preexcitation",
+    "195060002": "wpw_preexcitation",      # "ventricular preexcitation"
     "111975006": "long_qt",
 }
 

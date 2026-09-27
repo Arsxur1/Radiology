@@ -30,5 +30,13 @@ def test_parse_dx_from_header_comma_and_semicolon():
     assert snomed_dx_to_codes(dx) == {"sinus_rhythm", "left_axis_deviation", "st_elevation"}
 
 
+def test_dataset_specific_codes_map_to_detector_classes():
+    # PR-extension, limb low voltage and pre-excitation use dataset-specific codes.
+    assert snomed_dx_to_codes(["164947007"]) == {"first_degree_av_block"}
+    assert snomed_dx_to_codes(["251147008", "251146004"]) == {"low_qrs_voltage"}
+    assert snomed_dx_to_codes(["74390002", "195060002"]) == {"wpw_preexcitation"}
+    assert snomed_dx_to_codes(["164930006", "164931005"]) == {"st_elevation"}
+
+
 def test_parse_dx_missing_returns_empty():
     assert parse_dx_from_header("JS 12 500\n#Age: 40\n") == []

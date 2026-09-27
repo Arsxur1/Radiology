@@ -1,0 +1,177 @@
+"""Fetch a label-balanced subset of the PhysioNet ecg-arrhythmia dataset (TZ §15, §16).
+
+    python -m cardiolens.validation.fetch_physionet --out data/ecg-arrhythmia-balanced \\
+        --folders 60 --per-class 80 --seed 0
+
+The dataset (Chapman-Shaoxing + Ningbo, ~45k 12-lead records) is licensed on
+PhysioNet and never committed. ``RECORDS`` lists 452 folders; each folder's index
+page lists its ``JSxxxxx.hea``/``.mat`` pairs. Headers are ~1 KB, so the script
+downloads *headers* for a spread of folders, maps their ``#Dx:`` SNOMED labels to
+CardioLens finding codes, picks a per-class-capped selection (rarest classes
+first) and only then downloads the ``.mat`` files it needs. A ``manifest.json``
+records what was selected and why. Needs outbound access to ``physionet.org``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import http.client
+import json
+import os
+import random
+import re
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.request
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from cardiolens.validation.harness import parse_dx_from_header, snomed_dx_to_codes
+
+BASE_URL = "https://physionet.org/files/ecg-arrhythmia/1.0.0/"
+UNLABELED = "_unlabeled"   # pseudo-class: records with no mapped label (negatives)
+_HEA_RE = re.compile(r'href="(JS\d+)\.hea"')
+
+
+def _ssl_context() -> ssl.SSLContext:
+    cafile = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+    if not cafile and Path("/root/.ccr/ca-bundle.crt").exists():
+        cafile = "/root/.ccr/ca-bundle.crt"
+    return ssl.create_default_context(cafile=cafile)
+
+
+def _log(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
+
+
+def fetch_bytes(url: str, timeout: float = 90.0, attempts: int = 4) -> bytes:
+    """GET with retries: the egress proxy resets idle/parallel tunnels now and then."""
+    delay = 1.0
+    for i in range(attempts):
+        try:
+            with urllib.request.urlopen(url, context=_ssl_context(), timeout=timeout) as resp:
+                return resp.read()
+        except (urllib.error.URLError, ConnectionError, TimeoutError, http.client.HTTPException) as e:
+            if i == attempts - 1:
+                raise
+            _log(f"[fetch] retry {i + 1}/{attempts - 1} after {type(e).__name__}: {url}")
+            time.sleep(delay)
+            delay *= 2
+    raise RuntimeError("unreachable")
+
+
+def parse_records(text: str) -> list[str]:
+    """Folder paths from the dataset's RECORDS file (e.g. ``WFDBRecords/01/010/``)."""
+    return [ln.strip().rstrip("/") + "/" for ln in text.splitlines() if ln.strip()]
+
+
+def parse_index(html: str) -> list[str]:
+    """Record names (``JS00001``) listed on a folder's index page."""
+    return sorted(set(_HEA_RE.findall(html)))
+
+
+def choose_folders(folders: list[str], n: int, seed: int = 0) -> list[str]:
+    """Spread ``n`` folders evenly across the top-level directories (seeded)."""
+    by_top: dict[str, list[str]] = defaultdict(list)
+    for f in folders:
+        by_top[f.split("/")[1]].append(f)
+    rng = random.Random(seed)
+    for lst in by_top.values():
+        rng.shuffle(lst)
+    tops = sorted(by_top)
+    out: list[str] = []
+    while len(out) < n and any(by_top.values()):
+        for t in tops:
+            if by_top[t] and len(out) < n:
+                out.append(by_top[t].pop())
+    return out
+
+
+def select_balanced(records: dict[str, set[str]], per_class: int, seed: int = 0) -> list[str]:
+    """Pick records so every class has at most ``per_class`` members, rarest first.
+
+    A record counts toward every class it carries, so common classes fill up as a
+    side effect of collecting rare ones. Records without a mapped label form the
+    pseudo-class ``_unlabeled`` (useful negatives) with the same cap.
+    """
+    labels = {r: (labs or {UNLABELED}) for r, labs in records.items()}
+    counts = Counter(c for labs in labels.values() for c in labs)
+    rng = random.Random(seed)
+    selected: set[str] = set()
+    tally: Counter = Counter()
+    for cls, _ in sorted(counts.items(), key=lambda kv: (kv[1], kv[0])):
+        cands = [r for r, labs in labels.items() if cls in labs and r not in selected]
+        rng.shuffle(cands)
+        for r in cands:
+            if tally[cls] >= per_class:
+                break
+            selected.add(r)
+            tally.update(labels[r])
+    return sorted(selected)
+
+
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(description="Fetch a balanced ecg-arrhythmia subset")
+    ap.add_argument("--out", required=True, help="destination directory (git-ignored)")
+    ap.add_argument("--folders", type=int, default=60)
+    ap.add_argument("--per-class", type=int, default=80)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--workers", type=int, default=3)
+    args = ap.parse_args(argv)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+
+    folders = choose_folders(parse_records(fetch_bytes(BASE_URL + "RECORDS").decode()),
+                             args.folders, args.seed)
+    _log(f"[fetch] {len(folders)} folders chosen")
+
+    # 1. Headers for every record in the chosen folders.
+    headers: dict[str, tuple[str, str]] = {}  # record -> (folder, header text)
+
+    def fetch_folder(folder: str) -> list[tuple[str, str, str]]:
+        names = parse_index(fetch_bytes(BASE_URL + folder).decode())
+        return [(nm, folder, fetch_bytes(BASE_URL + folder + nm + ".hea").decode()) for nm in names]
+
+    with ThreadPoolExecutor(args.workers) as pool:
+        for i, batch in enumerate(pool.map(fetch_folder, folders), 1):
+            for nm, folder, text in batch:
+                headers[nm] = (folder, text)
+            _log(f"[fetch] headers {i}/{len(folders)} folders, {len(headers)} records")
+
+    # 2. Balanced selection by mapped label.
+    labels = {nm: snomed_dx_to_codes(parse_dx_from_header(text)) for nm, (_, text) in headers.items()}
+    chosen = select_balanced(labels, args.per_class, args.seed)
+    support = Counter(c for nm in chosen for c in (labels[nm] or {UNLABELED}))
+    _log(f"[fetch] selected {len(chosen)} of {len(headers)} records; support: {dict(support)}")
+
+    # 3. Signals for the selection only.
+    def fetch_record(nm: str) -> str:
+        folder, text = headers[nm]
+        dest = out / folder
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / f"{nm}.hea").write_text(text, encoding="utf-8")
+        mat = dest / f"{nm}.mat"
+        if not mat.exists():
+            mat.write_bytes(fetch_bytes(BASE_URL + folder + nm + ".mat"))
+        return nm
+
+    with ThreadPoolExecutor(args.workers) as pool:
+        for i, _ in enumerate(pool.map(fetch_record, chosen), 1):
+            if i % 50 == 0 or i == len(chosen):
+                _log(f"[fetch] signals {i}/{len(chosen)}")
+
+    manifest = {
+        "source": BASE_URL, "seed": args.seed, "folders": folders, "per_class": args.per_class,
+        "records": [{"record": nm, "folder": headers[nm][0], "labels": sorted(labels[nm])}
+                    for nm in chosen],
+        "support": dict(support),
+    }
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    _log(f"[fetch] done -> {out}")
+
+
+if __name__ == "__main__":
+    main()
