@@ -8,7 +8,9 @@ traceability (TZ §11.1, §12). Output rendering (JSON/SVG/graph/PDF) lives in
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
@@ -26,6 +28,7 @@ from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer2_preprocess import assess_quality, preprocess
 from cardiolens.layer3_measure import measure
 from cardiolens.layer4_findings import detect_findings
+from cardiolens.layer4_findings.ml import apply_ml_evidence
 from cardiolens.layer5_causal import analyze
 from cardiolens.layer6_interpret import InterpretationInput, default_provider, interpret
 from cardiolens.layer6_interpret.provider import LLMProvider
@@ -84,9 +87,19 @@ def run_pipeline(
         f"QRS={m.intervals.qrs_ms} QTcB={m.intervals.qtc_bazett_ms}"
     )
 
+    # Learnable layer (TZ §17): probabilities as extra evidence, never authority.
+    model = _ml_model(cfg) if cfg.ml.enabled else None
+    if model is not None:
+        from cardiolens.ml.features import features_from_measurements
+
+        m.ml_probabilities = model.predict_proba(features_from_measurements(m, sig.sampling_rate_hz))
+
     # Layer 4 — findings (TZ §7).
     norms = norms_for_patient(sig.patient.age_years, sig.patient.age_days)
     findings = detect_findings(sig, m, norms=norms, la_ra_reversed=la_ra_reversed)
+    if model is not None:
+        for line in apply_ml_evidence(findings, m, model.meta.get("suggest_classes")):
+            audit.append(f"[ML] {line}")
     # Apply confidence calibration to each finding (TZ §13).
     for f in findings.findings:
         f.confidence = round(calibrator.apply(f.confidence), 3)
@@ -143,6 +156,21 @@ def run_pipeline(
         signal=sig, measurements=m, findings=findings, causal_graph=causal,
         safety=safety, report=report, config=cfg, audit_log=audit, serial=serial,
     )
+
+
+@functools.lru_cache(maxsize=2)
+def _load_ml(path: str):
+    from cardiolens.ml.model import load_model
+
+    return load_model(path)
+
+
+def _ml_model(cfg: AppConfig):
+    """The learnable-layer model named in the config, or None (rules-only)."""
+    p = Path(cfg.ml.model_path)
+    if not p.is_absolute():
+        p = configs_dir().parent / p
+    return _load_ml(str(p))
 
 
 def _quality_ok(quality, threshold: float) -> bool:

@@ -72,6 +72,7 @@ class Measurements(BaseModel):
     av_dissociation: bool | None = None           # complete AV block signal (TZ §7.1)
     p_wave_duration_ms: float | None = None       # atrial enlargement (P-mitrale)
     p_wave_amplitude_uv: float | None = None      # atrial enlargement (P-pulmonale)
+    ml_probabilities: dict[str, float] | None = None   # learnable layer, per finding code
     n_beats: int = 0
     r_peaks_samples: list[int] = Field(default_factory=list)
     intervals: Intervals = Field(default_factory=Intervals)

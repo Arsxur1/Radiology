@@ -90,7 +90,8 @@ def analyze(
     # --- Implausibility: observed findings that no activated rule explains ---
     # (excluding benign standalone findings like plain sinus rhythm).
     benign = {"sinus_rhythm", "juvenile_t_pattern"}
-    implausible = sorted(observed - explained - benign - _standalone_codes())
+    implausible = sorted(c for c in observed - explained - benign - _standalone_codes()
+                         if not c.startswith("ml_suggested_"))
 
     # --- Critical flags come from findings the safety layer marked (TZ §10) + rules
     critical_flags = sorted({f.code for f in findings.critical()} |

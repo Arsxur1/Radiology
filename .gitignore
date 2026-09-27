@@ -20,3 +20,5 @@ configs/calibrator.json
 *.pdf
 !docs/**/*.pdf
 .DS_Store
+# Trained learnable-layer artifacts (7 MB; reproducible with python -m cardiolens.ml.train)
+configs/models/*.joblib

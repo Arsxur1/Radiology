@@ -64,9 +64,17 @@ class LLMConfig(BaseModel):
     timeout_s: float = 120.0
 
 
+class MLConfig(BaseModel):
+    """Learnable layer (TZ §17): off, or a joblib artifact used as extra evidence."""
+
+    enabled: bool = True
+    model_path: str = "configs/models/rhythm_hgb.joblib"   # relative to configs/ parent
+
+
 class AppConfig(BaseModel):
     mode: str
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    ml: MLConfig = Field(default_factory=MLConfig)
     mains_frequency_hz: float
     preprocessing: Preprocessing
     confidence: ConfidenceGates

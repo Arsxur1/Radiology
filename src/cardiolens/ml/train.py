@@ -86,6 +86,26 @@ def evaluate(model: RhythmModel, data: dict, threshold: float) -> dict:
     return out
 
 
+def suggest_classes(model: RhythmModel, min_spec: float = 0.95) -> list[str]:
+    """Classes the model may *suggest* on its own: precise on every evaluation set
+    and at least as sensitive as the rules on the cross-dataset sets."""
+    reports = model.meta.get("reports", {})
+    if not reports:
+        return []
+    out = []
+    for c in model.classes:
+        ok = True
+        for name, rep in reports.items():
+            mm, rr = rep["model"][c], rep["rules"][c]
+            if mm["spec"] is None or mm["spec"] < min_spec:
+                ok = False
+            if name.startswith("cross") and mm["sens"] is not None and rr["sens"] is not None and mm["sens"] < rr["sens"]:
+                ok = False
+        if ok:
+            out.append(c)
+    return out
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Train the CardioLens learnable layer")
     ap.add_argument("--train", nargs="+", required=True)
@@ -119,6 +139,9 @@ def main(argv: list[str] | None = None) -> None:
             for c in model.classes:
                 r, m_, o = rep["rules"][c], rep["model"][c], rep["rules_or_model"][c]
                 _log(f"     {c:22s} n={r['n']:4d} rules {r['sens']}/{r['spec']}  model {m_['sens']}/{m_['spec']}  or {o['sens']}/{o['spec']}")
+    model.meta["suggest_classes"] = suggest_classes(model)
+    _log(f"[ml] suggestion-eligible classes (spec >= 0.95 on hold-out and cross, sens >= rules on cross): "
+         f"{model.meta['suggest_classes']}")
     model.save(args.out)
     if args.report:
         Path(args.report).write_text(json.dumps(model.meta, indent=2), encoding="utf-8")
