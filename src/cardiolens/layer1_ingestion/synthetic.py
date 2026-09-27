@@ -88,9 +88,10 @@ def _beat(
 
 # Relative atrial-wave amplitude per lead (F-waves negative in II/III/aVF, positive
 # in V1; P waves upright in II, inverted in aVR).
-_FLUTTER_LEAD_UV = {"II": -150.0, "III": -140.0, "aVF": -150.0, "aVR": 120.0, "I": -40.0,
-                    "aVL": 30.0, "V1": 100.0, "V2": 60.0, "V3": 40.0, "V4": 30.0,
-                    "V5": 30.0, "V6": 30.0}
+# Typical flutter waves are 150-300 uV in II/III/aVF and prominent in V1.
+_FLUTTER_LEAD_UV = {"II": -250.0, "III": -230.0, "aVF": -250.0, "aVR": 200.0, "I": -60.0,
+                    "aVL": 40.0, "V1": 150.0, "V2": 90.0, "V3": 60.0, "V4": 40.0,
+                    "V5": 40.0, "V6": 40.0}
 _P_LEAD_SCALE = {"II": 1.0, "III": 0.6, "aVF": 0.8, "aVR": -0.8, "I": 0.5, "aVL": 0.2,
                  "V1": 0.5, "V2": 0.4, "V3": 0.4, "V4": 0.4, "V5": 0.4, "V6": 0.4}
 

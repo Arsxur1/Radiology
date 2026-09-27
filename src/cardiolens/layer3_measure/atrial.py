@@ -21,7 +21,7 @@ Every gate that fails leaves the field ``None`` and appends a note (TZ §0).
 from __future__ import annotations
 
 import numpy as np
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, welch
 
 # Pass-1 gates.
 ATRIAL_RESIDUAL_MIN_UV = 25.0      # residual RMS floor (absolute)
@@ -52,10 +52,22 @@ LOCKED_HARMONICS = (1, 2, 3, 4)
 # k:1 flutter with slightly variable conduction shows up in pass 1 at k x HR; it
 # is accepted only with a strong, regular peak (both >= this).
 FLUTTER_LOCKED_AUTOCORR_MIN = 0.5
+# Spectral flutter search on the QRS-blanked signal (no template subtraction, so
+# F-waves locked to the QRS survive): a sharp Welch-PSD peak in the F-wave band on
+# >= 2 atrial leads agreeing within 10 %. Thresholds chosen on PTB-XL (curated
+# labels): AFLT 0.63 / AFIB 0.02 / SR 0.00 at (10, 1.0); (6, 0.5) reaches 0.86 but
+# flags 9 % of sinus records.
+FLUTTER_SPECTRAL_BAND_HZ = (3.3, 6.0)
+FLUTTER_SPECTRAL_LOW_HZ = (0.5, 3.0)
+FLUTTER_SPECTRAL_SHARPNESS = 10.0     # peak / median PSD inside the band
+FLUTTER_SPECTRAL_RATIO = 1.0          # band power / low-band power
+FLUTTER_SPECTRAL_LEADS = ("II", "III", "aVF", "V1")
+FLUTTER_SPECTRAL_MIN_LEADS = 2
 # AV dissociation.
 AV_DISSOCIATION_RATE_RANGE = (45.0, 200.0)
-AV_DISSOCIATION_MIN_RATIO = 1.3
-AV_DISSOCIATION_MAX_RR_CV = 0.10
+# Real third-degree blocks (PTB-XL) include a junctional escape at 70 with atria at
+# 90 (ratio 1.29); residual periodicity within 10 % of HR is rejected separately.
+AV_DISSOCIATION_MIN_RATIO = 1.2
 LOCKED_TOLERANCE = 0.10            # within 10 % of k x HR = phase-locked
 
 
@@ -148,6 +160,51 @@ def _peak_near(ac: np.ndarray, lag: int, tol: float = 0.03) -> float:
     return float(np.max(ac[a:min(b, len(ac))]))
 
 
+def _blank_qrs(x: np.ndarray, rpeaks: np.ndarray, qrs_on: np.ndarray | None,
+               qrs_off: np.ndarray | None, fs: float) -> np.ndarray:
+    """Replace each QRS (onset-20 ms .. offset+40 ms) by a straight line."""
+    y = x.astype(np.float64).copy()
+    for i, r in enumerate(rpeaks):
+        on_ok = qrs_on is not None and i < len(qrs_on) and np.isfinite(qrs_on[i])
+        off_ok = qrs_off is not None and i < len(qrs_off) and np.isfinite(qrs_off[i])
+        a = int(qrs_on[i] - 0.02 * fs) if on_ok else int(r) - int(0.06 * fs)
+        b = int(qrs_off[i] + 0.04 * fs) if off_ok else int(r) + int(0.10 * fs)
+        a, b = max(0, a), min(len(y), b)
+        if b - a > 2:
+            y[a:b] = np.linspace(y[a], y[b - 1], b - a)
+    return y
+
+
+def flutter_spectrum(
+    leads: dict[str, np.ndarray], rpeaks: np.ndarray, fs: float,
+    qrs_on: np.ndarray | None = None, qrs_off: np.ndarray | None = None,
+) -> float | None:
+    """Atrial rate (bpm) when >= 2 atrial leads show a sharp F-wave spectral peak."""
+    hits = []
+    nperseg = int(min(4.0 * fs, max(len(next(iter(leads.values()))), 2)))
+    for name in FLUTTER_SPECTRAL_LEADS:
+        x = leads.get(name)
+        if x is None or len(x) < 2 * fs:
+            continue
+        y = _blank_qrs(x, rpeaks, qrs_on, qrs_off, fs)
+        y -= float(np.median(y))
+        f, p = welch(y, fs=fs, nperseg=nperseg, noverlap=int(0.75 * nperseg))
+        band = (f >= FLUTTER_SPECTRAL_BAND_HZ[0]) & (f <= FLUTTER_SPECTRAL_BAND_HZ[1])
+        low = (f >= FLUTTER_SPECTRAL_LOW_HZ[0]) & (f < FLUTTER_SPECTRAL_LOW_HZ[1])
+        if not band.any() or not low.any():
+            continue
+        k = int(np.argmax(p[band]))
+        sharp = float(p[band][k] / (np.median(p[band]) + 1e-12))
+        ratio = float(p[band].sum() / (p[low].sum() + 1e-12))
+        if sharp >= FLUTTER_SPECTRAL_SHARPNESS and ratio >= FLUTTER_SPECTRAL_RATIO:
+            hits.append(float(f[band][k]) * 60.0)
+    if len(hits) < FLUTTER_SPECTRAL_MIN_LEADS:
+        return None
+    med = float(np.median(hits))
+    agreeing = [h for h in hits if abs(h - med) <= 0.10 * med]
+    return round(float(np.median(agreeing)), 1) if len(agreeing) >= FLUTTER_SPECTRAL_MIN_LEADS else None
+
+
 def _locked_harmonic(rate: float, hr: float) -> int | None:
     """k when ``rate`` sits within LOCKED_TOLERANCE of k x HR, else None."""
     for k in LOCKED_HARMONICS:
@@ -164,11 +221,17 @@ def atrial_activity(
     heart_rate_bpm: float | None,
     rr_cv: float | None,
     r_ref: float,
+    pr_unstable: bool = False,
+    qrs_on: np.ndarray | None = None,
+    qrs_off: np.ndarray | None = None,
 ) -> tuple[float | None, bool | None, list[str]]:
     """Return (atrial_rate_bpm, av_dissociation, notes).
 
     ``leads`` maps lead name -> signal for the atrial leads to examine (II, V1);
-    the lead with the strongest periodic residual wins.
+    the lead with the strongest periodic residual wins. ``pr_unstable`` says the
+    beat-to-beat PR varies widely although a P was found before most beats — the
+    signature of dissociation, which lets a P-band candidate locked at 2-4 x HR
+    through (a fixed 2:1 block has a constant PR).
     """
     notes: list[str] = []
     if len(rpeaks) < 4 or heart_rate_bpm is None or not leads:
@@ -215,6 +278,13 @@ def atrial_activity(
         else:
             notes.append("atrial activity: residual periodic at a multiple of RR (phase-locked)")
 
+    # --- Stage 1b: spectral F-wave search (fixed-ratio flutter locked to the QRS) ---
+    if rate is None or rate < FLUTTER_BAND_BPM[0]:
+        spec = flutter_spectrum(leads, rpeaks, fs, qrs_on, qrs_off)
+        if spec is not None and FLUTTER_BAND_BPM[0] <= spec <= FLUTTER_BAND_BPM[1]:
+            rate = spec
+            notes.append("atrial activity: flutter waves found spectrally")
+
     # --- Stage 2: dissociated P waves (complete AV block), P band / slower lags ---
     # Only when stage 1 found nothing usable. Anything periodic that survives the
     # template subtraction is not phase-locked to the ventricles by construction,
@@ -240,18 +310,23 @@ def atrial_activity(
         if (best_p is not None and best_p[0] >= ATRIAL_AUTOCORR_MIN
                 and best_p[1] >= ATRIAL_HARMONIC_MIN):
             cand = 60.0 * fs / best_p[2]
-            if _locked_harmonic(cand, heart_rate_bpm) is None:
+            k = _locked_harmonic(cand, heart_rate_bpm)
+            if k is None or (k >= 2 and pr_unstable):
                 if rate is None:
                     rate = round(cand, 1)
                 dissociated = True
+                if k is not None:
+                    notes.append(f"atrial activity: P rate ~{k} x HR accepted (PR unstable)")
             else:
                 notes.append("atrial activity: P-band residual periodic at a multiple of RR")
 
     # --- AV dissociation (complete AV block signal) ---
-    regular = rr_cv is not None and rr_cv < AV_DISSOCIATION_MAX_RR_CV
+    # The escape rhythm of a real block is often irregular (PTB-XL: RR-CV 0.2-0.5 in
+    # 9 of 16), so ventricular regularity is not required; the residual gates and
+    # the stable-PR rejection in measure() carry the false-positive protection.
     if (dissociated and rate is not None
             and AV_DISSOCIATION_RATE_RANGE[0] <= rate <= AV_DISSOCIATION_RATE_RANGE[1]):
-        av: bool | None = bool(regular and rate >= AV_DISSOCIATION_MIN_RATIO * heart_rate_bpm)
+        av: bool | None = bool(rate >= AV_DISSOCIATION_MIN_RATIO * heart_rate_bpm)
     else:
         av = False
     return rate, av, notes

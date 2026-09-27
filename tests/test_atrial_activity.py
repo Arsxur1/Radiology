@@ -28,11 +28,14 @@ def test_flutter_with_variable_conduction_is_detected(seed, rate, hr):
     assert "left_atrial_enlargement" not in codes
 
 
-def test_fixed_ratio_flutter_is_a_documented_miss():
-    # Fixed k:1 conduction locks the F-waves to R; pass 1 removes them (see atrial.py).
+def test_fixed_ratio_flutter_is_found_spectrally():
+    # Fixed k:1 conduction locks the F-waves to R and the template subtraction removes
+    # them; the spectral search on the QRS-blanked signal still sees the sawtooth.
     r = _run(heart_rate_bpm=75, flutter_atrial_rate_bpm=300, flutter_conduction="fixed", seed=3)
-    assert r.measurements.atrial_rate_bpm is None
-    assert any("phase-locked" in n for n in r.measurements.notes)
+    m = r.measurements
+    assert m.atrial_rate_bpm == pytest.approx(300, rel=0.08)
+    assert any("spectrally" in n for n in m.notes)
+    assert "atrial_flutter" in r.findings.codes()
 
 
 @pytest.mark.parametrize("kw", [

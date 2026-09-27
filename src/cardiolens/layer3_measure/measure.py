@@ -29,6 +29,7 @@ from cardiolens.layer3_measure.delineation import (
     qrs_bounds_envelope,
     qt_multilead,
     refine_p_onsets,
+    spatial_velocity,
     terminal_qrs_sign,
 )
 from cardiolens.layer3_measure.intervals import (
@@ -51,18 +52,15 @@ P_PRESENCE_FRACTION = 0.15
 # PR-segment window used as the ST baseline: [onset-50 ms, onset-10 ms].
 ST_BASELINE_MS = (50.0, 10.0)
 
-# T-wave over-sensing filter: a detection below this fraction of the R reference
-# that arrives sooner than this fraction of the median RR is a T wave.
-T_OVERSENSE_AMP_FRACTION = 0.6
-T_OVERSENSE_RR_FRACTION = 0.6
-T_OVERSENSE_MAX_S = 0.5            # a T wave never lies further than this after R
-# ... and a detection below this fraction of the R reference is never a QRS on the
-# rhythm lead (P waves accepted after a long pause in complete AV block).
-OVERSENSE_ABS_FRACTION = 0.4
+# Non-QRS detection filter: envelope peak below this fraction of the 90th-percentile
+# envelope peak across detections = P or T wave, not a beat.
+OVERSENSE_ENV_FRACTION = 0.25
 
 # Beat-to-beat PR standard deviation below this = a fixed PR = conducted rhythm;
 # an AV-dissociation candidate with a stable PR is rejected.
 PR_STD_DISSOCIATION_MS = 40.0
+# ... and a dissociation candidate needs organised P waves (AF has none).
+AV_DISSOCIATION_MIN_P_RATIO = 0.3
 
 
 def _pick_rhythm_lead(sig: SignalRepresentation) -> int:
@@ -72,30 +70,26 @@ def _pick_rhythm_lead(sig: SignalRepresentation) -> int:
     return 0
 
 
-def _suppress_t_oversensing(x: np.ndarray, rpeaks: np.ndarray, fs: float) -> np.ndarray:
-    """Drop detections that are a T (or P) wave, not a QRS.
+def _reject_non_qrs_detections(signal: np.ndarray, rpeaks: np.ndarray, fs: float) -> np.ndarray:
+    """Drop peak detections that are a P or T wave, not a QRS.
 
-    At slow rates the peak detector's adaptive threshold accepts a tall T wave as a
-    beat. A detection well below the R amplitude reference that also falls far
-    too soon after the previous beat is removed.
+    At slow rates or after long pauses the adaptive peak detector accepts a tall
+    T wave or a P wave as a beat. Amplitude cannot tell them apart robustly (a
+    small conducted beat next to a tall PVC, a lead-II R flattened by axis
+    deviation), but slope can: the multi-lead spatial-velocity envelope peaks at
+    >= 0.7 of the record's reference on every true QRS and at <= 0.11 on P/T waves
+    (PTB-XL and synthetic checks). A detection below OVERSENSE_ENV_FRACTION of the
+    90th-percentile envelope peak is discarded.
     """
     if len(rpeaks) < 3:
         return rpeaks
-    amp = np.abs(x[rpeaks] - float(np.median(x)))
-    ref = float(np.percentile(amp, 90))
-    # RR reference from the certain (large) beats only — false detections would
-    # otherwise halve the median RR and hide themselves.
-    certain = rpeaks[amp >= T_OVERSENSE_AMP_FRACTION * ref]
-    med_rr = float(np.median(np.diff(certain))) if len(certain) >= 2 else float(np.median(np.diff(rpeaks)))
-    t_window = min(T_OVERSENSE_RR_FRACTION * med_rr, T_OVERSENSE_MAX_S * fs)
-    keep = np.ones(len(rpeaks), dtype=bool)
-    for i in range(len(rpeaks)):
-        too_small = amp[i] < OVERSENSE_ABS_FRACTION * ref
-        t_like = (i > 0 and amp[i] < T_OVERSENSE_AMP_FRACTION * ref
-                  and (rpeaks[i] - rpeaks[i - 1]) < t_window)
-        if too_small or t_like:
-            keep[i] = False
-    return rpeaks[keep]
+    env = spatial_velocity(signal, fs)
+    w = int(0.03 * fs)
+    peaks = np.array([float(env[max(0, int(r) - w):int(r) + w].max()) for r in rpeaks])
+    ref = float(np.percentile(peaks, 90))
+    if ref <= 0:
+        return rpeaks
+    return rpeaks[peaks >= OVERSENSE_ENV_FRACTION * ref]
 
 
 def _aligned(values, n: int) -> np.ndarray:
@@ -142,7 +136,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
     except Exception:
         rpeaks = np.array([], dtype=int)
 
-    rpeaks = _suppress_t_oversensing(cleaned, rpeaks, fs)
+    rpeaks = _reject_non_qrs_detections(sig.signal, rpeaks, fs)
     m.r_peaks_samples = rpeaks.tolist()
     m.n_beats = len(rpeaks)
 
@@ -253,9 +247,12 @@ def measure(sig: SignalRepresentation) -> Measurements:
                         for ln in ("II", "V1") if ln in sig.lead_names}
         if not atrial_leads:
             atrial_leads = {sig.lead_names[lead_idx]: cleaned}
+        pr_unstable = bool((m.p_onset_ratio or 0.0) >= 0.5 and m.pr_std_ms is not None
+                           and m.pr_std_ms >= PR_STD_DISSOCIATION_MS)
         rate, av, notes = atrial_activity(
             atrial_leads, rpeaks, fs,
             heart_rate_bpm=m.heart_rate_bpm, rr_cv=m.rr_cv, r_ref=r_ref,
+            pr_unstable=pr_unstable, qrs_on=qrs_on, qrs_off=qrs_off,
         )
         # AV dissociation means no fixed PR: when a P onset was found before most
         # beats and the PR is stable, the atria are conducting (sinus rhythm with a
@@ -264,6 +261,13 @@ def measure(sig: SignalRepresentation) -> Measurements:
                 and m.pr_std_ms is not None and m.pr_std_ms < PR_STD_DISSOCIATION_MS):
             av = False
             notes.append(f"atrial activity: stable PR (std {m.pr_std_ms} ms) -> conducted, not dissociated")
+        # A complete block has P waves by definition: without organised P waves the
+        # periodic residual is fibrillatory/noise (AF with a slow response), not
+        # dissociation.
+        if (av is True and (m.p_wave_ratio or 0.0) < AV_DISSOCIATION_MIN_P_RATIO
+                and (m.p_onset_ratio or 0.0) < 0.5):
+            av = False
+            notes.append("atrial activity: no organised P waves -> not AV dissociation")
         m.atrial_rate_bpm, m.av_dissociation = rate, av
         m.notes.extend(notes)
 
