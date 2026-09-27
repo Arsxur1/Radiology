@@ -11,6 +11,9 @@ venv/
 # Runtime output dir at repo root only — must NOT match src/cardiolens/outputs/
 /outputs/
 data/feedback/
+# Licensed PhysioNet datasets (downloaded locally for validation, never committed)
+data/ecg-arrhythmia/
+data/ptbxl/
 configs/calibrator.json
 *.pdf
 !docs/**/*.pdf

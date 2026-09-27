@@ -124,11 +124,38 @@ python -m cardiolens.validate --ptbxl <root>  # реальная PTB-XL (лок�
 python -m cardiolens.validate --ecg-arrhythmia <root>  # Chapman/Ningbo (локальный чекаут)
 ```
 
-Синтетический прогон даёт реальные (оптимистичные, помечены как синтетика)
-числа: macro-sensitivity, sens/spec по классам, PR/QT MAE. Морфологические
-находки (БНПГ/WPW/ФП) проверяются детерминированными юнит-тестами на уровне
-измерений и предназначены для валидации на реальной PTB-XL (SCP-метки уже
-маплятся в `build_ptbxl_dataset`; сеть к PhysioNet в рантайме не нужна).
+Синтетический прогон даёт оптимистичные (помеченные как синтетика) числа.
+
+**Реальная валидация (PhysioNet ecg-arrhythmia, 300 записей, подмножество
+`WFDBRecords/01/010–012`).** Настоящие sens/spec — не синтетика:
+
+| Находка | Sens | Spec | n |
+|---------|-----:|-----:|--:|
+| sinus_rhythm | 0.97 | 0.78 | 39 |
+| sinus_bradycardia | 0.94 | 0.98 | 155 |
+| sinus_tachycardia | 1.00 | 0.91 | 30 |
+| atrial_fibrillation | 0.62 | 0.94 | 61 |
+| left_axis_deviation | 1.00 | 0.94 | 10 |
+| low_qrs_voltage | 0.86 | 0.89 | 7 |
+| st_depression | 0.83 | 0.67 | 12 |
+| rbbb / lbbb | 0.18 / 0.17 | — | 11 / 6 |
+| atrial_flutter | 0.00 | 1.00 | 15 |
+| first_degree_av_block | 0.09 | 0.95 | 11 |
+
+Macro-sensitivity **0.65**. Что показала реальная валидация (честные ограничения,
+подробности — в [CLINICAL_REFERENCES](docs/CLINICAL_REFERENCES.md)):
+
+- **ФП**: изначально sens 0.0 — neurokit интерполирует онсет P почти в каждом
+  комплексе, поэтому `p_wave_ratio` «залипал» на 1.0. Исправлено амплитудным
+  порогом присутствия P (`P_PRESENCE_FRACTION`) → **0.62**.
+- **Трепетание и полная АВ-блокада**: правила есть, но измерения `atrial_rate_bpm` /
+  `av_dissociation` ещё не реализованы (следующая задача по обработке сигнала).
+- **БНПГ и АВ-блокада I** слабее на реальной морфологии/PR; **ST** переоценивается.
+
+Датасет лицензируемый и **не коммитится** (`data/ecg-arrhythmia/` в `.gitignore`).
+SCP/SNOMED-адаптеры (`build_ptbxl_dataset`, `build_ecg_arrhythmia_dataset`) покрыты
+юнит-тестами. Подмножество смещено к брадикардии и не репрезентативно для полного
+набора (~45k) — перед клиническими выводами прогнать на большей выборке.
 
 ## Обратная связь и калибровка (§13)
 
@@ -143,7 +170,7 @@ python -m cardiolens.validate --ecg-arrhythmia <root>  # Chapman/Ningbo (лок�
 ## Тесты
 
 ```bash
-pytest -q          # 62 теста
+pytest -q          # 100 тестов
 ```
 
 ## Архитектура

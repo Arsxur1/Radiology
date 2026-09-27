@@ -33,6 +33,12 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # Lead preferred for rhythm/delineation.
 _RHYTHM_LEAD_PREFERENCE = ["II", "V5", "V2", "I"]
 
+# A beat's P wave counts as "present/organized" when its P-region peak-to-peak is at
+# least this fraction of the R-wave amplitude reference. Below it (e.g. AF fibrillatory
+# waves) the beat contributes to a low p_wave_ratio, which the AF rule keys on (§7.1).
+# Calibrated on the PhysioNet ecg-arrhythmia set (sinus P/R ~0.21 vs AF ~0.10).
+P_PRESENCE_FRACTION = 0.15
+
 
 def _pick_rhythm_lead(sig: SignalRepresentation) -> int:
     for name in _RHYTHM_LEAD_PREFERENCE:
@@ -119,9 +125,22 @@ def measure(sig: SignalRepresentation) -> Measurements:
                 qrs_ms=_median_ms(qrs_list, fs),
                 qt_ms=_median_ms(qt_list, fs),
             )
-            # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
-            p_valid = int(np.sum(np.isfinite(p_on)))
-            m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
+            # Fraction of beats with an *organized* P wave, by amplitude (low ->
+            # suspect AF, §7.1). neurokit's delineation interpolates a P onset for
+            # nearly every beat, so an onset-only ratio saturates at 1.0 even in AF
+            # (where P waves are replaced by fibrillatory waves). Gate on the P-region
+            # deflection instead: a peak-to-peak below ~15% of the R reference counts
+            # as an absent/disorganized P.
+            base = float(np.median(cleaned))
+            r_ref = float(np.percentile(np.abs(cleaned - base), 99)) or 1.0
+            p_present = 0
+            for i in range(min(len(p_on), len(p_off))):
+                a, b = p_on[i], p_off[i]
+                if np.isfinite(a) and np.isfinite(b) and 0 <= a < b < len(cleaned):
+                    seg = cleaned[int(a):int(b)] - base
+                    if seg.size and float(seg.max() - seg.min()) >= P_PRESENCE_FRACTION * r_ref:
+                        p_present += 1
+            m.p_wave_ratio = round(p_present / max(1, len(rpeaks)), 2)
             # P-wave duration/amplitude for atrial enlargement (P-mitrale/-pulmonale).
             pdur = [(p_off[i] - p_on[i]) for i in range(min(len(p_on), len(p_off)))
                     if np.isfinite(p_on[i]) and np.isfinite(p_off[i]) and p_off[i] > p_on[i]]

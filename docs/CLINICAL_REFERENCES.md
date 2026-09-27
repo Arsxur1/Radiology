@@ -6,13 +6,12 @@ age/sex norm tables (`configs/norms/`) and the pathophysiology rule base
 This file records the clinical sources those criteria are drawn from and maps
 each encoded criterion to its source.
 
-> **Honesty note.** The references below were provided as learning material. In
-> this environment outbound network egress is restricted to package registries,
-> so these sources could **not** be fetched/scraped. The criteria encoded here
-> are **standard, well-established textbook ECG values** (medical facts, not
-> copyrighted expression) that these sources teach; nothing was copied verbatim.
-> Where a criterion is threshold-based it lives in a config file and can be
-> edited to match a given source or local protocol.
+> **Honesty note.** The references below were provided as learning material; they
+> were **not** fetched or scraped. The criteria encoded here are **standard,
+> well-established textbook ECG values** (medical facts, not copyrighted expression)
+> that these sources teach; nothing was copied verbatim. Where a criterion is
+> threshold-based it lives in a config file and can be edited to match a given source
+> or local protocol.
 
 ## Sources
 
@@ -64,12 +63,59 @@ predate it. Editing a threshold in `configs/norms/*.yaml` or adding a chain to
   `validation.build_ecg_arrhythmia_dataset`; SNOMED→finding mapping in
   `validation.SNOMED_TO_CODE`.
 
-> **PhysioNet is not reachable from this environment** — its host is not on the
-> egress allowlist, so these datasets can't be downloaded here. To validate on
-> them, either (a) grant the environment's network policy access to
-> `physionet.org`, or (b) obtain a local checkout and point the harness at it:
-> `python -m cardiolens.validate --ecg-arrhythmia <local-root>` (or `--ptbxl`).
-> The adapters and SNOMED/SCP mappings are unit-tested and ready.
+To validate, obtain a local checkout and point the harness at it:
+`python -m cardiolens.validate --ecg-arrhythmia <local-root>` (or `--ptbxl`). The
+dataset itself is licensed and is never committed (`data/ecg-arrhythmia/` is
+git-ignored). If the environment's network policy allows `physionet.org`, a subset can
+be fetched directly (see README).
+
+### Measured results — ecg-arrhythmia (real 12-lead)
+
+Run on a **300-record subset** (`WFDBRecords/01/010–012`, 500 Hz, SNOMED-labelled;
+brady-skewed, one region — **not** representative of the full ~45k set). These are real
+numbers, optimistic bounds do **not** apply:
+
+| Finding | Sens | Spec | n |
+|---------|-----:|-----:|--:|
+| sinus_rhythm | 0.97 | 0.78 | 39 |
+| sinus_bradycardia | 0.94 | 0.98 | 155 |
+| sinus_tachycardia | 1.00 | 0.91 | 30 |
+| atrial_fibrillation | 0.62 | 0.94 | 61 |
+| atrial_flutter | 0.00 | 1.00 | 15 |
+| first_degree_av_block | 0.09 | 0.95 | 11 |
+| rbbb | 0.18 | 0.98 | 11 |
+| lbbb | 0.17 | 0.79 | 6 |
+| left_axis_deviation | 1.00 | 0.94 | 10 |
+| right_axis_deviation | 0.75 | 0.98 | 4 |
+| low_qrs_voltage | 0.86 | 0.89 | 7 |
+| st_elevation | 0.67 | 0.76 | 3 |
+| st_depression | 0.83 | 0.67 | 12 |
+| long_qt | 1.00 | 0.66 | 1 |
+
+Macro sensitivity **0.65**. (PR/QT interval MAE is not reported for this dataset — it
+carries diagnostic labels only, no gold interval annotations.)
+
+**What real data revealed (honest limitations):**
+
+- **Atrial fibrillation** initially scored **0.0** sensitivity: neurokit's delineation
+  interpolates a P onset for nearly every beat, so the onset-only `p_wave_ratio`
+  saturated at 1.0 and the AF gate never fired. Fixed by gating P-presence on the
+  P-region **amplitude** (`P_PRESENCE_FRACTION` in `layer3_measure/measure.py`,
+  calibrated on this set: sinus P/R ≈ 0.21 vs AF ≈ 0.10) → **0.62** sensitivity at
+  0.94 specificity. Remaining misses are mostly AF with a controlled, near-regular
+  ventricular response that doesn't clear the RR-irregularity gate.
+- **Atrial flutter & complete AV block** score 0: the rules exist but the
+  `atrial_rate_bpm` / `av_dissociation` measurements that feed them are not yet
+  implemented (declared in the contract, always `None`). Detecting the atrial (F-wave)
+  rate independently of the QRS is the next signal-processing task.
+- **RBBB/LBBB** (0.18/0.17) and **first-degree AV block** (0.09) underperform on real
+  morphology/PR delineation — the synthetic unit tests pass, but real signals need more
+  robust criteria.
+- **ST elevation/depression** are over-called (spec 0.76/0.67); the J-point threshold
+  needs per-lead calibration on real data.
+
+The adapters and SNOMED/SCP mappings are unit-tested; rerun on a larger, more balanced
+sample (or the full dataset) before drawing clinical conclusions.
 
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is

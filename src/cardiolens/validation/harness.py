@@ -29,10 +29,16 @@ from cardiolens.validation.metrics import (
     score_findings,
 )
 
-# Finding labels scored by the harness.
+# Finding labels scored by the harness. Covers the rhythm/conduction/axis/ischemia
+# classes the pipeline emits (layer4_findings + safety) that also appear as gold
+# labels in the real datasets (PTB-XL SCP, ecg-arrhythmia SNOMED). The synthetic
+# dataset only stimulates a subset; unsupported classes simply report support=0.
 SCORED_LABELS = [
     "sinus_rhythm", "sinus_bradycardia", "sinus_tachycardia",
-    "first_degree_av_block", "st_elevation", "peaked_t_waves",
+    "atrial_fibrillation", "atrial_flutter", "first_degree_av_block",
+    "complete_av_block", "rbbb", "lbbb",
+    "left_axis_deviation", "right_axis_deviation", "low_qrs_voltage",
+    "st_elevation", "st_depression", "long_qt", "peaked_t_waves",
 ]
 
 
