@@ -15,6 +15,7 @@ records what was selected and why. Needs outbound access to ``physionet.org``.
 from __future__ import annotations
 
 import argparse
+import base64
 import http.client
 import json
 import os
@@ -22,9 +23,9 @@ import random
 import re
 import ssl
 import sys
+import threading
 import time
-import urllib.error
-import urllib.request
+import urllib.parse
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -47,20 +48,62 @@ def _log(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
 
-def fetch_bytes(url: str, timeout: float = 90.0, attempts: int = 4) -> bytes:
-    """GET with retries: the egress proxy resets idle/parallel tunnels now and then."""
-    delay = 1.0
-    for i in range(attempts):
-        try:
-            with urllib.request.urlopen(url, context=_ssl_context(), timeout=timeout) as resp:
-                return resp.read()
-        except (urllib.error.URLError, ConnectionError, TimeoutError, http.client.HTTPException) as e:
-            if i == attempts - 1:
-                raise
-            _log(f"[fetch] retry {i + 1}/{attempts - 1} after {type(e).__name__}: {url}")
-            time.sleep(delay)
-            delay *= 2
-    raise RuntimeError("unreachable")
+class _KeepAlive:
+    """One persistent HTTPS connection per thread (through the CONNECT proxy when set).
+
+    Opening a fresh TLS tunnel per request costs ~1 s each through the egress
+    proxy; keeping the connection alive makes thousands of small header requests
+    tractable. Reconnects on any error, with backoff.
+    """
+
+    def __init__(self) -> None:
+        self._local = threading.local()
+
+    def _connect(self) -> http.client.HTTPSConnection:
+        host = urllib.parse.urlparse(BASE_URL).hostname or "physionet.org"
+        proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+        ctx = _ssl_context()
+        if proxy:
+            u = urllib.parse.urlparse(proxy)
+            conn = http.client.HTTPSConnection(u.hostname, u.port or 443, context=ctx, timeout=90)
+            headers = {}
+            if u.username:
+                token = base64.b64encode(f"{u.username}:{u.password or ''}".encode()).decode()
+                headers["Proxy-Authorization"] = f"Basic {token}"
+            conn.set_tunnel(host, 443, headers=headers)
+        else:
+            conn = http.client.HTTPSConnection(host, 443, context=ctx, timeout=90)
+        return conn
+
+    def get(self, url: str, attempts: int = 4) -> bytes:
+        path = urllib.parse.urlparse(url).path
+        delay = 1.0
+        for i in range(attempts):
+            conn = getattr(self._local, "conn", None)
+            try:
+                if conn is None:
+                    conn = self._local.conn = self._connect()
+                conn.request("GET", path, headers={"Connection": "keep-alive"})
+                resp = conn.getresponse()
+                data = resp.read()
+                if resp.status != 200:
+                    raise http.client.HTTPException(f"HTTP {resp.status} for {url}")
+                return data
+            except (OSError, http.client.HTTPException) as e:
+                self._local.conn = None
+                if i == attempts - 1:
+                    raise
+                _log(f"[fetch] retry {i + 1}/{attempts - 1} after {type(e).__name__}: {url}")
+                time.sleep(delay)
+                delay *= 2
+        raise RuntimeError("unreachable")
+
+
+_CLIENT = _KeepAlive()
+
+
+def fetch_bytes(url: str) -> bytes:
+    return _CLIENT.get(url)
 
 
 def parse_records(text: str) -> list[str]:
