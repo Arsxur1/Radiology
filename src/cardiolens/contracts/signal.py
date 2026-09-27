@@ -72,6 +72,11 @@ class Provenance(BaseModel):
 
     digitized: bool = False              # True if recovered from image/scan
     confidence: float | None = None      # 0..1, low for dirty photos
+    # For a digitised 3x4 page each lead only exists inside its 2.5-s time slot
+    # (the rhythm strip covers the whole record). Per-lead measurements use only
+    # the beats inside the window; outside it the samples are zero, not data.
+    lead_windows: dict[str, tuple[float, float]] | None = None   # lead -> (t0_s, t1_s)
+    notes: list[str] = Field(default_factory=list)
 
 
 class SignalRepresentation(BaseModel):

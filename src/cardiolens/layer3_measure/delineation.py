@@ -263,6 +263,7 @@ def qt_multilead(
     qrs_on: np.ndarray,
     qrs_off: np.ndarray,
     fs: float,
+    masks: dict[str, np.ndarray] | None = None,
 ) -> tuple[float | None, str | None, np.ndarray | None]:
     """QT (ms) aggregated across leads, plus the reference lead's per-beat T offsets.
 
@@ -283,7 +284,12 @@ def qt_multilead(
             if t is not None:
                 offs[i] = t
         valid = np.isfinite(offs) & np.isfinite(qrs_on)
-        if valid.sum() >= max(2, T_MIN_VALID_FRACTION * n):
+        if masks is not None and name in masks:
+            valid &= masks[name]
+            n_ref = max(1, int(masks[name].sum()))
+        else:
+            n_ref = n
+        if valid.sum() >= max(2, T_MIN_VALID_FRACTION * n_ref):
             qt = float(np.median(offs[valid] - qrs_on[valid]) / fs * 1000.0)
             per_lead.append((qt, name, offs))
     if not per_lead:

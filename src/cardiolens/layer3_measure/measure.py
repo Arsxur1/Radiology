@@ -92,6 +92,21 @@ def _reject_non_qrs_detections(signal: np.ndarray, rpeaks: np.ndarray, fs: float
     return rpeaks[peaks >= OVERSENSE_ENV_FRACTION * ref]
 
 
+def _lead_mask(sig: SignalRepresentation, lead: str, rpeaks: np.ndarray, fs: float) -> np.ndarray:
+    """Beats that fall inside ``lead``'s valid time window (all, when no windows).
+
+    A digitised 3x4 page carries each lead for 2.5 s only; per-lead statistics
+    must ignore beats outside that window (the samples there are zero, not data).
+    """
+    windows = getattr(sig.provenance, "lead_windows", None)
+    if not windows or lead not in windows:
+        return np.ones(len(rpeaks), dtype=bool)
+    t0, t1 = windows[lead]
+    t = np.asarray(rpeaks, dtype=float) / fs
+    pad = 0.15  # keep whole complexes away from the window edges
+    return (t >= t0 + pad) & (t <= t1 - pad)
+
+
 def _aligned(values, n: int) -> np.ndarray:
     """neurokit wave marks as a float array of length ``n`` (NaN-padded)."""
     arr = np.full(n, np.nan)
@@ -200,8 +215,9 @@ def measure(sig: SignalRepresentation) -> Measurements:
                     and qrs_off[i] > qrs_on[i]]
         # QT: tangent-method T offset per lead, measured in the lead with the longest
         # QT (guideline practice); the single-lead dwt offset is only a fallback.
-        qt_tan, qt_lead, t_off_tan = qt_multilead(sig.signal, sig.lead_names, rpeaks,
-                                                  qrs_on, qrs_off, fs)
+        qt_tan, qt_lead, t_off_tan = qt_multilead(
+            sig.signal, sig.lead_names, rpeaks, qrs_on, qrs_off, fs,
+            masks={ln: _lead_mask(sig, ln, rpeaks, fs) for ln in sig.lead_names})
         if qt_tan is not None:
             qt_ms, qt_source = qt_tan, "tangent"
             t_off = t_off_tan
@@ -290,7 +306,8 @@ def measure(sig: SignalRepresentation) -> Measurements:
     # --- Terminal QRS forces in V1/V6 (RSR' / broad-S typing for BBB) ---
     for lead, attr in (("V1", "qrs_v1_terminal_positive"), ("V6", "qrs_v6_terminal_positive")):
         if lead in sig.lead_names:
-            setattr(m, attr, terminal_qrs_sign(sig.lead(lead), rpeaks, qrs_off, fs))
+            mk = _lead_mask(sig, lead, rpeaks, fs)
+            setattr(m, attr, terminal_qrs_sign(sig.lead(lead), rpeaks[mk], qrs_off[mk], fs))
 
     # --- Limb-lead QRS amplitude (for low-voltage detection, TZ §7.5) ---
     m.qrs_amplitude_limb_uv = _limb_qrs_amplitude(sig, rpeaks, fs)
@@ -319,8 +336,11 @@ def _qrs_amplitude(row: np.ndarray, rpeaks: np.ndarray, fs: float) -> float:
 def _qrs_axis(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
     if not {"I", "aVF"}.issubset(set(sig.lead_names)) or len(rpeaks) == 0:
         return None
-    i_amp = _qrs_amplitude(sig.lead("I"), rpeaks, fs)
-    f_amp = _qrs_amplitude(sig.lead("aVF"), rpeaks, fs)
+    rp_i, rp_f = rpeaks[_lead_mask(sig, "I", rpeaks, fs)], rpeaks[_lead_mask(sig, "aVF", rpeaks, fs)]
+    if len(rp_i) == 0 or len(rp_f) == 0:
+        return None
+    i_amp = _qrs_amplitude(sig.lead("I"), rp_i, fs)
+    f_amp = _qrs_amplitude(sig.lead("aVF"), rp_f, fs)
     return round(float(np.degrees(np.arctan2(f_amp, i_amp))), 1)
 
 
@@ -333,7 +353,7 @@ def _sokolow_lyon(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> f
     def deep_s(lead: str) -> float:
         row = sig.lead(lead)
         vals = []
-        for r in rpeaks:
+        for r in rpeaks[_lead_mask(sig, lead, rpeaks, fs)]:
             a, b = max(0, r - win), min(len(row), r + win)
             vals.append(abs(min(row[a:b])))
         return float(np.median(vals))
@@ -341,12 +361,15 @@ def _sokolow_lyon(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> f
     def tall_r(lead: str) -> float:
         row = sig.lead(lead)
         vals = []
-        for r in rpeaks:
+        for r in rpeaks[_lead_mask(sig, lead, rpeaks, fs)]:
             a, b = max(0, r - win), min(len(row), r + win)
             vals.append(max(row[a:b]))
         return float(np.median(vals))
 
-    return round(deep_s("V1") + max(tall_r("V5"), tall_r("V6")), 1)
+    try:
+        return round(deep_s("V1") + max(tall_r("V5"), tall_r("V6")), 1)
+    except ValueError:  # a lead with no beats inside its window
+        return None
 
 
 def _p_amplitude(sig: SignalRepresentation, p_on: np.ndarray, p_off: np.ndarray) -> float | None:
@@ -375,7 +398,7 @@ def _limb_qrs_amplitude(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float
     amps = []
     for lead in limb:
         row = sig.lead(lead)
-        for r in rpeaks:
+        for r in rpeaks[_lead_mask(sig, lead, rpeaks, fs)]:
             a, b = max(0, r - win), min(len(row), r + win)
             seg = row[a:b]
             amps.append(float(np.max(seg) - np.min(seg)))
@@ -404,10 +427,14 @@ def _measure_st(
     s60, s80 = int(0.06 * fs), int(0.08 * fs)
     b_lo, b_hi = int(ST_BASELINE_MS[0] / 1000.0 * fs), int(ST_BASELINE_MS[1] / 1000.0 * fs)
     st_list: list[STMeasurement] = []
+    all_pairs = [(int(a), int(b), i) for i, (a, b) in enumerate(zip(qrs_on, qrs_off))
+                 if np.isfinite(a) and np.isfinite(b) and b > a]
     for li, lead in enumerate(sig.lead_names):
         row = sig.signal[li]
+        mk = _lead_mask(sig, lead, rpeaks, fs)
+        lead_pairs = [(on, j) for on, j, i in all_pairs if mk[i]] or pairs
         j_vals, j60_vals, j80_vals = [], [], []
-        for on, j in pairs:
+        for on, j in lead_pairs:
             lo, hi = max(0, on - b_lo), max(1, on - b_hi)
             baseline = float(np.median(row[lo:hi])) if hi > lo else float(row[max(0, on - 1)])
             if j < len(row):
@@ -422,7 +449,7 @@ def _measure_st(
                 j_point_uv=round(float(np.median(j_vals)), 1) if j_vals else None,
                 j60_uv=round(float(np.median(j60_vals)), 1) if j60_vals else None,
                 j80_uv=round(float(np.median(j80_vals)), 1) if j80_vals else None,
-                qrs_net_uv=round(_qrs_amplitude(row, rpeaks, fs), 1),
+                qrs_net_uv=round(_qrs_amplitude(row, rpeaks[mk] if mk.any() else rpeaks, fs), 1),
             )
         )
     m.morphology.st = st_list
@@ -439,9 +466,12 @@ def _measure_t_morphology(
     t_end = min(int(0.45 * fs), rr - 1)
     for li, lead in enumerate(sig.lead_names):
         row = sig.signal[li]
-        qrs_amp = abs(_qrs_amplitude(row, rpeaks, fs)) + 1e-6
+        rp = rpeaks[_lead_mask(sig, lead, rpeaks, fs)]
+        if len(rp) == 0:
+            continue
+        qrs_amp = abs(_qrs_amplitude(row, rp, fs)) + 1e-6
         t_amps = []
-        for r in rpeaks:
+        for r in rp:
             a, b = r + t_start, r + t_end
             if b < len(row) and a < b:
                 seg = row[a:b] - float(np.median(row))
