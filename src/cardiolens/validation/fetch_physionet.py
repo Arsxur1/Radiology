@@ -131,9 +131,24 @@ def main(argv: list[str] | None = None) -> None:
     # 1. Headers for every record in the chosen folders.
     headers: dict[str, tuple[str, str]] = {}  # record -> (folder, header text)
 
+    # Headers are cached on disk so an interrupted run resumes instead of refetching.
+    cache = out / ".headers"
+
     def fetch_folder(folder: str) -> list[tuple[str, str, str]]:
+        cdir = cache / folder
+        done = cdir / ".complete"
+        if done.exists():
+            return [(f.stem, folder, f.read_text(encoding="utf-8")) for f in sorted(cdir.glob("*.hea"))]
+        cdir.mkdir(parents=True, exist_ok=True)
         names = parse_index(fetch_bytes(BASE_URL + folder).decode())
-        return [(nm, folder, fetch_bytes(BASE_URL + folder + nm + ".hea").decode()) for nm in names]
+        rows = []
+        for nm in names:
+            f = cdir / f"{nm}.hea"
+            if not f.exists():
+                f.write_text(fetch_bytes(BASE_URL + folder + nm + ".hea").decode(), encoding="utf-8")
+            rows.append((nm, folder, f.read_text(encoding="utf-8")))
+        done.touch()
+        return rows
 
     with ThreadPoolExecutor(args.workers) as pool:
         for i, batch in enumerate(pool.map(fetch_folder, folders), 1):

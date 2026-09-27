@@ -72,50 +72,86 @@ be fetched directly (see README).
 ### Measured results — ecg-arrhythmia (real 12-lead)
 
 Run on a **300-record subset** (`WFDBRecords/01/010–012`, 500 Hz, SNOMED-labelled;
-brady-skewed, one region — **not** representative of the full ~45k set). These are real
-numbers, optimistic bounds do **not** apply:
+brady-skewed, one region — **not** representative of the full ~45k set). Real
+numbers; the "before" column is the first run, "after" is the current code:
 
-| Finding | Sens | Spec | n |
-|---------|-----:|-----:|--:|
-| sinus_rhythm | 0.97 | 0.78 | 39 |
-| sinus_bradycardia | 0.94 | 0.98 | 155 |
-| sinus_tachycardia | 1.00 | 0.91 | 30 |
-| atrial_fibrillation | 0.62 | 0.94 | 61 |
-| atrial_flutter | 0.00 | 1.00 | 15 |
-| first_degree_av_block | 0.09 | 0.95 | 11 |
-| rbbb | 0.18 | 0.98 | 11 |
-| lbbb | 0.17 | 0.79 | 6 |
-| left_axis_deviation | 1.00 | 0.94 | 10 |
-| right_axis_deviation | 0.75 | 0.98 | 4 |
-| low_qrs_voltage | 0.86 | 0.89 | 7 |
-| st_elevation | 0.67 | 0.76 | 3 |
-| st_depression | 0.83 | 0.67 | 12 |
-| long_qt | 1.00 | 0.66 | 1 |
+| Finding | Before (sens / spec) | After (sens / spec) | n |
+|---------|:--------------------:|:-------------------:|--:|
+| sinus_rhythm | 0.97 / 0.78 | 0.95 / 0.93 | 39 |
+| sinus_bradycardia | 0.94 / 0.98 | 0.96 / 0.97 | 155 |
+| sinus_tachycardia | 1.00 / 0.91 | 0.97 / 0.96 | 30 |
+| atrial_fibrillation | 0.62 / 0.94 | 0.62 / 0.95 | 61 |
+| atrial_flutter | 0.00 / 1.00 | 0.20 / 1.00 | 15 |
+| first_degree_av_block | 0.09 / 0.95 | 0.83 / 0.95 | 12 |
+| rbbb | 0.18 / 0.98 | 1.00 / 0.99 | 11 |
+| lbbb | 0.17 / 0.79 | 0.50 / 0.98 | 6 |
+| left_axis_deviation | 1.00 / 0.94 | 1.00 / 0.94 | 10 |
+| right_axis_deviation | 0.75 / 0.98 | 0.75 / 0.98 | 4 |
+| low_qrs_voltage | 0.86 / 0.89 | 0.86 / 0.90 | 7 |
+| st_elevation | 0.67 / 0.76 | 0.67 / 0.99 | 3 |
+| st_depression | 0.83 / 0.67 | 0.75 / 0.97 | 12 |
+| long_qt | 1.00 / 0.66 | 0.00 / 0.98 | 1 |
 
-Macro sensitivity **0.65**. (PR/QT interval MAE is not reported for this dataset — it
-carries diagnostic labels only, no gold interval annotations.)
+Macro sensitivity 0.65 → **0.72**. (PR/QT interval MAE is not reported for this
+dataset — it carries diagnostic labels only, no gold interval annotations.)
 
-**What real data revealed (honest limitations):**
+**What real data revealed, and what was done about it:**
 
-- **Atrial fibrillation** initially scored **0.0** sensitivity: neurokit's delineation
-  interpolates a P onset for nearly every beat, so the onset-only `p_wave_ratio`
-  saturated at 1.0 and the AF gate never fired. Fixed by gating P-presence on the
-  P-region **amplitude** (`P_PRESENCE_FRACTION` in `layer3_measure/measure.py`,
-  calibrated on this set: sinus P/R ≈ 0.21 vs AF ≈ 0.10) → **0.62** sensitivity at
-  0.94 specificity. Remaining misses are mostly AF with a controlled, near-regular
-  ventricular response that doesn't clear the RR-irregularity gate.
-- **Atrial flutter & complete AV block** score 0: the rules exist but the
-  `atrial_rate_bpm` / `av_dissociation` measurements that feed them are not yet
-  implemented (declared in the contract, always `None`). Detecting the atrial (F-wave)
-  rate independently of the QRS is the next signal-processing task.
-- **RBBB/LBBB** (0.18/0.17) and **first-degree AV block** (0.09) underperform on real
-  morphology/PR delineation — the synthetic unit tests pass, but real signals need more
-  robust criteria.
-- **ST elevation/depression** are over-called (spec 0.76/0.67); the J-point threshold
-  needs per-lead calibration on real data.
+- **Atrial fibrillation** initially scored 0.0: neurokit's delineation interpolates a
+  P onset for nearly every beat, so the onset-only `p_wave_ratio` saturated at 1.0.
+  Fixed by gating P-presence on the P-region amplitude (`P_PRESENCE_FRACTION`,
+  calibrated here: sinus P/R ≈ 0.21 vs AF ≈ 0.10) → 0.62 at 0.95 specificity. The
+  remaining misses are AF with a controlled, near-regular ventricular response
+  (RR-CV below the 0.15 gate).
+- **Bundle branch block** read as *narrow* QRS: dwt under-estimates width when the
+  terminal forces are slurred (RBBB measured 62–74 ms). QRS bounds now come from the
+  multi-lead spatial-velocity envelope (`layer3_measure/delineation.py`,
+  `QRS_ENVELOPE_FRACTION = 0.05`, calibrated on this set: RBBB/LBBB 112–190 ms,
+  normal ≤ 102 ms) → RBBB 1.00. LBBB stays at 0.50 partly because the dataset gives
+  the fascicular blocks (LFBBB/LBBBB, narrow QRS) the same SNOMED code as complete
+  LBBB — label noise, not a detector miss.
+- **First-degree AV block**: dwt P onsets land late. P onsets are now refined by
+  amplitude (closest supra-threshold run before the QRS, smoothed 15 % onset
+  criterion; a fixed fallback offset was found to inflate PR by 60–80 ms and was
+  removed) → 0.83 sensitivity at 0.95 specificity. PR is not reported in AF or
+  under AV dissociation.
+- **Atrial flutter & complete AV block** had rules but no measurement behind them.
+  `layer3_measure/atrial.py` subtracts the average beat, blanks the QRS, band-limits
+  the residual and reads its autocorrelation: an F-wave search (2–8 Hz) for flutter
+  and a P-band search (1–6 Hz, 45–200 bpm) for dissociated P waves. Flutter with
+  variable conduction is detected (3/15 real cases; the rest are fixed 2:1 at high
+  ventricular rates or read as AF); a fixed k:1 ratio locks the F-waves to the QRS
+  and is a documented miss (a second pass on a QRS-only residual was built, caught
+  1 of 5 such cases and mimicked sinus P–T spacing as 3:1, so it was removed).
+  Complete AV block is validated on synthetic stimuli only (no gold cases in this
+  subset): 6 of 7 variants; an atrial rate within 10 % of k × ventricular rate is
+  rejected by the harmonic guard on purpose — a false complete-AV-block is a
+  critical alert, so the conservative side is chosen.
+- **ST** was over-called (72 false elevations / 297): J point from dwt, a single
+  baseline sample, one threshold for every lead, no contiguity, and secondary
+  changes in BBB/LVH counted as ischemia. Now: J = envelope QRS offset, baseline =
+  PR-segment median, sex/age-specific V2–V3 STEMI thresholds (ESC/ACC), elevation
+  must persist to J+60, depression judged at J+60/J+80 (upsloping excluded),
+  `st_elevation` requires two contiguous leads of one territory (else
+  `st_elevation_nonspecific`, never critical), discordant deviations under
+  BBB/LVH/WPW become `secondary_st_t_change` — discordant elevation is never a
+  STEMI, discordant depression stays reported (strain) and is explained by the
+  causal chains. Elevation specificity 0.76 → 0.99, depression 0.67 → 0.97.
+- **Sinus codes in AF/flutter** were the main reason for sinus_rhythm's 0.78
+  specificity: a detected non-sinus rhythm now replaces the sinus_* rate codes and
+  suppresses P-wave findings.
+- **R-peak over-sensing** at slow rates (a tall T or a P wave after a long pause
+  counted as a beat) is filtered; the synthetic 40-bpm case and the real
+  bradycardia class both improved.
+- **long_qt**: the single labelled case now measures QTc ≤ 450 with the earlier,
+  more accurate QRS onset; specificity rose from 0.66 to 0.98 (QT is no longer
+  inflated by a late onset). n = 1, so no conclusion either way.
 
-The adapters and SNOMED/SCP mappings are unit-tested; rerun on a larger, more balanced
-sample (or the full dataset) before drawing clinical conclusions.
+<!-- BALANCED_RESULTS -->
+
+The adapters and SNOMED/SCP mappings are unit-tested; the balanced fetch
+(`cardiolens.validation.fetch_physionet`) exists precisely because this 300-record
+slice is brady-skewed. Rerun on a larger sample before drawing clinical conclusions.
 
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is
