@@ -20,6 +20,8 @@ class Intervals(BaseModel):
     qtc_bazett_ms: float | None = None
     qtc_fridericia_ms: float | None = None
     qtc_framingham_ms: float | None = None
+    qt_lead: str | None = None           # lead the QT was measured in (longest QT)
+    qt_source: str | None = None         # "tangent" (multi-lead) | "dwt" (fallback)
 
 
 class Axes(BaseModel):

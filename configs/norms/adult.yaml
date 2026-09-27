@@ -18,7 +18,9 @@ intervals_ms:
   # QTc thresholds are sex-specific below.
 
 qtc_ms:
-  # Bazett-corrected upper limits (TZ §6).
+  # Correction formula used by the long/short-QT rules (bazett | fridericia |
+  # framingham). Fridericia by default: Bazett over-corrects at fast rates.
+  formula: fridericia
   male_upper: 450
   female_upper: 460
   short_lower: 350

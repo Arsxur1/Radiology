@@ -22,6 +22,7 @@ intervals_ms:
   qt: [300, 440]
 
 qtc_ms:
+  formula: fridericia
   upper: 460
   short_lower: 340
 

@@ -7,6 +7,7 @@ from cardiolens.validation.harness import (
     build_ptbxl_dataset,
     build_synthetic_dataset,
     parse_dx_from_header,
+    parse_patient_from_header,
     run_validation,
     snomed_dx_to_codes,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "build_ptbxl_dataset",
     "build_synthetic_dataset",
     "parse_dx_from_header",
+    "parse_patient_from_header",
     "run_validation",
     "score_findings",
     "snomed_dx_to_codes",

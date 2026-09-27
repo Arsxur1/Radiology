@@ -27,6 +27,7 @@ from cardiolens.layer3_measure.delineation import (
     P_ONSET_MIN_FRACTION,
     P_ONSET_MIN_UV,
     qrs_bounds_envelope,
+    qt_multilead,
     refine_p_onsets,
     terminal_qrs_sign,
 )
@@ -203,13 +204,24 @@ def measure(sig: SignalRepresentation) -> Measurements:
         qrs_list = [qrs_off[i] - qrs_on[i] for i in range(n_beats)
                     if np.isfinite(qrs_on[i]) and np.isfinite(qrs_off[i])
                     and qrs_off[i] > qrs_on[i]]
-        qt_list = ([t_off[i] - qrs_on[i] for i in range(n_beats)
-                    if np.isfinite(t_off[i]) and np.isfinite(qrs_on[i])]
-                   if t_off is not None else [])
+        # QT: tangent-method T offset per lead, measured in the lead with the longest
+        # QT (guideline practice); the single-lead dwt offset is only a fallback.
+        qt_tan, qt_lead, t_off_tan = qt_multilead(sig.signal, sig.lead_names, rpeaks,
+                                                  qrs_on, qrs_off, fs)
+        if qt_tan is not None:
+            qt_ms, qt_source = qt_tan, "tangent"
+            t_off = t_off_tan
+        else:
+            qt_list = ([t_off[i] - qrs_on[i] for i in range(n_beats)
+                        if np.isfinite(t_off[i]) and np.isfinite(qrs_on[i])]
+                       if t_off is not None else [])
+            qt_ms, qt_source = _median_ms(qt_list, fs), ("dwt" if qt_list else None)
+            if qt_ms is not None:
+                m.notes.append("QT from dwt T offset (tangent method found no usable lead)")
         m.intervals = Intervals(
             pr_ms=_median_ms(pr_list, fs),
             qrs_ms=_median_ms(qrs_list, fs),
-            qt_ms=_median_ms(qt_list, fs),
+            qt_ms=qt_ms, qt_lead=qt_lead, qt_source=qt_source,
         )
 
         if p_on is not None and p_off is not None:

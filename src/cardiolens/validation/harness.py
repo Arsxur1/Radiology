@@ -215,6 +215,23 @@ def snomed_dx_to_codes(dx_codes) -> set[str]:
             if str(c).strip() in SNOMED_TO_CODE}
 
 
+def parse_patient_from_header(header_text: str) -> tuple[float | None, str | None]:
+    """(age_years, sex) from the ``#Age:`` / ``#Sex:`` header comments (None if absent)."""
+    age: float | None = None
+    sex: str | None = None
+    for line in header_text.splitlines():
+        s = line.strip().lower()
+        if s.startswith("#age:"):
+            try:
+                age = float(s.split(":", 1)[1].strip())
+            except ValueError:
+                age = None
+        elif s.startswith("#sex:"):
+            v = s.split(":", 1)[1].strip()
+            sex = "female" if v.startswith("f") else "male" if v.startswith("m") else None
+    return age, sex
+
+
 def parse_dx_from_header(header_text: str) -> list[str]:
     """Extract SNOMED-CT diagnosis ids from a WFDB header's ``#Dx:`` comment.
 
@@ -247,10 +264,17 @@ def build_ecg_arrhythmia_dataset(root, limit: int = 50) -> list[LabeledCase]:  #
                and not any(part.startswith(".") for part in h.relative_to(root).parts)][:limit]
     cases: list[LabeledCase] = []
     for hea in headers:
-        gold = snomed_dx_to_codes(parse_dx_from_header(hea.read_text(encoding="utf-8")))
+        text = hea.read_text(encoding="utf-8")
+        gold = snomed_dx_to_codes(parse_dx_from_header(text))
         try:
             sig = load_wfdb(hea.with_suffix(""))
         except Exception:  # noqa: S112 - skip unreadable records, keep validating the rest
             continue
+        # Age/sex drive the norm tables (pediatric bands, sex-specific QTc / V2-V3).
+        age, sex = parse_patient_from_header(text)
+        if age is not None:
+            sig.patient.age_years = age
+        if sex is not None:
+            sig.patient.sex = sex
         cases.append(LabeledCase(sig, gold, name=f"ecgarr_{hea.stem}"))
     return cases

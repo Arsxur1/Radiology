@@ -71,6 +71,7 @@ class ClaudeProvider(LLMProvider):
                 "pr_ms": data.measurements.intervals.pr_ms,
                 "qrs_ms": data.measurements.intervals.qrs_ms,
                 "qtc_bazett_ms": data.measurements.intervals.qtc_bazett_ms,
+                "qtc_fridericia_ms": data.measurements.intervals.qtc_fridericia_ms,
             },
         }
 

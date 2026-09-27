@@ -14,6 +14,7 @@ data/feedback/
 # Licensed PhysioNet datasets (downloaded locally for validation, never committed)
 data/ecg-arrhythmia/
 data/ecg-arrhythmia-balanced/
+data/ecg-arrhythmia-train/
 data/ptbxl/
 configs/calibrator.json
 *.pdf

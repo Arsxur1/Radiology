@@ -197,3 +197,97 @@ def terminal_qrs_sign(
     if not vals:
         return None
     return bool(np.median(vals) > 0)
+
+
+# --- T offset by the tangent method, per lead -----------------------------------
+# The dwt T offset on a single lead landed early on real records (measured QT of
+# 196-290 ms on long-QT cases). Guideline practice: measure QT in the lead with the
+# longest QT, T offset = intersection of the steepest descending tangent of the T
+# wave with the baseline.
+T_WINDOW_START_MS = 80.0      # after the QRS offset
+T_WINDOW_MAX_MS = 520.0       # ... and no further than this (or 0.55 * RR)
+T_WINDOW_RR_FRACTION = 0.55
+T_MIN_AMP_UV = 80.0           # smaller T waves are not delineated on that lead
+T_SLOPE_SMOOTH_MS = 10.0
+T_MIN_VALID_FRACTION = 0.5    # a lead needs an offset on this share of beats
+# Across-lead aggregate of the per-lead median QT. The textbook "lead with the
+# longest QT" is the max of 12 noisy estimates and over-read on real data (664
+# PhysioNet records: normal QTc median 441-457, spec 0.44-0.57). The 75th
+# percentile keeps the long-QT sensitivity (0.56-0.83 by split) with normal QTc
+# back at ~405 (Fridericia); the median under-reads (sens 0.44-0.58).
+T_LEAD_AGGREGATE_PERCENTILE = 75.0
+
+
+def t_offset_tangent(
+    row: np.ndarray, qrs_on: float, qrs_off: float, rr_s: float, fs: float
+) -> float | None:
+    """T offset (sample index) on one lead for one beat, tangent method."""
+    if not (np.isfinite(qrs_on) and np.isfinite(qrs_off)):
+        return None
+    on, off = int(qrs_on), int(qrs_off)
+    b_lo, b_hi = int(0.050 * fs), int(0.010 * fs)
+    lo, hi = max(0, on - b_lo), max(1, on - b_hi)
+    if hi <= lo:
+        return None
+    baseline = float(np.median(row[lo:hi]))
+    w0 = off + int(T_WINDOW_START_MS / 1000.0 * fs)
+    w1 = off + int(min(T_WINDOW_MAX_MS / 1000.0, T_WINDOW_RR_FRACTION * rr_s) * fs)
+    if w1 - w0 < int(0.08 * fs) or w1 > len(row):
+        return None
+    seg = row[w0:w1].astype(np.float64) - baseline
+    k = int(np.argmax(np.abs(seg)))
+    amp = float(seg[k])
+    if abs(amp) < T_MIN_AMP_UV:
+        return None
+    # Steepest slope back toward baseline after the peak (10 ms smoothed derivative).
+    sm = max(1, int(round(T_SLOPE_SMOOTH_MS / 1000.0 * fs)))
+    d = np.convolve(np.diff(seg), np.ones(sm) / sm, mode="same")
+    tail = d[k:]
+    if tail.size < 2:
+        return None
+    j = k + int(np.argmin(tail) if amp > 0 else np.argmax(tail))
+    slope = float(d[j])
+    if (amp > 0 and slope >= 0) or (amp < 0 and slope <= 0):
+        return None
+    # Tangent through (j, seg[j]) with that slope meets the baseline at x where seg=0.
+    x = j - seg[j] / slope
+    if not (k < x <= len(seg) + int(0.02 * fs)):
+        return None
+    return float(w0 + x)
+
+
+def qt_multilead(
+    signal: np.ndarray,
+    lead_names: list[str],
+    rpeaks: np.ndarray,
+    qrs_on: np.ndarray,
+    qrs_off: np.ndarray,
+    fs: float,
+) -> tuple[float | None, str | None, np.ndarray | None]:
+    """QT (ms) aggregated across leads, plus the reference lead's per-beat T offsets.
+
+    Returns (qt_ms, lead, t_offsets) or (None, None, None). A lead counts when it
+    yields a tangent offset on >= T_MIN_VALID_FRACTION of beats; the record QT is
+    the T_LEAD_AGGREGATE_PERCENTILE of the per-lead medians and the reported lead
+    is the one closest to that value.
+    """
+    n = len(rpeaks)
+    if n < 2:
+        return None, None, None
+    rr_s = float(np.median(np.diff(rpeaks))) / fs
+    per_lead: list[tuple[float, str, np.ndarray]] = []
+    for li, name in enumerate(lead_names):
+        offs = np.full(n, np.nan)
+        for i in range(n):
+            t = t_offset_tangent(signal[li], qrs_on[i], qrs_off[i], rr_s, fs)
+            if t is not None:
+                offs[i] = t
+        valid = np.isfinite(offs) & np.isfinite(qrs_on)
+        if valid.sum() >= max(2, T_MIN_VALID_FRACTION * n):
+            qt = float(np.median(offs[valid] - qrs_on[valid]) / fs * 1000.0)
+            per_lead.append((qt, name, offs))
+    if not per_lead:
+        return None, None, None
+    target = float(np.percentile([q for q, _, _ in per_lead], T_LEAD_AGGREGATE_PERCENTILE))
+    _, name, offs = min(per_lead, key=lambda t: abs(t[0] - target))
+    return round(target, 1), name, offs

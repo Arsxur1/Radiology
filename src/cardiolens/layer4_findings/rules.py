@@ -251,10 +251,17 @@ def _replace_sinus_codes_if_non_sinus(fs: FindingSet, hr, hr_range) -> None:
 
 
 def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
-    qtc = iv.qtc_bazett_ms
+    qtc_norms = norms.get("qtc_ms", {})
+    # Correction formula from the norm table. Fridericia is the default: Bazett
+    # over-corrects at fast rates (real-data long-QT specificity 0.68 vs 0.85).
+    formula = str(qtc_norms.get("formula", "fridericia")).lower()
+    by_formula = {"bazett": iv.qtc_bazett_ms, "fridericia": iv.qtc_fridericia_ms,
+                  "framingham": iv.qtc_framingham_ms}
+    qtc = by_formula.get(formula)
+    if qtc is None:                      # hand-built Measurements carry only Bazett
+        qtc, formula = iv.qtc_bazett_ms, "bazett"
     if qtc is None:
         return
-    qtc_norms = norms.get("qtc_ms", {})
     if is_pediatric:
         upper = qtc_norms.get("upper")
         short_lower = qtc_norms.get("short_lower")
@@ -265,16 +272,16 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
     if upper and qtc > upper:
         fs.findings.append(Finding(
             code="long_qt", group="interval",
-            label_ru=f"Удлинение QT (QTc {qtc} мс)",
-            label_uz=f"QT uzayishi (QTc {qtc} ms)",
-            evidence=_ev(qtc_bazett_ms=qtc, upper=upper), confidence=0.85,
+            label_ru=f"Удлинение QT (QTc {qtc} мс, {formula})",
+            label_uz=f"QT uzayishi (QTc {qtc} ms, {formula})",
+            evidence=_ev(qtc_ms=qtc, formula=formula, upper=upper), confidence=0.85,
         ))
     elif short_lower and qtc < short_lower:
         fs.findings.append(Finding(
             code="short_qt", group="interval",
-            label_ru=f"Укорочение QT (QTc {qtc} мс)",
-            label_uz=f"QT qisqarishi (QTc {qtc} ms)",
-            evidence=_ev(qtc_bazett_ms=qtc, lower=short_lower), confidence=0.7,
+            label_ru=f"Укорочение QT (QTc {qtc} мс, {formula})",
+            label_uz=f"QT qisqarishi (QTc {qtc} ms, {formula})",
+            evidence=_ev(qtc_ms=qtc, formula=formula, lower=short_lower), confidence=0.7,
         ))
 
 

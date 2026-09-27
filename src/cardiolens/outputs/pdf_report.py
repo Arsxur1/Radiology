@@ -63,7 +63,7 @@ def write_pdf(result: PipelineResult, path: str) -> str:
 
     m = result.measurements
     meas = (f"ЧСС: {m.heart_rate_bpm} /мин · PR: {m.intervals.pr_ms} мс · "
-            f"QRS: {m.intervals.qrs_ms} мс · QTc(B): {m.intervals.qtc_bazett_ms} мс · "
+            f"QRS: {m.intervals.qrs_ms} мс · QTc(F/B): {m.intervals.qtc_fridericia_ms}/{m.intervals.qtc_bazett_ms} мс · "
             f"ось QRS: {m.axes.qrs_deg}°")
     flow.append(Paragraph(meas, body))
     flow.append(Spacer(1, 0.3 * cm))
