@@ -62,6 +62,7 @@ class Measurements(BaseModel):
     hrv_sdnn_ms: float | None = None
     p_wave_ratio: float | None = None         # fraction of beats with an organised P (AF gate)
     p_onset_ratio: float | None = None        # fraction of beats with a refined P onset (PR)
+    pr_std_ms: float | None = None            # beat-to-beat PR variability (AV dissociation gate)
     qrs_v1_terminal_positive: bool | None = None  # terminal forces in V1 (R' -> RBBB)
     qrs_v6_terminal_positive: bool | None = None  # terminal forces in V6 (broad R -> LBBB)
     qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak

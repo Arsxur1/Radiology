@@ -37,7 +37,7 @@ SCORED_LABELS = [
     "sinus_rhythm", "sinus_bradycardia", "sinus_tachycardia",
     "atrial_fibrillation", "atrial_flutter", "first_degree_av_block",
     "complete_av_block", "rbbb", "lbbb",
-    "left_axis_deviation", "right_axis_deviation", "low_qrs_voltage",
+    "left_axis_deviation", "right_axis_deviation", "low_qrs_voltage", "lvh",
     "wpw_preexcitation",
     "st_elevation", "st_depression", "long_qt", "peaked_t_waves",
 ]
@@ -240,7 +240,11 @@ def build_ecg_arrhythmia_dataset(root, limit: int = 50) -> list[LabeledCase]:  #
     from cardiolens.layer1_ingestion import load_wfdb
 
     root = Path(root)
-    headers = sorted(root.rglob("*.hea"))[:limit]
+    # Only records with a signal file, outside hidden dirs (the fetch script keeps a
+    # header-only cache under ``.headers/``).
+    headers = [h for h in sorted(root.rglob("*.hea"))
+               if h.with_suffix(".mat").exists()
+               and not any(part.startswith(".") for part in h.relative_to(root).parts)][:limit]
     cases: list[LabeledCase] = []
     for hea in headers:
         gold = snomed_dx_to_codes(parse_dx_from_header(hea.read_text(encoding="utf-8")))

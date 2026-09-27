@@ -59,6 +59,10 @@ T_OVERSENSE_MAX_S = 0.5            # a T wave never lies further than this after
 # rhythm lead (P waves accepted after a long pause in complete AV block).
 OVERSENSE_ABS_FRACTION = 0.4
 
+# Beat-to-beat PR standard deviation below this = a fixed PR = conducted rhythm;
+# an AV-dissociation candidate with a stable PR is rejected.
+PR_STD_DISSOCIATION_MS = 40.0
+
 
 def _pick_rhythm_lead(sig: SignalRepresentation) -> int:
     for name in _RHYTHM_LEAD_PREFERENCE:
@@ -188,6 +192,8 @@ def measure(sig: SignalRepresentation) -> Measurements:
         pr_list = [qrs_on[i] - p_on_ref[i] for i in range(n_beats)
                    if np.isfinite(p_on_ref[i]) and np.isfinite(qrs_on[i])]
         m.p_onset_ratio = round(len(pr_list) / max(1, n_beats), 2)
+        if len(pr_list) >= 3:
+            m.pr_std_ms = round(float(np.std(pr_list) / fs * 1000.0), 1)
         if len(pr_list) < 0.5 * n_beats:
             pr_list = ([qrs_on[i] - p_on[i] for i in range(n_beats)
                         if np.isfinite(p_on[i]) and np.isfinite(qrs_on[i])]
@@ -239,6 +245,13 @@ def measure(sig: SignalRepresentation) -> Measurements:
             atrial_leads, rpeaks, fs,
             heart_rate_bpm=m.heart_rate_bpm, rr_cv=m.rr_cv, r_ref=r_ref,
         )
+        # AV dissociation means no fixed PR: when a P onset was found before most
+        # beats and the PR is stable, the atria are conducting (sinus rhythm with a
+        # long PR / long QT left a periodic residual) — not a complete block.
+        if (av is True and (m.p_onset_ratio or 0.0) >= 0.5
+                and m.pr_std_ms is not None and m.pr_std_ms < PR_STD_DISSOCIATION_MS):
+            av = False
+            notes.append(f"atrial activity: stable PR (std {m.pr_std_ms} ms) -> conducted, not dissociated")
         m.atrial_rate_bpm, m.av_dissociation = rate, av
         m.notes.extend(notes)
 

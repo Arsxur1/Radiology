@@ -147,7 +147,69 @@ dataset — it carries diagnostic labels only, no gold interval annotations.)
   more accurate QRS onset; specificity rose from 0.66 to 0.98 (QT is no longer
   inflated by a late onset). n = 1, so no conclusion either way.
 
-<!-- BALANCED_RESULTS -->
+### Measured results — balanced subset (664 records)
+
+`fetch_physionet --folders 40 --per-class 80 --seed 0`: headers from 40 folders
+spread over all 46 top-level directories (Chapman **and** Ningbo), 4000 records
+screened, 664 selected (rarest classes first; 80 unlabeled negatives kept).
+`manifest.json` lists every record and its labels.
+
+| Finding | Sens | Spec | n |
+|---------|-----:|-----:|--:|
+| sinus_rhythm | 0.89 | 0.77 | 80 |
+| sinus_bradycardia | 0.96 | 0.93 | 115 |
+| sinus_tachycardia | 0.91 | 0.87 | 93 |
+| atrial_fibrillation | 0.49 | 0.82 | 80 |
+| atrial_flutter | 0.01 | 1.00 | 187 |
+| *AF or flutter (one family)* | *0.49* | *0.96* | 267 |
+| first_degree_av_block | 0.73 | 0.89 | 85 |
+| rbbb | 0.73 | 0.98 | 71 |
+| lbbb | 0.74 | 0.94 | 83 |
+| left_axis_deviation | 0.81 | 0.86 | 83 |
+| right_axis_deviation | 0.75 | 0.95 | 80 |
+| low_qrs_voltage | 0.69 | 0.85 | 81 |
+| lvh | 0.88 | 0.91 | 51 |
+| wpw_preexcitation | 0.00 | 0.98 | 3 |
+| st_elevation | 0.40 | 0.98 | 58 |
+| st_depression | 0.48 | 0.82 | 85 |
+| long_qt | 0.17 | 0.93 | 23 |
+| complete_av_block | — (no gold cases) | 1.00 | 0 |
+
+Macro sensitivity **0.60** — lower than on the 300-record slice (0.72) because the
+set is harder and more diverse, not because the code regressed (the 300-set
+numbers above are from the same code). What the misses are:
+
+- **AF vs flutter.** 91 of the 107 AF false positives are flutter-labelled records:
+  flutter with an irregular ventricular response and no organised P is what the AF
+  rule describes. None of the 187 flutter records is recognised as flutter (median
+  RR-CV 0.21 → mostly irregular; the F-wave autocorrelation gates are not met), 91
+  are called AF and 96 nothing. Treated as one family the detector is precise
+  (spec 0.96, 132 TP / 16 FP) but catches half (sens 0.49). AF misses: 21 records
+  with irregular RR but coarse f-waves that pass the P-amplitude gate, 20 with a
+  near-regular response (RR-CV ≤ 0.15).
+- **Long QT** fails on measurement, not thresholds: for many gold records the
+  measured QT is implausibly short (196–290 ms) because the dwt T offset lands
+  early on the rhythm lead. Next step: a multi-lead T offset (tangent method on
+  the lead with the longest QT).
+- **ST elevation.** The dataset label "ST tilt up" is broader than the STEMI
+  definition the alert implements: the misses are discordant elevation under LVH
+  (reported as `secondary_st_t_change`), J-point elevation with no plateau at J+60
+  (early-repolarisation-like) and V2–V3 elevation under the sex/age threshold. The
+  alert keeps its precision (spec 0.98); a broader "any ST elevation" descriptor
+  could be added as a non-critical finding if the label semantics are wanted.
+- **ST depression** 0.48 / 0.82 ("ST drop down" is likewise broad); not analysed
+  further in this increment.
+- **Complete AV block.** The first balanced run produced one false positive (sinus
+  rhythm with first-degree AV block and long QT: a periodic P-band residual at 112
+  bpm). A physiologic gate closed it — AV dissociation means no fixed PR, so a
+  candidate with a refined P onset on ≥ 50 % of beats and a beat-to-beat PR
+  standard deviation < 40 ms (`pr_std_ms`) is conducted, not dissociated. 0 false
+  positives in 664 afterwards; synthetic complete AV block still detected. No 3AVB
+  label exists in the 4000 screened headers, so real-data sensitivity is unknown.
+- **LBBB** improves from 0.50 to 0.74 here (the hemiblock share of the LBBB code
+  is smaller in this sample); **LVH** 0.88 / 0.91 on a Sokolow-Lyon criterion.
+
+
 
 The adapters and SNOMED/SCP mappings are unit-tested; the balanced fetch
 (`cardiolens.validation.fetch_physionet`) exists precisely because this 300-record
