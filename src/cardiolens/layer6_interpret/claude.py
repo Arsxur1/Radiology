@@ -79,39 +79,45 @@ class ClaudeProvider(LLMProvider):
         import anthropic
 
         client = anthropic.Anthropic()
-        prompt = (
-            "Interpret this ECG. Return JSON with keys: summary[], "
-            "causal_explanation[], differential[], red_flags[], "
-            "confidence_word_ru, confidence_word_uz, next_step_ru, next_step_uz, "
-            "reasoning_trace[]. Each summary/causal/red_flag item is "
-            "{text_ru, text_uz, grounded_by[]}.\n\nDATA:\n"
-            + json.dumps(self._payload(data), ensure_ascii=False, indent=2)
-        )
+        prompt = PROMPT_INSTRUCTIONS + json.dumps(self._payload(data), ensure_ascii=False, indent=2)
         msg = client.messages.create(
             model=self.model, max_tokens=self.max_tokens, system=_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-        parsed = json.loads(_extract_json(text))
+        return report_from_json(json.loads(_extract_json(text)), data)
 
-        def claims(key: str) -> list[Claim]:
-            return [Claim(**c) for c in parsed.get(key, [])]
 
-        return InterpretationReport(
-            mode=data.mode,
-            summary=claims("summary"),
-            causal_explanation=claims("causal_explanation"),
-            red_flags=claims("red_flags"),
-            differential=[],  # kept deterministic from the engine
-            confidence_value=data.causal_graph.confidence,
-            confidence_word_ru=parsed.get("confidence_word_ru", ""),
-            confidence_word_uz=parsed.get("confidence_word_uz", ""),
-            next_step_ru=parsed.get("next_step_ru", ""),
-            next_step_uz=parsed.get("next_step_uz", ""),
-            reasoning_trace=parsed.get("reasoning_trace", []),
-            disclaimer_ru=data.disclaimer_ru,
-            disclaimer_uz=data.disclaimer_uz,
-        )
+PROMPT_INSTRUCTIONS = (
+    "Interpret this ECG. Return JSON with keys: summary[], "
+    "causal_explanation[], differential[], red_flags[], "
+    "confidence_word_ru, confidence_word_uz, next_step_ru, next_step_uz, "
+    "reasoning_trace[]. Each summary/causal/red_flag item is "
+    "{text_ru, text_uz, grounded_by[]}.\n\nDATA:\n"
+)
+
+
+def report_from_json(parsed: dict, data: InterpretationInput) -> InterpretationReport:
+    """Assemble the raw report from a model's JSON (shared by cloud/local providers)."""
+
+    def claims(key: str) -> list[Claim]:
+        return [Claim(**c) for c in parsed.get(key, [])]
+
+    return InterpretationReport(
+        mode=data.mode,
+        summary=claims("summary"),
+        causal_explanation=claims("causal_explanation"),
+        red_flags=claims("red_flags"),
+        differential=[],  # kept deterministic from the engine
+        confidence_value=data.causal_graph.confidence,
+        confidence_word_ru=parsed.get("confidence_word_ru", ""),
+        confidence_word_uz=parsed.get("confidence_word_uz", ""),
+        next_step_ru=parsed.get("next_step_ru", ""),
+        next_step_uz=parsed.get("next_step_uz", ""),
+        reasoning_trace=[str(t) for t in parsed.get("reasoning_trace", [])],
+        disclaimer_ru=data.disclaimer_ru,
+        disclaimer_uz=data.disclaimer_uz,
+    )
 
 
 def _extract_json(text: str) -> str:

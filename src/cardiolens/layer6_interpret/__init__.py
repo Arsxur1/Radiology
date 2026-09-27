@@ -10,15 +10,35 @@ from __future__ import annotations
 from cardiolens.contracts.report import InterpretationReport
 from cardiolens.layer6_interpret.claude import ClaudeProvider, available
 from cardiolens.layer6_interpret.grounding import validate_grounding
+from cardiolens.layer6_interpret.local import (
+    DEFAULT_BASE_URL,
+    DEFAULT_MODEL,
+    LocalOpenAIProvider,
+    local_available,
+)
 from cardiolens.layer6_interpret.policy import decide_mode
 from cardiolens.layer6_interpret.provider import InterpretationInput, LLMProvider
 from cardiolens.layer6_interpret.stub import StubProvider
 from cardiolens.safety.critical import SafetyResult
 
 
-def default_provider(prefer_claude: bool = True) -> LLMProvider:
+def default_provider(prefer_claude: bool = True, llm=None) -> LLMProvider:
+    """Pick the narrative provider from the ``llm`` config (or auto-detect)."""
+    choice = (getattr(llm, "provider", "auto") or "auto").lower()
+    base_url = getattr(llm, "local_base_url", DEFAULT_BASE_URL)
+    model = getattr(llm, "local_model", DEFAULT_MODEL)
+    timeout = float(getattr(llm, "timeout_s", 120.0))
+    if choice == "stub":
+        return StubProvider()
+    if choice == "claude":
+        return ClaudeProvider() if available() else StubProvider()
+    if choice == "local":
+        return LocalOpenAIProvider(base_url, model, timeout)
+    # auto
     if prefer_claude and available():
         return ClaudeProvider()
+    if local_available(base_url):
+        return LocalOpenAIProvider(base_url, model, timeout)
     return StubProvider()
 
 
@@ -50,6 +70,7 @@ __all__ = [
     "ClaudeProvider",
     "InterpretationInput",
     "LLMProvider",
+    "LocalOpenAIProvider",
     "StubProvider",
     "default_provider",
     "interpret",

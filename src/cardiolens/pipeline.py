@@ -27,7 +27,7 @@ from cardiolens.layer2_preprocess import assess_quality, preprocess
 from cardiolens.layer3_measure import measure
 from cardiolens.layer4_findings import detect_findings
 from cardiolens.layer5_causal import analyze
-from cardiolens.layer6_interpret import InterpretationInput, interpret
+from cardiolens.layer6_interpret import InterpretationInput, default_provider, interpret
 from cardiolens.layer6_interpret.provider import LLMProvider
 from cardiolens.safety import SafetyResult, scan_critical
 from cardiolens.safety.critical import CriticalAlert
@@ -134,7 +134,7 @@ def run_pipeline(
         disclaimer_ru=cfg.disclaimers.ru, disclaimer_uz=cfg.disclaimers.uz,
     )
     report = interpret(
-        data, safety, provider=provider,
+        data, safety, provider=provider or default_provider(llm=cfg.llm),
         min_overall=cfg.confidence.autonomous_min_overall, quality_ok=quality_ok,
     )
     audit.append(f"[L6] provider={report.mode} escalation={report.escalation_reason}")

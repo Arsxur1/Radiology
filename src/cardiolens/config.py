@@ -55,8 +55,18 @@ class Versions(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class LLMConfig(BaseModel):
+    """Layer-6 narrative provider selection (TZ §12): auto | claude | local | stub."""
+
+    provider: str = "auto"
+    local_base_url: str = "http://127.0.0.1:11434/v1"
+    local_model: str = "llama3.1:8b"
+    timeout_s: float = 120.0
+
+
 class AppConfig(BaseModel):
     mode: str
+    llm: LLMConfig = Field(default_factory=LLMConfig)
     mains_frequency_hz: float
     preprocessing: Preprocessing
     confidence: ConfidenceGates

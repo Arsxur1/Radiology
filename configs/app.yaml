@@ -16,6 +16,16 @@ preprocessing:
   # Signal Quality Index below this marks a lead as low-quality (0..1).
   sqi_accept_threshold: 0.5
 
+# Layer-6 narrative provider (TZ §12). The core (Layers 1-5) is always offline.
+#   auto   = Claude if ANTHROPIC_API_KEY is set, else a local OpenAI-compatible server
+#            if one answers at local_base_url, else the deterministic stub.
+#   claude | local | stub = force one provider (local falls back to stub on error).
+llm:
+  provider: "auto"
+  local_base_url: "http://127.0.0.1:11434/v1"   # Ollama / llama.cpp / vLLM / LM Studio
+  local_model: "llama3.1:8b"
+  timeout_s: 120
+
 # Confidence gating for autonomous mode B (TZ §2, §16).
 confidence:
   # Autonomous report is emitted only if overall confidence >= this.
