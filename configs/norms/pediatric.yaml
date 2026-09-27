@@ -15,6 +15,13 @@ heart_rate_bpm_by_age:
 
 rhythm:
   atrial_flutter_bpm: [200, 350]
+  # Atrial fibrillation gates: RR coefficient of variation above, and fraction of
+  # beats with an organised P below. Chosen on the train half of 964 PhysioNet
+  # ecg-arrhythmia records with a specificity floor and confirmed on the test half
+  # and PTB-XL (AF-or-flutter family: spec >= 0.92 everywhere, sensitivity
+  # 0.50 -> 0.62 on PTB-XL). The old (0.15, 0.30) was tuned on 300 records.
+  af_rr_cv_min: 0.10
+  af_p_ratio_max: 0.5
 
 intervals_ms:
   pr: [90, 170]        # shorter than adult

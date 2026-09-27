@@ -111,8 +111,11 @@ def detect_findings(
     # Intervals / QT (TZ §7.3)
     # ------------------------------------------------------------------ #
     # Atrial fibrillation: irregularly-irregular rhythm with absent P waves (§7.1).
-    if (m.rhythm_regular is False and (m.rr_cv or 0) > 0.15
-            and m.p_wave_ratio is not None and m.p_wave_ratio < 0.3):
+    # Gates come from the norm table; calibrated on 964 ecg-arrhythmia records
+    # (train/test halves) and checked on PTB-XL — see DECISIONS D31.
+    rh = norms.get("rhythm", {})
+    af_cv, af_p = rh.get("af_rr_cv_min", 0.10), rh.get("af_p_ratio_max", 0.5)
+    if ((m.rr_cv or 0) > af_cv and m.p_wave_ratio is not None and m.p_wave_ratio < af_p):
         fs.findings.append(Finding(
             code="atrial_fibrillation", group="rhythm",
             label_ru="Фибрилляция предсердий (нерегулярный ритм, отсутствие P)",
@@ -460,7 +463,10 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
     for st in m.morphology.st:
         elev, depr = _st_thresholds(norms, patient, st.lead)
         j, j60, j80 = st.j_point_uv, st.j60_uv, st.j80_uv
-        if st.lead != "aVR" and ((j is not None and j >= elev) or (j60 is not None and j60 >= elev)):
+        # Descriptor needs a persisting elevation (J and J+60): a J-point-only bump
+        # (early repolarisation, S-wave tail) fired on half of all records.
+        if (st.lead != "aVR" and j is not None and j >= elev
+                and (j60 is None or j60 >= plateau * elev)):
             any_elevated.append(st.lead)
         dev = 0
         # STEMI is defined by J-POINT elevation that persists into the ST segment.
