@@ -124,6 +124,8 @@ def fundamental_peak(ac: np.ndarray, lmin: int, lmax: int) -> tuple[int, float] 
     if idx.size == 0:
         return None
     top = float(np.max(seg[idx]))
+    if top <= 0.0:
+        return None  # no positive periodicity at all (every local peak is negative)
     k = int(idx[np.flatnonzero(seg[idx] >= FUNDAMENTAL_FRACTION * top)[0]])
     return lmin + k, float(seg[k])
 

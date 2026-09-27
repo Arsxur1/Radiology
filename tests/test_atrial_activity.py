@@ -82,3 +82,14 @@ def test_atrial_rate_near_twice_ventricular_is_a_documented_miss():
     # leftover QRS/T periodicity by the conservative harmonic guard (see atrial.py).
     r = _run(heart_rate_bpm=38, dissociated_atrial_rate_bpm=80, seed=4)
     assert r.measurements.av_dissociation is not True
+
+
+def test_fundamental_peak_with_only_negative_peaks_returns_none():
+    # Regression: an autocorrelation whose local maxima are all negative used to raise
+    # IndexError (threshold 0.8 x top lies above top when top < 0) and crash the pipeline.
+    import numpy as np
+
+    from cardiolens.layer3_measure.atrial import fundamental_peak
+
+    ac = -np.abs(np.sin(np.linspace(0, 40, 4000))) - 0.1
+    assert fundamental_peak(ac, 75, 750) is None
