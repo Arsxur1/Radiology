@@ -58,6 +58,22 @@ def test_atrial_fibrillation():
     assert "atrial_fibrillation" in _find(m).codes()
 
 
+def test_sinus_arrhythmia_with_conducted_p_is_not_af():
+    # Irregular RR and a small P/R amplitude ratio (children), but a refined P onset
+    # on most beats with a stable PR: organised atrial activity, not AF (D36).
+    m = Measurements(heart_rate_bpm=75, rhythm_regular=False, rr_cv=0.13,
+                     p_wave_ratio=0.0, p_onset_ratio=0.92, pr_std_ms=12.0,
+                     intervals=Intervals(pr_ms=140, qrs_ms=88, qt_ms=370, qtc_bazett_ms=410))
+    assert "atrial_fibrillation" not in _find(m).codes()
+
+
+def test_irregular_rr_with_unstable_pr_stays_af():
+    m = Measurements(heart_rate_bpm=95, rhythm_regular=False, rr_cv=0.28,
+                     p_wave_ratio=0.1, p_onset_ratio=0.9, pr_std_ms=70.0,
+                     intervals=Intervals(pr_ms=None, qrs_ms=90, qt_ms=360, qtc_bazett_ms=430))
+    assert "atrial_fibrillation" in _find(m).codes()
+
+
 def test_normal_measurements_no_conduction_findings():
     m = Measurements(heart_rate_bpm=72, rhythm_regular=True, rr_cv=0.03,
                      p_wave_ratio=1.0, qrs_v1_terminal_positive=True,

@@ -17,6 +17,9 @@ rhythm:
   # 0.50 -> 0.62 on PTB-XL). The old (0.15, 0.30) was tuned on 300 records.
   af_rr_cv_min: 0.10
   af_p_ratio_max: 0.5
+  # Conducted P: refined P onset on >= 50 % of beats with beat-to-beat PR SD below
+  # this excludes AF (same physiology as the AV-dissociation gate, D26/D28).
+  af_pr_std_max_ms: 40
 
 intervals_ms:
   pr: [120, 200]

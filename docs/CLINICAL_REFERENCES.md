@@ -48,6 +48,11 @@ each encoded criterion to its source.
 | LVH strain: secondary ST-T, not primary ischemia | — | standard |
 | BBB / WPW explain a wide QRS (not hyperkalemia) | RBBB by V1 terminal sign; WPW by short PR | standard |
 | LA/RA electrode reversal → artifact hypothesis | lead I inverted + aVR upright | standard |
+| **QT end (tangent method), QTc formula** | steepest post-peak tangent ∩ baseline; record QT = 75th percentile of per-lead medians; Fridericia default (`qtc_ms.formula`) | Postema & Wilde 2014 (tangent); Fridericia; D27 |
+| **STEMI thresholds V2–V3** | J ≥ 2.5 mV·10⁻¹ men < 40, 2.0 men ≥ 40, 1.5 women; other leads 1.0 mm; ≥ 2 contiguous leads; plateau at J+60 | ESC/ACC/AHA universal MI definition |
+| **Atrial flutter band** | atrial rate 200–350 bpm (`rhythm.atrial_flutter_bpm`), F-wave autocorrelation or spectral peak on ≥ 2 leads | standard; D24/D28 |
+| **AF gates** | RR-CV ≥ 0.10 and organised-P fraction ≤ 0.5 (`rhythm.af_*`) | calibrated on 964 records, train/test halves (D31) |
+| **Complete AV block** | dissociated P train, atrial/ventricular ratio ≥ 1.2, unstable PR, organised P | standard; gates from 16 PTB-XL cases (D28) |
 
 Bold rows are the criteria added in the clinical-knowledge increment; the rest
 predate it. Editing a threshold in `configs/norms/*.yaml` or adding a chain to
@@ -214,6 +219,48 @@ numbers above are from the same code). What the misses are:
 The adapters and SNOMED/SCP mappings are unit-tested; the balanced fetch
 (`cardiolens.validation.fetch_physionet`) exists precisely because this 300-record
 slice is brady-skewed. Rerun on a larger sample before drawing clinical conclusions.
+
+### Calibration of the AF gates — train/test halves (item 2)
+
+The AF rule fires on `rr_cv >= rhythm.af_rr_cv_min` and `p_wave_ratio <=
+rhythm.af_p_ratio_max` (both in `configs/norms/*.yaml`). The old values (0.15 / 0.30)
+were tuned on the 300-record slice. The new ones were chosen on the **train half**
+of 300 + 664 ecg-arrhythmia records (split by record-name hash), objective = Youden
+index of the AF-or-flutter family with a family-specificity floor of 0.93, then
+scored on the untouched **test half** and on PTB-XL. Family = AF rule ∪ flutter
+detector vs gold AFIB ∪ AFLT.
+
+| Gates (cv / p_ratio) | ecg-arrhythmia train (n+ 162) | ecg-arrhythmia test (n+ 181) | PTB-XL (n+ 179 / n− 1513) |
+|---|:-:|:-:|:-:|
+| 0.15 / 0.30 (old) | 0.54 / 0.97 | 0.52 / 0.97 | 0.50 / 0.97 |
+| **0.10 / 0.50 (chosen)** | 0.81 / 0.94 | **0.78 / 0.94** | **0.64 / 0.92** |
+
+Train and test agree within 0.03, so the gates did not over-fit the half they were
+chosen on. The cost is 3–5 points of family specificity, spent knowingly: the
+alternative (missing half of the AF) is the worse clinical error, and AF is not a
+critical alert in this system.
+
+### Paper-page digitisation benchmark (item 5d)
+
+Synthetic 12-lead pages (3×4 layout + lead-II rhythm strip, 6 px/mm, 25 mm/s,
+10 mm/mV) rendered by `render_ecg_page`, degraded by `degrade_image`, recovered by
+`digitize_page`; per-lead Pearson r between the 2.5-s panel trace and the source:
+
+| Degradation | mean r (12 leads) | min r |
+|---|:-:|:-:|
+| clean scan | 0.93 | 0.89 |
+| rotation +3° | 0.93 | 0.89 |
+| Gaussian blur 2 px | 0.91 | 0.87 |
+| JPEG q = 40 | 0.93 | 0.89 |
+| shadow gradient 50 % | 0.93 | 0.89 |
+| salt noise 0.5 % | 0.93 | 0.89 |
+| all of the above (−2°, blur 1 px, JPEG 40, shadow 40 %, salt 0.3 %) | 0.92 | 0.89 |
+
+The ceiling (~0.93) is the render itself: 150 samples/s and a 2-px stroke quantise
+the QRS. Downstream on a degraded STEMI page: HR within 3 bpm, QRS axis within 15°,
+`st_elevation` preserved (`tests/test_digitize_page.py`). Real photographs and the
+calibration pulse remain untested/unimplemented; `provenance.confidence` is the panel
+column coverage, so a bad photo lowers confidence rather than inventing a trace.
 
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is

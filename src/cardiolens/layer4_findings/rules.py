@@ -115,12 +115,20 @@ def detect_findings(
     # (train/test halves) and checked on PTB-XL — see DECISIONS D31.
     rh = norms.get("rhythm", {})
     af_cv, af_p = rh.get("af_rr_cv_min", 0.10), rh.get("af_p_ratio_max", 0.5)
-    if ((m.rr_cv or 0) > af_cv and m.p_wave_ratio is not None and m.p_wave_ratio < af_p):
+    # Conducted P waves exclude AF regardless of RR irregularity: a refined P onset
+    # on most beats with a stable PR (sinus arrhythmia, ectopy) is organised atrial
+    # activity. Children's P/R amplitude ratio is small, so the amplitude gate
+    # alone read pediatric sinus arrhythmia as AF (15 of 64 PTB-XL children).
+    conducted_p = ((m.p_onset_ratio or 0.0) >= 0.5 and m.pr_std_ms is not None
+                   and m.pr_std_ms < rh.get("af_pr_std_max_ms", 40))
+    if ((m.rr_cv or 0) > af_cv and m.p_wave_ratio is not None and m.p_wave_ratio < af_p
+            and not conducted_p):
         fs.findings.append(Finding(
             code="atrial_fibrillation", group="rhythm",
             label_ru="Фибрилляция предсердий (нерегулярный ритм, отсутствие P)",
             label_uz="Bo'lmachalar fibrillyatsiyasi (notekis ritm, P yo'q)",
-            evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio), confidence=0.7,
+            evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio, pr_std_ms=m.pr_std_ms),
+            confidence=0.7,
         ))
 
     iv = m.intervals
