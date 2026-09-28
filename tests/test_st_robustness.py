@@ -126,6 +126,30 @@ def test_st_elevation_any_is_descriptive_and_never_critical():
     assert {"st_elevation", "st_elevation_any"} <= _codes(m3)
 
 
+def test_descriptor_uses_flat_1mm_not_stemi_thresholds():
+    # Young man, V2 elevation 1.3 mm persisting at J+60: below the 2.5-mm STEMI
+    # threshold for V2 (no alert) but "some ST elevation" for the descriptor —
+    # the PTB-XL "non-specific ST elevation" label (D37).
+    m = _base(morphology=_st({"V2": 130}, j60={"V2": 150}))
+    codes = _codes(m, age=30, sex="male")
+    assert "st_elevation_any" in codes
+    assert not codes & {"st_elevation", "st_elevation_nonspecific"}
+    # A J-point-only bump that does not persist at J+60 is not elevation.
+    m2 = _base(morphology=_st({"V2": 130}, j60={"V2": 20}))
+    assert "st_elevation_any" not in _codes(m2, age=30, sex="male")
+
+
+def test_descriptor_discordant_elevation_needs_2mm():
+    lvh = dict(sokolow_lyon_uv=4000)
+    # 1.5 mm discordant elevation in V1-V2 under LVH: expected repolarisation.
+    m = _base(morphology=_st({"V1": 150, "V2": 150}, qrs_net={"V1": -1500, "V2": -1800}), **lvh)
+    assert "st_elevation_any" not in _codes(m)
+    # 2.5 mm discordant: still no alert, but the descriptor reports it.
+    m2 = _base(morphology=_st({"V1": 250, "V2": 250}, qrs_net={"V1": -1500, "V2": -1800}), **lvh)
+    codes2 = _codes(m2)
+    assert "st_elevation_any" in codes2 and "st_elevation" not in codes2
+
+
 def test_normal_has_no_st_codes():
     r = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=75, seed=9), mode="A", provider=StubProvider())
     assert not r.findings.codes() & {"st_elevation", "st_elevation_nonspecific", "st_depression",

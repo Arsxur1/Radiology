@@ -51,6 +51,13 @@ st_uv:
   elevation_significant: 100
   elevation_v2_v3: { male_under_40: 150, male: 150, female: 150 }
   elevation_plateau_fraction: 0.8
+  # Neutral descriptor st_elevation_any: flat 1 mm in any lead (J and J+60), no
+  # sex/age V2-V3 thresholds; under BBB/LVH/WPW a discordant lead counts only from
+  # any_elevation_discordant_uv (Sgarbossa-like). Chosen on PTB-XL STE_ (28) and
+  # ecg-arrhythmia "ST tilt up" (58): sens 0.18 -> 0.61 and 0.81 -> 0.83 at the
+  # same specificity (0.80 / 0.82) — see D37.
+  any_elevation_uv: 100
+  any_elevation_discordant_uv: 200
   depression_significant: 100
   depression_upsloping_uv: 50
 

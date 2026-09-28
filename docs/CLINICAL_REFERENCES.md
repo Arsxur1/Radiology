@@ -328,6 +328,52 @@ Macro sensitivity 0.44 → **0.57**. Reading, by clinical weight:
   pre-excitation; **long QT 0.49 / 0.89** with the tangent method (LNGQT includes
   borderline QTc).
 
+### ST elevation on PTB-XL STE_ — what the label is and what was changed (D37)
+
+`STE_` is a PTB-XL *form* statement ("non-specific ST elevation", likelihood 0 like all
+form/rhythm codes; 28 of 1692 records, 13 of them otherwise NORM, 2 with digitalis, 1
+paced, 2 with LVH). It is not a STEMI label — PTB-XL has essentially no acute-MI
+labels in this subset (AMI 1, ASMI 2) — so the STEMI-grade alert's 0.00 sensitivity on
+it is not the failure it looks like; the right target is the neutral descriptor
+`st_elevation_any`, which reached only 0.18.
+
+Per-lead measurements of the 28 records: the elevation sits in V2 (25 records) and V3
+(18), J-point 50–190 µV, J+60 100–430 µV — i.e. 1–2 mm below the sex/age STEMI
+thresholds for V2–V3 (150 / 200 / 250 µV) that the descriptor had inherited.
+
+Is the measurement biased? The PR-segment baseline lies 15–55 µV *below* the TP
+baseline in V2–V3 (atrial repolarisation), and 60 % of all records show ≥ 1 mm at
+J+60 in V2 over the PR baseline (median 96 µV) — the normal upsloping ST of the
+right precordial leads. Re-measuring every record under three baselines:
+
+| Baseline | descriptor J ≥ 100 & J+60 ≥ 100, concordant | alert proxy spec | V2 J / J+60 median (negatives) |
+|---|:-:|:-:|:-:|
+| PR segment [−50, −10] ms (current) | 0.57 / 0.88 | 0.971 | 32 / 96 |
+| PQ junction [−24, −4] ms | 0.54 / 0.89 | 0.974 | 30 / 94 |
+| TP segment [−300, −200] ms | 0.43 / 0.91 | 0.980 | 7 / 66 |
+
+The baseline only slides along the same sensitivity/specificity curve, so the PR
+segment stays (it is the reference of the universal MI definition). The label is
+subjective and rare, and cannot be separated cleanly from normal-variant V2–V3
+elevation by J / J+60 levels; the achievable operating points, evaluated on **both**
+sets (PTB-XL STE_ n = 28 and ecg-arrhythmia "ST tilt up" n = 58):
+
+| Descriptor rule (any lead but aVR) | PTB-XL STE_ | 664 "ST tilt up" |
+|---|:-:|:-:|
+| previous: STEMI V2–V3 thresholds, discordant included | 0.18 / 0.80 | 0.81 / 0.84 |
+| J ≥ 100 & J+60 ≥ 100, concordant only | 0.57 / 0.88 | 0.67 / 0.91 |
+| J ≥ 80 & J+60 ≥ 100, concordant only | 0.71 / 0.84 | 0.69 / 0.85 |
+| **J ≥ 100 & J+60 ≥ 80, discordant only when J ≥ 200 (chosen)** | **0.61 / 0.80** | **0.83 / 0.82** |
+
+Chosen: a flat 1 mm for the descriptor (`st_uv.any_elevation_uv`), the STEMI-grade
+sex/age thresholds stay with the alert; discordant elevation under BBB/LVH/WPW counts
+from 2 mm (`any_elevation_discordant_uv`, a softened Sgarbossa criterion) because the
+datasets' broad labels include secondary elevation. Same specificity as before on
+both sets, sensitivity 0.18 → 0.61 on PTB-XL and 0.81 → 0.83 on the 664. The alert
+was not touched: its 54 PTB-XL false positives are mostly elderly patients with V2–V4
+elevation, some under an LBBB the detector missed (no secondary context → the
+discordant elevation counts as primary); there is no STEMI gold here to trade against.
+
 ### Pediatric stratum — PTB-XL, 64 records aged ≤ 15 (item 5b)
 
 `validate --ptbxl data/ptbxl --age-max 15`. All 64 children of PTB-XL are in the

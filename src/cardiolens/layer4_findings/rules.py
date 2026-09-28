@@ -464,6 +464,11 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
         return
     plateau = float(thr.get("elevation_plateau_fraction", 0.8))
     upsloping = float(thr.get("depression_upsloping_uv", 50))
+    # Descriptor thresholds: a flat 1 mm in any lead (the STEMI-grade sex/age V2-V3
+    # thresholds belong to the alert only); discordant elevation under BBB/LVH/WPW
+    # counts only when it is large (Sgarbossa-like), see D37.
+    any_thr = float(thr.get("any_elevation_uv", thr["elevation_significant"]))
+    any_disc_thr = float(thr.get("any_elevation_discordant_uv", 2 * any_thr))
     # With a bundle branch block, pre-excitation or LVH the expected repolarisation
     # is discordant to the QRS; only concordant deviations count as primary.
     secondary_ctx = bool(fs.codes() & _SECONDARY_ST_CONTEXT)
@@ -473,8 +478,10 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
         j, j60, j80 = st.j_point_uv, st.j60_uv, st.j80_uv
         # Descriptor needs a persisting elevation (J and J+60): a J-point-only bump
         # (early repolarisation, S-wave tail) fired on half of all records.
-        if (st.lead != "aVR" and j is not None and j >= elev
-                and (j60 is None or j60 >= plateau * elev)):
+        disc_elev = secondary_ctx and st.qrs_net_uv is not None and st.qrs_net_uv < 0
+        if (st.lead != "aVR" and j is not None and j >= any_thr
+                and (j60 is None or j60 >= plateau * any_thr)
+                and (not disc_elev or j >= any_disc_thr)):
             any_elevated.append(st.lead)
         dev = 0
         # STEMI is defined by J-POINT elevation that persists into the ST segment.
