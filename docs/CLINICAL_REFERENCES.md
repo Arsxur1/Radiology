@@ -220,6 +220,107 @@ The adapters and SNOMED/SCP mappings are unit-tested; the balanced fetch
 (`cardiolens.validation.fetch_physionet`) exists precisely because this 300-record
 slice is brady-skewed. Rerun on a larger sample before drawing clinical conclusions.
 
+### Measured results — balanced 664 after items 0–3 and the conducted-P gate (rerun)
+
+Same 664 records, current code (tangent T offset + Fridericia, spectral flutter
+search, AF gates from the norm table, `st_elevation_any`, conducted-P veto). The
+first-run column is the table above.
+
+| Finding | First run (sens / spec) | Current (sens / spec) | n |
+|---------|:-:|:-:|--:|
+| sinus_rhythm | 0.89 / 0.77 | 0.89 / 0.84 | 80 |
+| sinus_bradycardia | 0.96 / 0.93 | 0.93 / 0.98 | 115 |
+| sinus_tachycardia | 0.91 / 0.87 | 0.91 / 0.89 | 93 |
+| atrial_fibrillation | 0.49 / 0.82 | 0.80 / 0.73 | 80 |
+| atrial_flutter | 0.01 / 1.00 | 0.01 / 1.00 | 187 |
+| *AF or flutter (family)* | *0.49 / 0.96* | *0.77 / 0.95* | 267 |
+| first_degree_av_block | 0.73 / 0.89 | 0.68 / 0.94 | 85 |
+| rbbb / lbbb | 0.73 / 0.98 · 0.74 / 0.94 | 0.72 / 0.98 · 0.71 / 0.94 | 71 / 83 |
+| left / right axis deviation | 0.81 / 0.86 · 0.75 / 0.95 | 0.87 / 0.86 · 0.69 / 0.96 | 83 / 80 |
+| low_qrs_voltage | 0.69 / 0.85 | 0.72 / 0.86 | 81 |
+| lvh | 0.88 / 0.91 | 0.90 / 0.91 | 51 |
+| st_elevation (alert) | 0.40 / 0.98 | 0.38 / 0.98 | 58 |
+| *st_elevation_any (family)* | — | *0.81 / 0.84* | 58 |
+| st_depression | 0.48 / 0.82 | 0.48 / 0.82 | 85 |
+| long_qt | 0.17 / 0.93 | 0.70 / 0.86 | 23 |
+
+Macro sensitivity 0.60 → **0.65**. Reading:
+
+- **Long QT** 0.17 → 0.70 is the tangent-method T offset aggregated over leads
+  (D27); the 23 gold records no longer measure 196–290 ms. Specificity fell 0.93 →
+  0.86 — the 75th-percentile aggregate over-reads some normals; the maximum over
+  leads (textbook "longest lead") was worse (spec 0.44–0.57) and the median missed
+  half the cases, so this is the chosen trade-off, made on the train half.
+- **AF** 0.49 → 0.80 at 0.73 specificity: the gates moved from (0.15, 0.30) to
+  (0.10, 0.5) (calibration table below). Most of the remaining false AF are
+  flutter-labelled records (family spec 0.95), so the per-class specificity
+  understates the detector. The conducted-P veto (D36) cost 5 points of AF
+  sensitivity here (0.85 → 0.80) and bought 2 points of family specificity; it was
+  introduced for children, where it removed two thirds of the false AF.
+- **Flutter** stays at 0.01 on the Ningbo "flutter" label: the spectral F-wave
+  search finds no 3.3–6 Hz peak on ≥ 2 leads in these records, while it does on
+  PTB-XL AFLT (0.51). Either the label is broad here or the F-waves are not
+  visible at 500 Hz surface leads with an irregular response; reported as is.
+- **First-degree AV block** 0.73 → 0.68 / 0.89 → 0.94: the AF/flutter/dissociation
+  gates suppress PR in more records; the trade favours specificity.
+- **ST elevation (alert)** unchanged at spec 0.98; the neutral `st_elevation_any`
+  descriptor (D32) covers 0.81 of the "ST tilt up" label at 0.84 specificity —
+  the first version without the J+60 plateau fired on half the set (spec 0.51).
+
+### Pediatric stratum — PTB-XL, 64 records aged ≤ 15 (item 5b)
+
+`validate --ptbxl data/ptbxl --age-max 15`. All 64 children of PTB-XL are in the
+local subset; the pediatric norm table (`configs/norms/pediatric.yaml`) applies to
+every one of them (HR bands by age, PR 90–170, QTc 460, wide normal axis, juvenile
+T pattern). Labels: NORM 54, SR 39, SARRH 20, SBRAD 4, STACH 2, IRBBB 6, LVH 5,
+WPW 2, LNGQT 1, 1AVB 1, one inferior MI pattern.
+
+| Finding | Sens | Spec | n |
+|---|:-:|:-:|--:|
+| sinus_rhythm (SR ∪ SARRH) | 0.86 | 0.67 | 58 |
+| sinus_bradycardia | 1.00 | 0.95 | 4 |
+| sinus_tachycardia | 0.00 | 1.00 | 2 |
+| atrial_fibrillation | — | 0.92 | 0 |
+| first_degree_av_block | 1.00 | 0.91 | 1 |
+| wpw_preexcitation | 0.50 | 1.00 | 2 |
+| right_axis_deviation | 0.00 | 1.00 | 2 |
+| lvh | 0.00 | 1.00 | 5 |
+| long_qt | 0.00 | 1.00 | 1 |
+| complete AV block, flutter, BBB, ST codes | — | 0.86–1.00 | 0 |
+
+What the stratum taught, in order of importance:
+
+- **Sinus arrhythmia read as AF** — the biggest finding of this exercise. In the
+  first run 15 of 64 children were called AF: marked respiratory RR variation
+  (RR-CV 0.10–0.21) plus a P/R amplitude ratio near zero (tall pediatric R waves
+  defeat the adult-calibrated `P_PRESENCE_FRACTION` gate), while a refined P onset
+  existed on 92–100 % of beats with a stable PR (SD 8–20 ms). The AF rule now
+  vetoes on conducted P (D36): false AF 15 → 5, sinus_rhythm sensitivity 0.69 →
+  0.86. The 5 remaining are records where the P onset is not found or the PR is
+  unstable (SD 55–95 ms).
+- **SARRH is sinus rhythm.** 20 of the 25 children without an SR label carry SARRH
+  (sinus arrhythmia); the adapter now maps it to `sinus_rhythm`. Before that the
+  stratum showed a meaningless 0.32 sinus-rhythm specificity.
+- **Sinus_rhythm specificity 0.67** is now label semantics: the only children
+  without a sinus-rhythm label are the 6 with SBRAD/STACH by adult thresholds,
+  and 4 of them fall inside the pediatric HR band (60–110 at 9–15 y), which calls
+  them normal;
+  the two STACH children (HR ≈ 105–110) are the mirror image (sens 0.00 for
+  sinus_tachycardia). The pediatric norms are doing what they should.
+- **LVH 0 / 5**: the pediatric norm table has no voltage criterion for LVH
+  (Sokolow-Lyon 3.5 mV is an adult criterion; children need Davignon/Rijnbeek
+  age-band percentiles), so `lvh` cannot fire. Deliberately not filled in with the
+  adult number.
+- **WPW 1 / 2, RAD 0 / 2, long QT 0 / 1**: too few to conclude; the RAD misses are
+  the intentionally wide pediatric normal axis (−30° … 180°).
+
+Pediatric **fine-tuning** (TZ §17) was not done and is not claimable here: no
+labelled pediatric training set exists in the reachable data (64 children in PTB-XL,
+a handful in ecg-arrhythmia). What it needs: a pediatric dataset with ages
+(e.g. a children's-hospital 12-lead set), age-band norm tables for voltage/axis/QT,
+and a stratified hold-out per band. Until then the system relies on the
+rule-based pediatric norm table plus this evaluation.
+
 ### Calibration of the AF gates — train/test halves (item 2)
 
 The AF rule fires on `rr_cv >= rhythm.af_rr_cv_min` and `p_wave_ratio <=
