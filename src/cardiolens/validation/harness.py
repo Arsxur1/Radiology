@@ -142,6 +142,22 @@ def build_synthetic_dataset() -> list[LabeledCase]:
     return cases
 
 
+# Emitted subtypes that satisfy a coarser gold label. A dataset "PVC" label means
+# at least one ventricular premature beat; the pipeline reports the most specific
+# pattern instead (couplet / bigeminy / VT run, see arrhythmia.beats), which is a
+# correct detection of the parent class, not a miss.
+FINDING_IMPLIES: dict[str, str] = {
+    "ventricular_couplet": "ventricular_ectopy",
+    "ventricular_bigeminy": "ventricular_ectopy",
+    "ventricular_tachycardia": "ventricular_ectopy",
+}
+
+
+def expand_implied(codes: set[str]) -> set[str]:
+    """Add the parent class of every emitted subtype (``FINDING_IMPLIES``)."""
+    return codes | {FINDING_IMPLIES[c] for c in codes if c in FINDING_IMPLIES}
+
+
 def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None) -> ValidationReport:
     labels = labels or SCORED_LABELS
     preds: list[set[str]] = []
@@ -151,7 +167,7 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
 
     for case in cases:
         result = run_pipeline(case.signal, mode="A", provider=StubProvider())
-        preds.append(result.findings.codes())
+        preds.append(expand_implied(result.findings.codes()))
         gold.append(case.gold_findings)
         pr_err.add(result.measurements.intervals.pr_ms, case.gold_pr_ms)
         qt_err.add(result.measurements.intervals.qt_ms, case.gold_qt_ms)

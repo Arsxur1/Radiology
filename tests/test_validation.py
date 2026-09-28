@@ -130,3 +130,12 @@ def test_challenge2021_snomed_codes_map_to_matching_findings():
     # Ambiguous codes stay unmapped rather than being equated with a narrower finding.
     assert "426627000" not in SNOMED_TO_CODE   # generic bradycardia
     assert "164947007" not in SNOMED_TO_CODE   # prolonged PR (scored separately from IAVB)
+
+
+def test_ectopy_subtypes_satisfy_pvc_gold_label():
+    """A 'PVC' gold label is detected when the pipeline reports couplet/bigeminy/VT."""
+    from cardiolens.validation.harness import expand_implied
+
+    for sub in ("ventricular_couplet", "ventricular_bigeminy", "ventricular_tachycardia"):
+        assert "ventricular_ectopy" in expand_implied({sub})
+    assert expand_implied({"sinus_rhythm"}) == {"sinus_rhythm"}
