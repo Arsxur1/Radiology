@@ -55,7 +55,7 @@ PTBXL_SCP_TO_CODE = {
     "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
     "1AVB": "first_degree_av_block", "STE_": "st_elevation", "STD_": "st_depression",
     "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
-    "RVH": "rvh", "PACE": "paced_rhythm", "AFLT": "atrial_flutter",
+    "RVH": "rvh", "PACE": "paced_rhythm", "AFLT": "atrial_flutter", "PVC": "ventricular_ectopy",
     "SVTAC": "supraventricular_tachycardia", "PSVT": "supraventricular_tachycardia",
 }
 
@@ -258,6 +258,7 @@ SNOMED_TO_CODE = {
     "10370003": "paced_rhythm",                                  # pacing rhythm
     "59931005": "t_inversion",                                   # T-wave inversion
     "427172004": "ventricular_ectopy", "17338001": "ventricular_ectopy",  # PVC / VPB
+    "164884008": "ventricular_ectopy",                           # ventricular ectopics (CPSC PVC)
 }
 
 
