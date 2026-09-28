@@ -104,3 +104,19 @@ def test_interval_accuracy_bias_and_mae():
     assert acc.n == 2
     assert acc.bias_ms == 28.5   # median signed error
     assert acc.mae_ms == 28.5
+
+
+def test_select_ptbxl_rows_filters_official_fold():
+    import pandas as pd
+
+    from cardiolens.validation.harness import select_ptbxl_rows
+
+    db = pd.DataFrame({"strat_fold": [1, 9, 10, 10, 10, 3]},
+                      index=pd.Index([1, 2, 3, 4, 5, 6], name="ecg_id"))
+    # Fold 10 is PTB-XL's recommended test split.
+    assert list(select_ptbxl_rows(db, folds=[10]).index) == [3, 4, 5]
+    # The limit applies after the fold filter, not before it.
+    assert list(select_ptbxl_rows(db, folds=[10], limit=2).index) == [3, 4]
+    assert list(select_ptbxl_rows(db, folds=[9, 10]).index) == [2, 3, 4, 5]
+    # No filter keeps the previous behaviour (first N rows).
+    assert list(select_ptbxl_rows(db, limit=2).index) == [1, 2]

@@ -35,6 +35,9 @@ def main() -> None:
                     help="path to a local LUDB checkout — reports delineation accuracy "
                          "(PR/QRS/QT bias + MAE vs expert annotations) instead of findings")
     ap.add_argument("--limit", type=int, default=50)
+    ap.add_argument("--fold",
+                    help="PTB-XL only: comma-separated official strat_fold(s) to score, "
+                         "e.g. '10' for the recommended test fold")
     ap.add_argument("--labels",
                     help="comma-separated finding codes to score (overrides the "
                          "per-source default)")
@@ -53,8 +56,9 @@ def main() -> None:
         return
 
     if args.ptbxl:
-        cases = build_ptbxl_dataset(args.ptbxl, limit=args.limit)
-        source = f"PTB-XL ({args.ptbxl})"
+        folds = [int(f) for f in args.fold.split(",")] if args.fold else None
+        cases = build_ptbxl_dataset(args.ptbxl, limit=args.limit, folds=folds)
+        source = f"PTB-XL ({args.ptbxl}{f', fold {args.fold}' if folds else ''})"
         labels = PTBXL_SCORED_LABELS
     elif args.ecg_arrhythmia:
         cases = build_ecg_arrhythmia_dataset(args.ecg_arrhythmia, limit=args.limit)

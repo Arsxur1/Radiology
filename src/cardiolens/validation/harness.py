@@ -166,12 +166,28 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
     )
 
 
-def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:  # pragma: no cover
+def select_ptbxl_rows(db, folds: list[int] | None = None, limit: int | None = None):
+    """Pick the PTB-XL metadata rows to validate on.
+
+    ``folds`` restricts to the dataset's own ``strat_fold`` split — PTB-XL ships 10
+    patient-disjoint stratified folds and recommends fold 10 as the test set (fold 9
+    for validation), so ``folds=[10]`` gives the standard, literature-comparable
+    benchmark at natural prevalence. ``limit`` caps the count *after* the fold
+    filter. With neither, all rows are returned.
+    """
+    if folds:
+        db = db[db["strat_fold"].isin(folds)]
+    return db.head(limit) if limit else db
+
+
+def build_ptbxl_dataset(root: str | Path, limit: int = 50,
+                        folds: list[int] | None = None) -> list[LabeledCase]:  # pragma: no cover
     """Load real PTB-XL records + SCP labels from a local checkout (TZ §15).
 
     Expects ``ptbxl_database.csv`` and ``scp_statements.csv`` at ``root`` and the
     WFDB records under ``records500/``. Maps a subset of SCP codes to our finding
-    codes. Runs only when the dataset is present locally.
+    codes. ``folds`` selects official ``strat_fold`` splits (see
+    ``select_ptbxl_rows``). Runs only when the dataset is present locally.
     """
     import ast
 
@@ -184,7 +200,7 @@ def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:
     from cardiolens.layer1_ingestion import load_wfdb
 
     cases: list[LabeledCase] = []
-    for ecg_id, row in db.head(limit).iterrows():
+    for ecg_id, row in select_ptbxl_rows(db, folds, limit).iterrows():
         rec = root / str(row["filename_hr"])
         if not rec.with_suffix(".hea").exists():
             continue
