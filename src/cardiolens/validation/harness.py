@@ -55,7 +55,7 @@ PTBXL_SCP_TO_CODE = {
     "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
     "1AVB": "first_degree_av_block", "STE_": "st_elevation", "STD_": "st_depression",
     "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
-    "RVH": "rvh", "PACE": "paced_rhythm",
+    "RVH": "rvh", "PACE": "paced_rhythm", "AFLT": "atrial_flutter",
     "SVTAC": "supraventricular_tachycardia", "PSVT": "supraventricular_tachycardia",
 }
 

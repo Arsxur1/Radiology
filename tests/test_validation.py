@@ -67,6 +67,8 @@ def test_real_dataset_scored_labels_derive_from_maps():
     assert ECG_ARRHYTHMIA_SCORED_LABELS == sorted(set(SNOMED_TO_CODE.values()))
     # Codes the pipeline reports (layer4) so scoring is against real predictions.
     assert {"rbbb", "lbbb", "atrial_fibrillation", "lvh"} <= set(PTBXL_SCORED_LABELS)
+    # Flutter is scored on PTB-XL too (AFLT), so a weak detector stays visible.
+    assert PTBXL_SCP_TO_CODE["AFLT"] == "atrial_flutter"
 
 
 def test_ptbxl_st_mapping_uses_st_codes_not_mi_scars():
