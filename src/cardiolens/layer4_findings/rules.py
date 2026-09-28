@@ -162,7 +162,9 @@ def detect_findings(
     # Union: the primary lead II prolonged, OR >=min_leads leads agree. The union
     # never loses a lead-II detection and adds cases II alone under-measures.
     multi = bool(pr_hi and min_leads and len(prolonged_leads) >= min_leads)
-    prolonged = single or multi
+    # The global (12-lead median beat) PR is already a multi-lead measurement and
+    # far less noisy (D30): it decides alone; the per-lead union is the fallback.
+    prolonged = bool(single) if m.pr_global else (single or multi)
     if prolonged:
         pr_repr = iv.pr_ms if iv.pr_ms is not None else max(
             (m.pr_ms_by_lead or {}).values(), default=None)

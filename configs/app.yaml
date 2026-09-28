@@ -39,6 +39,9 @@ delineation_correction:
   # LUDB expert global QT: -48 ms). Calibrated to 12SL — at +48 long-QT
   # specificity collapsed on development data.
   global_qt_ms: 30.0
+  # Global PR (12-lead median beat, P onset at 10% of the RMS P peak; D30) reads
+  # short by 12 ms against GE 12SL (LUDB expert global PR: -14 ms — they agree).
+  global_pr_ms: 12.0
   qt_ms: 0.0
 
 # Pause / dropped-beat thresholds (TZ §7.1, §10). A pause is flagged when the

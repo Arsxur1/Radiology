@@ -70,10 +70,14 @@ def test_delineation_correction_shifts_pr():
     from cardiolens.config import DelineationCorrection
 
     sig, _ = _prep(generate_synthetic_ecg(heart_rate_bpm=70, pr_ms=160))
-    base = measure(sig).intervals.pr_ms
-    shifted = measure(sig, correction=DelineationCorrection(pr_ms=34.0)).intervals.pr_ms
-    assert base is not None and shifted is not None
-    assert shifted == pytest.approx(base + 34.0, abs=0.1)
+    base = measure(sig)
+    # The per-lead fiducial PR takes the fiducial offset...
+    fid = measure(sig, correction=DelineationCorrection(pr_ms=34.0))
+    assert base.pr_ms_fiducial is not None and fid.pr_ms_fiducial is not None
+    assert fid.pr_ms_fiducial == pytest.approx(base.pr_ms_fiducial + 34.0, abs=0.1)
+    # ...and the reported global PR (D30) takes its own offset.
+    glob = measure(sig, correction=DelineationCorrection(global_pr_ms=12.0))
+    assert base.pr_global and glob.intervals.pr_ms == pytest.approx(base.intervals.pr_ms + 12.0, abs=0.1)
 
 
 # --- QTc formulas ---
