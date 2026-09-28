@@ -183,3 +183,12 @@ def test_reversal_flagged_as_artifact_chain():
     _, fnd, _ = _run(sig)
     g = analyze(fnd, load_rule_base(), sig.context)
     assert "electrode_reversal_la_ra" in g.activated_rules
+
+
+def test_robust_rr_dispersion_low_for_regular_high_for_irregular():
+    """rr_mad_cv: ~0 for a regular rhythm, large for a broadly irregular one."""
+    reg, _ = _prep(generate_synthetic_ecg(heart_rate_bpm=75, duration_s=10))
+    irr, _ = _prep(generate_synthetic_ecg(heart_rate_bpm=90, duration_s=10, rr_jitter_ms=180))
+    m_reg, m_irr = measure(reg), measure(irr)
+    assert m_reg.rr_mad_cv is not None and m_reg.rr_mad_cv < 0.03
+    assert m_irr.rr_mad_cv > 0.08

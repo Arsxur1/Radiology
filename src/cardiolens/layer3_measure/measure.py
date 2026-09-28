@@ -158,6 +158,12 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
         cv = float(np.std(rr) / (np.mean(rr) + 1e-9))
         m.rr_cv = round(cv, 3)
         m.rhythm_regular = bool(cv < 0.10)
+        # Robust dispersion (MAD / median, normal-consistent): sinus rhythm with a
+        # few ectopic beats keeps most RR clustered at the median, so a couple of
+        # coupling/compensatory outliers inflate the std-based CV but not this.
+        if len(rr) >= 4:
+            med = float(np.median(rr))
+            m.rr_mad_cv = round(1.4826 * float(np.median(np.abs(rr - med))) / (med + 1e-9), 3)
         # Longest RR gap and its ratio to the median beat — pause / dropped-beat
         # detection (§7.1, §10). Purely R-peak based, so as reliable as HR.
         m.max_rr_ms = round(float(np.max(rr)) * 1000.0, 1)

@@ -58,6 +58,7 @@ class Measurements(BaseModel):
     rhythm_regular: bool | None = None
     rr_std_ms: float | None = None            # RR interval variability
     rr_cv: float | None = None                # RR coefficient of variation
+    rr_mad_cv: float | None = None            # robust RR dispersion (1.4826·MAD / median)
     hrv_sdnn_ms: float | None = None
     max_rr_ms: float | None = None            # longest RR gap (pause detection, §7.1/§10)
     pause_ratio: float | None = None          # longest RR / median RR (dropped-beat cue)
