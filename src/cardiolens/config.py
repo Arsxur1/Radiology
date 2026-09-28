@@ -56,6 +56,7 @@ class DelineationCorrection(BaseModel):
     pr_ms: float = 0.0
     qrs_ms: float = 0.0
     qt_ms: float = 0.0
+    global_qt_ms: float = 0.0   # offset for the 12-lead median-beat QT (D30)
 
 
 class PauseConfig(BaseModel):

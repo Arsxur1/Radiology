@@ -67,6 +67,8 @@ class Measurements(BaseModel):
     pr_ms_by_lead: dict = Field(default_factory=dict)
     # Per-lead QT, informational (D28); the reported QT is the rhythm lead's.
     qt_ms_by_lead: dict = Field(default_factory=dict)
+    # Rhythm-lead (fiducial) QT, kept when the global QT is reported (D30).
+    qt_ms_fiducial: float | None = None
     p_wave_ratio: float | None = None         # fraction of beats with a detected P
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
     qrs_v1_rs_ratio: float | None = None          # R/S in V1 (dominant R -> RVH, §7.5)

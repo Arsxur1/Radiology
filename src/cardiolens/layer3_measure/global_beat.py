@@ -1,0 +1,120 @@
+"""Global (all-lead) wave boundaries from the 12-lead median beat (D30).
+
+A single lead's T offset is noisy: against GE 12SL global measurements on PTB-XL
+development folds the rhythm-lead QT had MAE 46 ms (28% of records off by > 60 ms).
+Commercial interpreters measure QT on the superimposed leads instead. Here every
+lead's median beat is aligned on the shared R peaks, referenced to its own
+isoelectric PR segment, and combined:
+
+* QRS onset/offset — summed slope energy crossing 5% of its QRS peak;
+* T end — tangent through the steepest descent of the RMS curve after the T peak,
+  intersected with the isoelectric noise level, capped at the point where the RMS
+  falls within 5% of the T peak; the search stops 100 ms before the next beat
+  (an unbounded window ran into the next QRS at fast rates);
+* P onset — the RMS curve falling to 10% of the P peak above the noise level.
+
+Offsets against a reference are applied by the caller (``DelineationCorrection``).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+_PRE_S, _POST_S = 0.35, 0.65
+
+
+def median_beats(signal: np.ndarray, rpeaks, fs: float) -> tuple[np.ndarray | None, int]:
+    """Per-lead median beat (leads x samples) around the R peaks; R at index ``a``."""
+    a, b = int(_PRE_S * fs), int(_POST_S * fs)
+    rp = [int(r) for r in rpeaks if r - a >= 0 and r + b < signal.shape[1]]
+    if len(rp) < 3:
+        return None, a
+    beats = np.stack([signal[:, r - a:r + b] for r in rp]).astype(float)
+    return np.median(beats, axis=0), a
+
+
+def _smooth(x: np.ndarray, n: int) -> np.ndarray:
+    if n <= 1:
+        return x
+    return np.convolve(x, np.ones(n) / n, mode="same")
+
+
+def global_fiducials(X: np.ndarray, a: int, fs: float, rr_s: float | None,
+                     p_fraction: float = 0.10) -> dict[str, int | None]:
+    """Sample indices (in the median beat) of P onset, QRS onset/offset and T end."""
+    n = X.shape[1]
+    w20 = max(2, int(0.02 * fs))
+    lo, hi = max(0, a - int(0.30 * fs)), a - int(0.03 * fs)
+    base = []
+    for x in X:                       # isoelectric level: flattest 20 ms in the PR segment
+        best, val = np.inf, 0.0
+        for s in range(lo, max(lo + 1, hi - w20)):
+            seg = x[s:s + w20]
+            e = float(np.ptp(seg))
+            if e < best:
+                best, val = e, float(np.mean(seg))
+        base.append(val)
+    xb = X - np.asarray(base)[:, None]
+    k = max(1, int(0.01 * fs))
+    rms = _smooth(np.sqrt(np.mean(xb ** 2, axis=0)), k)
+    energy = _smooth(np.sum(np.abs(np.diff(xb, axis=1)), axis=0), k)
+    win = energy[max(0, a - int(0.1 * fs)):a + int(0.1 * fs)]
+    thr = 0.05 * float(win.max()) if win.size else 0.0
+    on = a
+    while on > a - int(0.12 * fs) and on > 0 and energy[on - 1] >= thr:
+        on -= 1
+    off = a
+    while off < min(a + int(0.2 * fs), len(energy) - 1) and energy[off] >= thr:
+        off += 1
+    noise = float(np.median(rms[lo:hi])) if hi > lo else 0.0
+
+    out: dict[str, int | None] = {"p_on": None, "qrs_on": on, "qrs_off": off, "t_end": None}
+    t0, t1 = off + int(0.06 * fs), min(n - 1, off + int(0.55 * fs))
+    if rr_s:
+        t1 = max(min(t1, a + int((rr_s - 0.10) * fs)), t0 + int(0.10 * fs))
+    t1 = min(t1, n - 1)
+    if t1 - t0 >= 5:
+        tp = t0 + int(np.argmax(rms[t0:t1]))
+        # Latest plausible end: the RMS back within 5% of the T peak above noise.
+        level = noise + 0.05 * (rms[tp] - noise)
+        late = tp
+        while late < t1 and rms[late] > level:
+            late += 1
+        d = np.diff(rms[tp:t1 + 1])
+        te = late
+        if d.size and d.min() < 0:
+            ks = tp + int(np.argmin(d))
+            tan = int(round(ks + (noise - rms[ks]) / float(d.min())))
+            # A shallow descent extrapolates the tangent far out (e.g. to the
+            # search limit at fast rates): never past the 5% crossing.
+            te = min(max(tan, tp), late)
+        out["t_end"] = te
+    p0, p1 = on - int(0.30 * fs), on - int(0.04 * fs)
+    if rr_s:
+        p0 = max(p0, a - int(0.45 * rr_s * fs))
+    p0 = max(p0, 0)
+    if p1 - p0 >= 5:
+        pp = p0 + int(np.argmax(rms[p0:p1]))
+        level = noise + p_fraction * (rms[pp] - noise)
+        po = pp
+        while po > p0 and rms[po] > level:
+            po -= 1
+        out["p_on"] = po
+    return out
+
+
+def global_intervals(signal: np.ndarray, rpeaks, fs: float) -> tuple[float | None, float | None]:
+    """(PR ms, QT ms) from the global fiducials, uncorrected; None where not found."""
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return None, None
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    f = global_fiducials(X, a, fs, rr_s)
+    qt = (f["t_end"] - f["qrs_on"]) / fs * 1000.0 if f["t_end"] is not None else None
+    pr = (f["qrs_on"] - f["p_on"]) / fs * 1000.0 if f["p_on"] is not None else None
+    if qt is not None and not 200.0 <= qt <= 900.0:
+        qt = None
+    if pr is not None and not 60.0 <= pr <= 600.0:
+        pr = None
+    return pr, qt

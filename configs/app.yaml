@@ -34,6 +34,11 @@ delineation_correction:
   # bias (~-11 ms) disagrees with the synthetic ground truth, so a global QT
   # offset does more harm than good.
   qrs_ms: 0.0
+  # Global QT (12-lead median beat, capped tangent T end; D30) reads short against
+  # GE 12SL global QT by a constant 30 ms on PTB-XL development folds (938 records;
+  # LUDB expert global QT: -48 ms). Calibrated to 12SL — at +48 long-QT
+  # specificity collapsed on development data.
+  global_qt_ms: 30.0
   qt_ms: 0.0
 
 # Pause / dropped-beat thresholds (TZ §7.1, §10). A pause is flagged when the

@@ -22,6 +22,7 @@ from cardiolens.contracts.features import (
     STMeasurement,
 )
 from cardiolens.contracts.signal import SignalRepresentation
+from cardiolens.layer3_measure.global_beat import global_intervals
 from cardiolens.layer3_measure.intervals import (
     qtc_bazett,
     qtc_framingham,
@@ -273,6 +274,13 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             if qrs_energy is not None:
                 qrs_ms = qrs_energy
             m.intervals = Intervals(pr_ms=pr_ms, qrs_ms=qrs_ms, qt_ms=qt_ms)
+            # Global QT from the 12-lead median beat (D30) replaces the noisy
+            # rhythm-lead QT when it can be measured; the per-lead value is kept.
+            _g_pr, g_qt = global_intervals(sig.signal, rpeaks, fs)
+            if g_qt is not None:
+                m.qt_ms_fiducial = qt_ms
+                g_off = getattr(correction, "global_qt_ms", 0.0) if correction is not None else 0.0
+                m.intervals.qt_ms = round(g_qt + g_off, 1)
             # Multi-lead PR (§7.3): a single lead under-measures PR, so first-degree
             # AV block is called on agreement across leads (layer 4). Reuse the
             # already-detected R-peaks; only PR is recomputed per lead.
