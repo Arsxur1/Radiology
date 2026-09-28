@@ -12,9 +12,11 @@ import json
 
 from cardiolens.validation import (
     build_ecg_arrhythmia_dataset,
+    build_ptbdb_dataset,
     build_ptbxl_dataset,
     build_synthetic_dataset,
     filter_by_age,
+    ptbdb_report_lines,
     run_validation,
 )
 
@@ -22,6 +24,9 @@ from cardiolens.validation import (
 def main() -> None:
     ap = argparse.ArgumentParser(description="CardioLens validation")
     ap.add_argument("--ptbxl", help="path to a local PTB-XL checkout")
+    ap.add_argument("--ptbdb", help="path to a local PTB Diagnostic DB (fetch_ptbdb)")
+    ap.add_argument("--max-days", type=int, default=3,
+                    help="PTBDB: MI ECGs recorded at most this many days after the infarction are STEMI gold")
     ap.add_argument("--ecg-arrhythmia",
                     help="path to a local PhysioNet ecg-arrhythmia (Chapman/Ningbo) checkout")
     ap.add_argument("--limit", type=int, default=50)
@@ -32,6 +37,9 @@ def main() -> None:
     if args.ptbxl:
         cases = build_ptbxl_dataset(args.ptbxl, limit=args.limit)
         source = f"PTB-XL ({args.ptbxl})"
+    elif args.ptbdb:
+        cases = build_ptbdb_dataset(args.ptbdb, limit=args.limit, max_days=args.max_days)
+        source = f"PTBDB ({args.ptbdb}, STEMI gold = MI <= {args.max_days} d)"
     elif args.ecg_arrhythmia:
         cases = build_ecg_arrhythmia_dataset(args.ecg_arrhythmia, limit=args.limit)
         source = f"ecg-arrhythmia ({args.ecg_arrhythmia})"
@@ -53,6 +61,10 @@ def main() -> None:
     print("\nfamilies (any-of prediction vs any-of gold):")
     for lbl, m in report.families.items():
         print(f"  {lbl:24s} sens={m.sensitivity} spec={m.specificity} n={m.support}")
+    if args.ptbdb:
+        print("\nPTBDB STEMI report (alert = st_elevation; any = descriptor family):")
+        for line in ptbdb_report_lines(cases, report):
+            print("  " + line)
     print("\nJSON:")
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
 

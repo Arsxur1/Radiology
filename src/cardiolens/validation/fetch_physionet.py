@@ -75,20 +75,24 @@ class _KeepAlive:
             conn = http.client.HTTPSConnection(host, 443, context=ctx, timeout=90)
         return conn
 
-    def get(self, url: str, attempts: int = 4) -> bytes:
+    def get(self, url: str, attempts: int = 4, max_bytes: int | None = None) -> bytes:
+        """GET the body; with ``max_bytes`` only the first bytes (HTTP Range)."""
         path = urllib.parse.urlparse(url).path
         delay = 1.0
+        headers = {"Connection": "keep-alive"}
+        if max_bytes is not None:
+            headers["Range"] = f"bytes=0-{max_bytes - 1}"
         for i in range(attempts):
             conn = getattr(self._local, "conn", None)
             try:
                 if conn is None:
                     conn = self._local.conn = self._connect()
-                conn.request("GET", path, headers={"Connection": "keep-alive"})
+                conn.request("GET", path, headers=headers)
                 resp = conn.getresponse()
                 data = resp.read()
-                if resp.status != 200:
+                if resp.status not in (200, 206):
                     raise http.client.HTTPException(f"HTTP {resp.status} for {url}")
-                return data
+                return data[:max_bytes] if max_bytes is not None else data
             except (OSError, http.client.HTTPException) as e:
                 self._local.conn = None
                 if i == attempts - 1:
@@ -102,8 +106,8 @@ class _KeepAlive:
 _CLIENT = _KeepAlive()
 
 
-def fetch_bytes(url: str) -> bytes:
-    return _CLIENT.get(url)
+def fetch_bytes(url: str, max_bytes: int | None = None) -> bytes:
+    return _CLIENT.get(url, max_bytes=max_bytes)
 
 
 def parse_records(text: str) -> list[str]:

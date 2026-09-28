@@ -50,6 +50,7 @@ class LabeledCase:
     gold_pr_ms: float | None = None
     gold_qt_ms: float | None = None
     name: str = ""
+    meta: dict = field(default_factory=dict)   # dataset-specific extras (PTBDB: days, territory)
 
 
 # Derived "family" scores: a prediction of any code in the first set against a gold
@@ -73,6 +74,7 @@ class ValidationReport:
     macro_sensitivity: float | None = None
     pr_mae_ms: float | None = None
     qt_mae_ms: float | None = None
+    details: dict = field(default_factory=dict)   # name -> {"pred": codes, "st_leads": [...]}
 
     def to_dict(self) -> dict:
         return {
@@ -153,12 +155,17 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
     pr_err = IntervalError("PR")
     qt_err = IntervalError("QT")
 
+    details: dict = {}
     for case in cases:
         result = run_pipeline(case.signal, mode="A", provider=StubProvider())
-        preds.append(result.findings.codes())
+        codes = result.findings.codes()
+        preds.append(codes)
         gold.append(case.gold_findings)
         pr_err.add(result.measurements.intervals.pr_ms, case.gold_pr_ms)
         qt_err.add(result.measurements.intervals.qt_ms, case.gold_qt_ms)
+        st = result.findings.by_code("st_elevation") if "st_elevation" in codes else None
+        st_leads = next((e.value.split(",") for e in st.evidence if e.feature == "leads"), []) if st else []
+        details[case.name] = {"pred": sorted(codes), "st_leads": st_leads}
 
     per_class = score_findings(preds, gold, labels)
     families = {}
@@ -173,6 +180,7 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
         macro_sensitivity=macro_recall(per_class),
         pr_mae_ms=pr_err.mae,
         qt_mae_ms=qt_err.mae,
+        details=details,
     )
 
 
@@ -240,6 +248,100 @@ def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:
         sig.patient.sex = "male" if row.get("sex") == 0 else "female"
         cases.append(LabeledCase(sig, gold, name=f"ptbxl_{ecg_id}"))
     return cases
+
+
+# PTB Diagnostic ECG Database (PhysioNet ptbdb): acute-MI localisation -> ECG
+# territories the STEMI alert can name (posterior has no standard-lead territory).
+PTBDB_TERRITORY = {
+    "inferior": {"inferior"}, "infero-lateral": {"inferior", "lateral"},
+    "infero-latera": {"inferior", "lateral"}, "infero-posterior": {"inferior"},
+    "infero-postero-lateral": {"inferior", "lateral"}, "infero-poster-lateral": {"inferior", "lateral"},
+    "anterior": {"anterior"}, "antero-septal": {"anterior"}, "antero-lateral": {"anterior", "lateral"},
+    "antero-septo-lateral": {"anterior", "lateral"}, "lateral": {"lateral"},
+    "postero-lateral": {"lateral"}, "posterior": set(),
+}
+LEAD_TERRITORY = {"II": "inferior", "III": "inferior", "aVF": "inferior",
+                  "V1": "anterior", "V2": "anterior", "V3": "anterior", "V4": "anterior",
+                  "I": "lateral", "aVL": "lateral", "V5": "lateral", "V6": "lateral"}
+
+
+def territories_of_leads(leads) -> set[str]:
+    """ECG territories named by a set of leads (for alert/gold agreement)."""
+    return {LEAD_TERRITORY[lead] for lead in leads if lead in LEAD_TERRITORY}
+
+
+def build_ptbdb_dataset(root: str | Path, limit: int = 5000, max_days: int = 3,
+                        seconds: float = 10.0) -> list[LabeledCase]:  # pragma: no cover
+    """PTBDB as a STEMI benchmark (TZ §16, open item 1).
+
+    Gold ``st_elevation`` = admission for myocardial infarction with the ECG recorded
+    at most ``max_days`` after the acute infarction (a proxy: the ST elevation of a
+    STEMI is expected in the first days and fades afterwards). Later MI ECGs, healthy
+    controls and every other diagnosis are negatives. ``meta`` carries ``days``,
+    ``reason`` and the gold ``territory`` set for the day-bin / territory report.
+    Only the first ``seconds`` of the 12 standard leads are read.
+    """
+    import json
+
+    from cardiolens.layer1_ingestion import load_wfdb
+
+    root = Path(root)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    cases: list[LabeledCase] = []
+    for rec in manifest["records"][:limit]:
+        path = root / rec["record"]
+        if not path.with_suffix(".hea").exists() or not path.with_suffix(".dat").exists():
+            continue
+        try:
+            sig = load_wfdb(path, sampto=int(seconds * 1000), channels=list(range(12)))
+        except Exception:  # noqa: S112 - skip unreadable records
+            continue
+        sig.patient.age_years = rec.get("age")
+        sig.patient.sex = rec.get("sex")
+        days = rec.get("days_since_infarction")
+        is_mi = rec.get("reason", "").startswith("Myocardial infarction")
+        gold: set[str] = set()
+        if is_mi and days is not None and 0 <= days <= max_days:
+            gold.add("st_elevation")
+        territory = PTBDB_TERRITORY.get(rec.get("acute_localization", ""), set()) if is_mi else set()
+        cases.append(LabeledCase(sig, gold, name=f"ptbdb_{rec['record'].replace('/', '_')}",
+                                 meta={"days": days, "reason": rec.get("reason", ""),
+                                       "territory": territory, "mi": is_mi}))
+    return cases
+
+
+PTBDB_DAY_BINS = [(0, 1), (2, 3), (4, 7), (8, 14), (15, 10**6)]
+
+
+def ptbdb_report_lines(cases: list[LabeledCase], report: ValidationReport) -> list[str]:
+    """STEMI-alert sensitivity by days since infarction, territory agreement, and
+    false positives by admission reason (PTBDB, open item 1)."""
+    lines: list[str] = []
+    det = report.details
+    mi = [c for c in cases if c.meta.get("mi") and c.meta.get("days") is not None]
+    for lo, hi in PTBDB_DAY_BINS:
+        sub = [c for c in mi if lo <= c.meta["days"] <= hi]
+        if not sub:
+            continue
+        alert = sum("st_elevation" in det[c.name]["pred"] for c in sub)
+        anyst = sum(bool({"st_elevation", "st_elevation_nonspecific", "st_elevation_any"}
+                         & set(det[c.name]["pred"])) for c in sub)
+        agree = sum(1 for c in sub if "st_elevation" in det[c.name]["pred"] and c.meta["territory"]
+                    and territories_of_leads(det[c.name]["st_leads"]) & c.meta["territory"])
+        label = f"{lo}-{hi} d" if hi < 10**6 else f">= {lo} d"
+        lines.append(f"MI {label:9s} n={len(sub):3d} alert {alert/len(sub):.2f} ({alert})  "
+                     f"any-ST {anyst/len(sub):.2f}  territory agreement {agree}/{alert}")
+    by_reason: dict[str, list[int]] = {}
+    for c in cases:
+        if c.meta.get("mi"):
+            continue
+        r = c.meta.get("reason") or "n/a"
+        by_reason.setdefault(r, [0, 0])
+        by_reason[r][0] += 1
+        by_reason[r][1] += "st_elevation" in det[c.name]["pred"]
+    for r, (n, fp) in sorted(by_reason.items(), key=lambda kv: -kv[1][0]):
+        lines.append(f"non-MI {r[:32]:32s} n={n:3d} alert false positives {fp} (spec {1 - fp / n:.3f})")
+    return lines
 
 
 # SNOMED-CT concept id -> CardioLens finding code, for the PhysioNet

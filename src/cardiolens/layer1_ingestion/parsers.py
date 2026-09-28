@@ -23,16 +23,18 @@ def _mv_to_uv(x: np.ndarray) -> np.ndarray:
     return (np.asarray(x, dtype=np.float32) * 1000.0).astype(np.float32)
 
 
-def load_wfdb(record_path: str | Path) -> SignalRepresentation:
-    """Parse a WFDB record (``.hea``/``.dat``) — MIT-BIH, PTB-XL (TZ §4).
+def load_wfdb(record_path: str | Path, *, sampto: int | None = None,
+              channels: list[int] | None = None) -> SignalRepresentation:
+    """Parse a WFDB record (``.hea``/``.dat``) — MIT-BIH, PTB-XL, PTBDB (TZ §4).
 
     ``record_path`` is the record name WITHOUT extension (wfdb convention).
-    WFDB physical units are typically millivolts -> converted to µV.
+    WFDB physical units are typically millivolts -> converted to µV. ``sampto`` /
+    ``channels`` cut long multi-channel records (PTBDB: 2 min, 15 leads) on read.
     """
     import wfdb
 
     record_path = str(record_path)
-    rec = wfdb.rdrecord(record_path)
+    rec = wfdb.rdrecord(record_path, sampto=sampto, channels=channels)
     sig = np.asarray(rec.p_signal, dtype=np.float32).T  # -> [leads, samples]
 
     units = [u.lower() if u else "mv" for u in (rec.units or [])]
