@@ -124,6 +124,22 @@ def test_atrial_fibrillation_detected_despite_present_p_ratio():
     assert "atrial_fibrillation" in _find(m).codes()
 
 
+def test_sinus_with_ectopy_is_not_atrial_fibrillation():
+    # A couple of premature beats inflate the std-based CV, but most RR stay
+    # clustered at the median (low robust dispersion) -> not AF (D15z).
+    m = Measurements(heart_rate_bpm=80, rhythm_regular=False, rr_cv=0.22, rr_mad_cv=0.02,
+                     p_wave_ratio=0.95,
+                     intervals=Intervals(pr_ms=160, qrs_ms=90, qt_ms=380, qtc_bazett_ms=420))
+    assert "atrial_fibrillation" not in _find(m).codes()
+
+
+def test_af_with_moderate_cv_but_broad_dispersion():
+    m = Measurements(heart_rate_bpm=88, rhythm_regular=False, rr_cv=0.13, rr_mad_cv=0.11,
+                     p_wave_ratio=0.9,
+                     intervals=Intervals(pr_ms=None, qrs_ms=90, qt_ms=360, qtc_bazett_ms=430))
+    assert "atrial_fibrillation" in _find(m).codes()
+
+
 def test_regular_rhythm_is_not_atrial_fibrillation():
     m = Measurements(heart_rate_bpm=72, rhythm_regular=True, rr_cv=0.30,
                      p_wave_ratio=0.1,

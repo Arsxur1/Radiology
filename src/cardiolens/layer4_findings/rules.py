@@ -24,7 +24,15 @@ _PEDIATRIC_TINV_OK = {"V1", "V2", "V3", "V4"}
 # ~0.82 of AF at ~0.82 specificity — the knee of the sens/spec curve. AF is
 # flagged at moderate confidence ("exclude AF"), so a false positive costs a
 # review, not a misdiagnosis.
-_AFIB_RR_CV_MIN = 0.15
+# D15z: the std-based CV is inflated by a few ectopic beats (sinus + PVC/PAC was
+# the largest AFib false-positive pool on PTB-XL fold 10, D15x), so the call also
+# requires broad robust dispersion (rr_mad_cv). With that gate the CV threshold
+# can drop to 0.12. Chosen on development data only (Chapman/Ningbo subset +
+# PTB-XL outside test fold 10): TP 129 -> 142, FP 182 -> 157 versus CV >= 0.15.
+_AFIB_RR_CV_MIN = 0.12
+_AFIB_RR_MAD_CV_MIN = 0.06
+# Too few beats for a robust dispersion (rr_mad_cv undefined): previous rule.
+_AFIB_RR_CV_MIN_NO_MAD = 0.15
 
 # Coronary territories and their reciprocal leads (TZ §7.2, §8.1).
 _TERRITORIES = [
@@ -175,13 +183,19 @@ def detect_findings(
     # hard P-absence gate silently suppresses every detection. So the irregularly-
     # irregular RR pattern is the primary criterion; a genuinely low P-wave ratio
     # only raises confidence rather than being required.
-    if m.rhythm_regular is False and (m.rr_cv or 0) >= _AFIB_RR_CV_MIN:
+    # A few ectopic beats on a sinus background inflate rr_cv but leave most RR
+    # clustered at the median (low rr_mad_cv); AF spreads RR broadly.
+    if m.rr_mad_cv is None:
+        afib_rr = (m.rr_cv or 0) >= _AFIB_RR_CV_MIN_NO_MAD
+    else:
+        afib_rr = (m.rr_cv or 0) >= _AFIB_RR_CV_MIN and m.rr_mad_cv >= _AFIB_RR_MAD_CV_MIN
+    if m.rhythm_regular is False and afib_rr:
         p_absent = m.p_wave_ratio is not None and m.p_wave_ratio < 0.3
         fs.findings.append(Finding(
             code="atrial_fibrillation", group="rhythm",
             label_ru="Фибрилляция предсердий (нерегулярно-нерегулярный ритм)",
             label_uz="Bo'lmachalar fibrillyatsiyasi (notekis-notekis ritm)",
-            evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio),
+            evidence=_ev(rr_cv=m.rr_cv, rr_mad_cv=m.rr_mad_cv, p_wave_ratio=m.p_wave_ratio),
             confidence=0.8 if p_absent else 0.6,
         ))
 
