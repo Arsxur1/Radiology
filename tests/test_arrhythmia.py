@@ -77,3 +77,58 @@ def test_feature_matrix_shape():
     X, idx = extract_beat_features(lead, info["ECG_R_Peaks"], sig.sampling_rate_hz)
     assert X.shape[0] == len(idx)
     assert X.shape[1] == len(FEATURES)
+
+
+def _pulse_train(rr_ms, odd=None, fs=500.0):
+    """3-lead (II, V1, V5) train of narrow QRS-like pulses at the given RR
+    intervals; beats listed in ``odd`` get a wide biphasic shape instead."""
+    from cardiolens.contracts.signal import SignalRepresentation
+
+    t_r = np.cumsum([400.0] + list(rr_ms)) / 1000.0
+    n = int((t_r[-1] + 0.5) * fs)
+    x = np.zeros((3, n))
+    tt = np.arange(n) / fs
+    for k, t in enumerate(t_r):
+        if odd and k in odd:
+            pulse = 900 * (np.exp(-((tt - t + 0.03) / 0.03) ** 2) - np.exp(-((tt - t - 0.04) / 0.03) ** 2))
+        else:
+            pulse = 1000 * np.exp(-((tt - t) / 0.012) ** 2)
+        x += pulse
+    sig = SignalRepresentation(signal=x.astype(np.float32), sampling_rate_hz=fs,
+                               lead_names=["II", "V1", "V5"], duration_s=n / fs, source="synthetic")
+    return sig, (t_r * fs).astype(int)
+
+
+def test_pvc_rule_finds_premature_differently_shaped_beat():
+    from cardiolens.arrhythmia import detect_pvc_beats
+
+    rr = [800] * 5 + [560, 1040] + [800] * 5          # beat 6: premature + compensatory
+    sig, rp = _pulse_train(rr, odd={6})
+    assert detect_pvc_beats(sig, rp, 500.0) == [6]
+    sig, rp = _pulse_train([800] * 12)
+    assert detect_pvc_beats(sig, rp, 500.0) == []
+    # premature but same shape (e.g. a PAC) -> not a PVC
+    sig, rp = _pulse_train(rr)
+    assert detect_pvc_beats(sig, rp, 500.0) == []
+
+
+def test_pvc_findings_bigeminy_pattern():
+    from cardiolens.arrhythmia import pvc_findings
+
+    assert [f.code for f in pvc_findings([2, 4, 6, 8], 12)] == ["ventricular_bigeminy"]
+    assert [f.code for f in pvc_findings([5], 12)] == ["ventricular_ectopy"]
+    assert pvc_findings([], 12) == []
+
+
+def test_pvc_explains_af_like_irregularity():
+    from cardiolens.pipeline import _pvc_explains_irregularity
+
+    # Regular sinus with two PVC couplings: explained once the PVC intervals go.
+    rr = [800] * 4 + [560, 1040] + [800] * 4 + [560, 1040] + [800] * 3
+    rp = np.cumsum([0] + rr)
+    assert _pvc_explains_irregularity(rp, [5, 11])[0] is True
+    # Genuinely irregular background stays AF even after removing one PVC.
+    rng = np.random.default_rng(1)
+    rr_af = list(rng.uniform(450, 1100, 14))
+    rp_af = np.cumsum([0] + rr_af)
+    assert _pvc_explains_irregularity(rp_af, [6])[0] is False

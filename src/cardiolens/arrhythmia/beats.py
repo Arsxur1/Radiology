@@ -130,7 +130,7 @@ class BeatClassifier:
         return out
 
 
-def ectopy_findings(summary: EctopySummary):
+def ectopy_findings(summary: EctopySummary, *, vt_only: bool = False):
     """Build ventricular-ectopy findings from a beat-classification summary (§7.1).
 
     Reported only when ≥2 ventricular beats are classified (a single beat is
@@ -156,6 +156,10 @@ def ectopy_findings(summary: EctopySummary):
             evidence=[*ev, Evidence(feature="run", value=str(summary.max_vt_run))],
             confidence=0.8, critical=True,
         ))
+        return out
+    if vt_only:
+        # D25: isolated-PVC and bigeminy calls come from detect_pvc_beats; the
+        # Holter-trained LDA over-calls them on 10-s 12-lead records.
         return out
     if summary.bigeminy:
         out.append(Finding(
@@ -241,3 +245,70 @@ def summarize_ectopy(lead: np.ndarray, rpeaks, fs: float, model: BeatClassifier)
         bigeminy = sum(g == 2 for g in gaps) / len(gaps) >= 0.6
     return EctopySummary(n_beats=len(is_v), n_ventricular=n_v, max_vt_run=max_run,
                          vt=vt, bigeminy=bigeminy)
+
+
+# 12-lead PVC beat rule (D25). Chosen on development data only (Chapman/Ningbo +
+# PTB-XL outside test fold 10): record-level sens 0.73/0.74, spec 0.965/0.968,
+# versus 0.31/0.29 and 0.93/0.89 for the MIT-BIH LDA with >=2 V beats.
+_PVC_PRE_MAX = 0.90       # premature: preceding RR <= 0.90 x median RR
+_PVC_POST_MIN = 1.10      # compensatory pause: following RR >= 1.10 x median RR
+_PVC_CORR_MAX = 0.90      # shape differs from the dominant beat (mean over leads)
+_PVC_LEADS = ("II", "V1", "V5")
+_PVC_HALF_S = 0.10
+
+
+def detect_pvc_beats(sig, rpeaks, fs: float) -> list[int]:
+    """Indices (into ``rpeaks``) of beats meeting the 12-lead PVC rule.
+
+    A PVC is premature, followed by a compensatory pause, and shaped unlike
+    the record's dominant beat in several leads at once (mean correlation to
+    the per-lead median beat over II, V1 and V5). Interior beats only.
+    """
+    rp = np.asarray(rpeaks, dtype=int)
+    if rp.size < 5:
+        return []
+    leads = [n for n in _PVC_LEADS if n in sig.lead_names] or list(sig.lead_names[:3])
+    half = int(_PVC_HALF_S * fs)
+    n_samples = sig.signal.shape[1]
+    ok = [i for i, r in enumerate(rp) if r - half >= 0 and r + half < n_samples]
+    if len(ok) < 5:
+        return []
+    segs = {n: np.stack([sig.lead(n)[rp[i] - half:rp[i] + half].astype(float) for i in ok])
+            for n in leads}
+    tmpl = {n: np.median(segs[n], axis=0) for n in leads}
+    rr = np.diff(rp).astype(float)
+    med = float(np.median(rr)) or 1.0
+    out = []
+    for k, i in enumerate(ok):
+        if i == 0 or i >= len(rp) - 1:
+            continue
+        if rr[i - 1] / med > _PVC_PRE_MAX or rr[i] / med < _PVC_POST_MIN:
+            continue
+        corr = np.mean([np.corrcoef(segs[n][k], tmpl[n])[0, 1] for n in leads])
+        if corr <= _PVC_CORR_MAX:
+            out.append(i)
+    return out
+
+
+def pvc_findings(pvc_idx: list[int], n_beats: int):
+    """ventricular_bigeminy (PVC on alternate beats) or ventricular_ectopy (D25)."""
+    from itertools import pairwise
+
+    from cardiolens.contracts.findings import Evidence, Finding
+
+    if not pvc_idx:
+        return []
+    burden = len(pvc_idx) / max(1, n_beats)
+    ev = [Evidence(feature="pvc_count", value=str(len(pvc_idx))),
+          Evidence(feature="beats", value=str(n_beats)),
+          Evidence(feature="burden", value=f"{burden:.0%}")]
+    gaps = [b - a for a, b in pairwise(pvc_idx)]
+    if len(pvc_idx) >= 3 and sum(g == 2 for g in gaps) / len(gaps) >= 0.6:
+        return [Finding(code="ventricular_bigeminy", group="rhythm",
+                        label_ru=f"Желудочковая бигеминия (ЖЭ {burden:.0%} ударов)",
+                        label_uz=f"Ventrikulyar bigeminiya (VES {burden:.0%})",
+                        evidence=ev, confidence=0.7)]
+    return [Finding(code="ventricular_ectopy", group="rhythm",
+                    label_ru=f"Желудочковая экстрасистолия — {len(pvc_idx)} ЖЭ / {n_beats} уд.",
+                    label_uz=f"Ventrikulyar ekstrasistoliya — {len(pvc_idx)} VES / {n_beats}",
+                    evidence=ev, confidence=0.75)]

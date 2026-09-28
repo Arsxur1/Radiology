@@ -10,7 +10,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cardiolens.arrhythmia import BeatClassifier, ectopy_findings, summarize_ectopy
+import numpy as np
+
+from cardiolens.arrhythmia import (
+    BeatClassifier,
+    detect_pvc_beats,
+    ectopy_findings,
+    pvc_findings,
+    summarize_ectopy,
+)
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
     AppConfig,
@@ -32,6 +40,7 @@ from cardiolens.layer3_measure.measure import (
     pacing_spike_times,
 )
 from cardiolens.layer4_findings import detect_findings
+from cardiolens.layer4_findings.rules import _AFIB_RR_CV_MIN, _AFIB_RR_MAD_CV_MIN
 from cardiolens.layer5_causal import analyze
 from cardiolens.layer6_interpret import InterpretationInput, interpret
 from cardiolens.layer6_interpret.provider import LLMProvider
@@ -106,26 +115,34 @@ def run_pipeline(
     # Layer 4 — findings (TZ §7).
     norms = norms_for_patient(sig.patient.age_years, sig.patient.age_days)
     findings = detect_findings(sig, m, norms=norms, la_ra_reversed=la_ra_reversed)
-    # Per-beat ventricular ectopy (TZ §7.1) — needs beat-level morphology, so it
-    # rides the beat classifier rather than a single median interval. No-op until
-    # a model is trained into configs/beat_lda.json.
+    # Ventricular ectopy (TZ §7.1). VT (a §10 alert) stays on the MIT-BIH beat
+    # classifier, tuned to a false-positive-free operating point; isolated PVCs
+    # and bigeminy use the 12-lead PVC rule, which the Holter-trained classifier
+    # under-detects and over-calls on 10-s 12-lead records (DECISIONS D25).
     beat_model = BeatClassifier.load(configs_dir() / "beat_lda.json")
+    vt_called = False
     if beat_model.fitted and m.r_peaks_samples:
         lead_idx = sig.lead_names.index("II") if "II" in sig.lead_names else 0
         summary = summarize_ectopy(sig.signal[lead_idx], m.r_peaks_samples,
                                    sig.sampling_rate_hz, beat_model)
-        findings.findings.extend(ectopy_findings(summary))
-        audit.append(f"[L4] ectopy: {summary.n_ventricular}/{summary.n_beats} VEB "
-                     f"burden={summary.burden}")
-        # Ventricular bigeminy makes RR irregularly-irregular and mimics AF on RR
-        # alone. When bigeminy is detected, the irregularity is explained by the
-        # ectopy, so suppress a co-emitted atrial_fibrillation (§7.1).
-        if summary.bigeminy:
-            af = findings.by_code("atrial_fibrillation")
-            if af is not None:
-                findings.findings.remove(af)
-                audit.append("[L4] suppressed atrial_fibrillation (RR irregularity "
-                             "explained by ventricular bigeminy)")
+        vt = ectopy_findings(summary, vt_only=True)
+        findings.findings.extend(vt)
+        vt_called = bool(vt)
+        audit.append(f"[L4] beat classifier: {summary.n_ventricular}/{summary.n_beats} V, "
+                     f"VT={summary.vt}")
+    pvc_idx = detect_pvc_beats(sig, m.r_peaks_samples or [], sig.sampling_rate_hz)
+    if pvc_idx and not vt_called:
+        findings.findings.extend(pvc_findings(pvc_idx, len(m.r_peaks_samples)))
+        audit.append(f"[L4] 12-lead PVC rule: {len(pvc_idx)} PVC beat(s)")
+    # PVCs make RR irregular and mimic AF. If the rhythm no longer meets the AF
+    # criteria once the intervals around each PVC are removed, the irregularity
+    # is explained by the ectopy, so AF is withheld (D25).
+    if pvc_idx and findings.by_code("atrial_fibrillation") is not None:
+        explained, note = _pvc_explains_irregularity(m.r_peaks_samples, pvc_idx)
+        if explained:
+            findings.findings.remove(findings.by_code("atrial_fibrillation"))
+            audit.append(f"[L4] withheld atrial_fibrillation: RR irregularity explained "
+                         f"by {len(pvc_idx)} PVC(s) ({note})")
     # Pause / dropped beat (TZ §7.1, §10) — R-peak based, as reliable as HR.
     pc = cfg.pause
     if m.max_rr_ms is not None and (m.max_rr_ms >= pc.finding_ms
@@ -276,6 +293,21 @@ def _apply_rhythm_hierarchy(findings, m, audit: list[str]) -> None:
         af.evidence.append(Evidence(feature="ventricular_rate_bpm", value=f"{hr:.0f}"))
     if dropped:
         audit.append(f"[L4] rhythm hierarchy: AF present, withheld {dropped}")
+
+
+def _pvc_explains_irregularity(r_peaks, pvc_idx) -> tuple[bool, str]:
+    """True if, with the RR intervals around each PVC removed, the rhythm no
+    longer meets the AF RR criteria (D25). Needs >= 4 remaining intervals."""
+    rr = np.diff(np.asarray(r_peaks, dtype=float))
+    drop = {j for i in pvc_idx for j in (i - 1, i)}
+    clean = np.array([x for j, x in enumerate(rr) if j not in drop])
+    if clean.size < 4:
+        return False, "too few intervals left"
+    med = float(np.median(clean))
+    cv = float(np.std(clean) / np.mean(clean))
+    mad_cv = 1.4826 * float(np.median(np.abs(clean - med))) / med
+    explained = not (cv >= _AFIB_RR_CV_MIN and mad_cv >= _AFIB_RR_MAD_CV_MIN)
+    return explained, f"clean CV {cv:.2f}, MAD-CV {mad_cv:.2f}"
 
 
 def _quality_ok(quality, threshold: float) -> bool:
