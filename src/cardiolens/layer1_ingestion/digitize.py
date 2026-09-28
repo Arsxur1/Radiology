@@ -70,6 +70,28 @@ def render_ecg_image(
     return path
 
 
+def _track_trace(dark: np.ndarray) -> np.ndarray:
+    """Row position of one continuous trace per column (NaN where none).
+
+    Starts from the image centre; in each column picks the run of dark pixels
+    containing, or nearest to, the previous position and takes its mean row.
+    On ecg-image-kit renders this lifted median SNR from 9.1 to 12.7 dB
+    versus per-column averaging of all dark pixels (DECISIONS D15y).
+    """
+    height, width = dark.shape
+    trace = np.full(width, np.nan)
+    prev = height / 2.0
+    for x in range(width):
+        rows = np.flatnonzero(dark[:, x])
+        if rows.size == 0:
+            continue
+        runs = np.split(rows, np.flatnonzero(np.diff(rows) > 1) + 1)
+        dist = [0.0 if r[0] <= prev <= r[-1] else min(abs(r[0] - prev), abs(r[-1] - prev))
+                for r in runs]
+        prev = trace[x] = float(runs[int(np.argmin(dist))].mean())
+    return trace
+
+
 def digitize_image(
     path: str | Path,
     *,
@@ -81,28 +103,29 @@ def digitize_image(
 ) -> SignalRepresentation:
     """Recover a single-lead ``SignalRepresentation`` from a gridded image (TZ §4).
 
-    Column-wise trace extraction: for each x, the median row of sufficiently
-    dark pixels is the trace position; gaps are interpolated. Output sampling
-    rate equals the horizontal resolution (px/mm × mm/s).
+    A pixel is trace only if it is dark in *every* colour channel, so a red or
+    pink grid (dark in grayscale, bright in R) is rejected. Each column's dark
+    pixels are split into contiguous runs and the run nearest the previous
+    column's position is followed (``_track_trace``), so traces from
+    neighbouring leads that enter the crop are not averaged in. Gaps are
+    interpolated. Output sampling rate equals the horizontal resolution
+    (px/mm × mm/s).
     """
     import cv2
 
     path = str(path)
-    gray = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-    if gray is None:
+    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    if img is None:
         raise FileNotFoundError(f"cannot read image: {path}")
-    height, width = gray.shape
+    if img.ndim == 3:
+        img = img[:, :, :3].max(axis=2)  # dark only if dark in all channels
+    height, width = img.shape
 
     px_per_s = px_per_mm * mm_per_s
     uv_per_px = 1000.0 / (px_per_mm * mm_per_mv)
     center = height // 2
 
-    trace_px = np.full(width, np.nan)
-    dark = gray < dark_threshold
-    for x in range(width):
-        rows = np.where(dark[:, x])[0]
-        if rows.size:
-            trace_px[x] = float(np.median(rows))
+    trace_px = _track_trace(img < dark_threshold)
 
     found = np.isfinite(trace_px)
     coverage = float(found.mean())

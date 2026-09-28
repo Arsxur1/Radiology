@@ -37,6 +37,51 @@ def test_digitized_signal_recovers_heart_rate(tmp_path):
     assert result.measurements.heart_rate_bpm == pytest.approx(88, abs=4)
 
 
+def _recovery(img_path, lead):
+    """(correlation, amplitude gain) of the digitised trace vs the original."""
+    rec = resample(digitize_image(img_path).lead("II"), len(lead))
+    return float(np.corrcoef(lead, rec)[0, 1]), float(np.std(rec) / np.std(lead))
+
+
+def test_red_grid_is_not_mistaken_for_trace(tmp_path):
+    """ecg-image-kit style red grid: dark in grayscale, bright in the R channel."""
+    import cv2
+
+    orig = generate_synthetic_ecg(heart_rate_bpm=75, duration_s=6)
+    lead = orig.lead("II")
+    img = str(tmp_path / "ecg.png")
+    render_ecg_image(lead, orig.sampling_rate_hz, img)
+    im = cv2.imread(img)
+    grid = np.zeros(im.shape[:2], dtype=bool)
+    grid[:, ::8] = grid[::8, :] = True
+    trace = im.max(axis=2) < 100
+    # BGR red, grayscale ~ 95 (below the dark threshold); trace drawn on top.
+    im[grid & ~trace] = (60, 60, 220)
+    cv2.imwrite(img, im)
+    corr, gain = _recovery(img, lead)
+    assert corr > 0.9
+    assert 0.8 < gain < 1.2  # amplitude not flattened toward the grid
+
+
+def test_neighbouring_trace_in_crop_is_not_averaged_in(tmp_path):
+    """A trace of the adjacent lead entering the crop must not pull the output."""
+    import cv2
+
+    orig = generate_synthetic_ecg(heart_rate_bpm=75, duration_s=6)
+    lead = orig.lead("II")
+    img = str(tmp_path / "ecg.png")
+    render_ecg_image(lead, orig.sampling_rate_hz, img)
+    im = cv2.imread(img)
+    h, w = im.shape[:2]
+    xs = np.arange(w)
+    ys = (h // 8 + 6 * np.sin(xs / 15.0)).astype(int)  # foreign trace near the top
+    cv2.polylines(im, [np.stack([xs, ys], 1).reshape(-1, 1, 2)], False, (20, 20, 20), 2)
+    cv2.imwrite(img, im)
+    corr, gain = _recovery(img, lead)
+    assert corr > 0.9
+    assert 0.8 < gain < 1.2  # amplitude not flattened toward the grid
+
+
 def test_digitize_missing_file():
     with pytest.raises(FileNotFoundError):
         digitize_image("/nonexistent/does_not_exist.png")
