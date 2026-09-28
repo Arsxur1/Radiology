@@ -267,6 +267,67 @@ Macro sensitivity 0.60 → **0.65**. Reading:
   descriptor (D32) covers 0.81 of the "ST tilt up" label at 0.84 specificity —
   the first version without the J+60 plateau fired on half the set (spec 0.51).
 
+### Measured results — PTB-XL (1692 records, item 4)
+
+`fetch_ptbxl` selects from `ptbxl_database.csv` (SCP codes with likelihood ≥ 50,
+rhythm codes at likelihood 0 are labels too, `heart_axis` LAD/RAD): rare classes in
+full (3AVB 16, 2AVB 14, AFLT 73, WPW 79, LNGQT 117, STE_ 28, LVOLT 182), 80 per
+common class, 80 unlabeled normals, plus every record aged ≤ 15 (64). 500 Hz
+`records500/*_hr`. Lead names AVR/AVL/AVF are canonicalised on ingestion (D30) —
+before that the axis and ST-territory logic silently ran on 9 leads.
+
+| Finding | First run | Current (sens / spec) | n |
+|---|:-:|:-:|--:|
+| sinus_rhythm (SR ∪ SARRH) | — | 0.83 / 0.78 | 1135 |
+| sinus_bradycardia / sinus_tachycardia | — | 0.96 / 0.88 · 0.92 / 0.96 | 106 / 110 |
+| atrial_fibrillation | 0.41 | 0.55 / 0.97 | 123 |
+| atrial_flutter | 0.23 | 0.51 / 0.997 | 73 |
+| *AF or flutter (family)* | — | *0.59 / 0.97* | 179 |
+| **complete_av_block** | 1 / 16 | **7 / 16 (0.44) / 0.996** | 16 |
+| first_degree_av_block (1AVB ∪ LPR) | — | 0.63 / 0.92 | 188 |
+| rbbb / lbbb | — | 0.85 / 0.93 · 0.57 / 0.88 | 86 / 85 |
+| left / right axis deviation | 0.00 · 0.89 | 0.36 / 0.84 · 0.89 / 0.96 | 305 / 93 |
+| low_qrs_voltage | — | 0.74 / 0.91 | 182 |
+| lvh | — | 0.35 / 0.97 | 198 |
+| wpw_preexcitation | — | 0.35 / 0.98 | 79 |
+| st_elevation (alert) | — | 0.00 / 0.97 | 28 |
+| *st_elevation_any (family)* | — | *0.18 / 0.80* | 28 |
+| st_depression | — | 0.23 / 0.80 | 107 |
+| long_qt | — | 0.49 / 0.89 | 117 |
+
+Macro sensitivity 0.44 → **0.57**. Reading, by clinical weight:
+
+- **Complete AV block, 16 real cases** (the headline check of item 4): 1 → 7 found,
+  one false positive in 1676 negatives. The AV-dissociation gates were rewritten on
+  these records (D28): 9 of 16 have an irregular ventricular response, so
+  regularity is no longer required; atrial/ventricular ratio ≥ 1.2; "P rate ≈ k ×
+  HR" is allowed when the PR is unstable (a 2:1 block has a constant PR and is
+  rejected on purpose — it is not complete). The 9 misses are records where the
+  P-band residual has no dominant period (low P amplitude, wide QRS escape with
+  large T) — a critical alert stays on the conservative side.
+- **Flutter with a regular response** 0.23 → 0.51 at 0.997: the spectral F-wave
+  search (Welch PSD of the QRS-blanked signal, sharp 3.3–6 Hz peak on ≥ 2 leads
+  with a band-power ratio ≥ 1 vs 0.5–3 Hz). Thresholds were chosen here (AFLT
+  0.63 / AFIB 0.02 / SR 0.00 for the detector alone); the looser setting caught
+  0.86 but flagged 9 % of sinus records.
+- **AF** 0.41 → 0.55 at 0.97 specificity: the norm-table gates (D31) took it to
+  0.61 / 0.92, the conducted-P veto (D36) trades 6 points of sensitivity for 4.5
+  of specificity on this set — the veto is kept because it removes two thirds of
+  the pediatric false AF and AF is not a critical alert.
+- **Left-axis deviation 0.00 → 0.36**: the 0.00 was the lead-name bug (aVL/aVF
+  absent → axis undefined). 0.36 / 0.84 against PTB-XL's `heart_axis` field, which
+  its own algorithm assigns; not investigated further.
+- **ST elevation**: none of the 28 STE_ records reaches the STEMI alert, and only 18
+  % reach `st_elevation_any`. The contiguity + J+60 plateau + sex/age V2–V3 rules
+  are stricter than the STE_ label (which includes single-lead and early-
+  repolarisation-like elevation), and the plateau requirement introduced for
+  ecg-arrhythmia's "ST tilt up" over-calling (spec 0.51 → 0.84 there) costs
+  coverage here. This is the clearest open item after this increment.
+- **LVH 0.35 / 0.97** on Sokolow-Lyon alone (PTB-XL's LVH is a mixed voltage +
+  strain label); **WPW 0.35**: the short-PR + delta rule misses intermittent
+  pre-excitation; **long QT 0.49 / 0.89** with the tangent method (LNGQT includes
+  borderline QTc).
+
 ### Pediatric stratum — PTB-XL, 64 records aged ≤ 15 (item 5b)
 
 `validate --ptbxl data/ptbxl --age-max 15`. All 64 children of PTB-XL are in the
