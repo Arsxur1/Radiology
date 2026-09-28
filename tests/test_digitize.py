@@ -129,3 +129,60 @@ def test_clean_digitized_image_is_not_escalated_for_provenance(tmp_path):
     render_ecg_image(orig.lead("II"), orig.sampling_rate_hz, img)
     result = run_pipeline(digitize_image(img), mode="B")
     assert not any("provenance confidence" in line for line in result.audit_log)
+
+
+def _render_page(tmp_path, *, with_pulse=True, hr=72):
+    """Synthetic 12-lead page: red 1/5-mm grid, 3x4 layout + lead-II rhythm strip,
+    1 mV calibration pulse per row; 8 px/mm, 25 mm/s, 10 mm/mV."""
+    import cv2
+
+    from cardiolens.layer1_ingestion.digitize import PAGE_LAYOUT_3X4_II
+
+    ecg = generate_synthetic_ecg(heart_rate_bpm=hr, duration_s=10)
+    fs, ppm = ecg.sampling_rate_hz, 8
+    w, h = int(290 * ppm), int(200 * ppm)
+    img = np.full((h, w, 3), 255, np.uint8)
+    for x in range(0, w, ppm):
+        img[:, x] = (200, 200, 255) if x % (5 * ppm) else (60, 60, 230)
+    for y in range(0, h, ppm):
+        img[y, :] = (200, 200, 255) if y % (5 * ppm) else (60, 60, 230)
+    x_pulse, x0 = 10 * ppm, 15 * ppm
+    for r, names in enumerate(PAGE_LAYOUT_3X4_II):
+        base = int((40 + 45 * r) * ppm)
+        if with_pulse:
+            pts = [(x_pulse, base), (x_pulse, base - 10 * ppm), (x0, base - 10 * ppm), (x0, base)]
+            cv2.polylines(img, [np.array(pts).reshape(-1, 1, 2)], False, (0, 0, 0), 2)
+        seg_s = 10.0 / len(names)
+        for k, name in enumerate(names):
+            i0, i1 = int(k * seg_s * fs), int((k + 1) * seg_s * fs)
+            x = ecg.lead(name)[i0:i1]
+            xs = (x0 + (np.arange(len(x)) + i0) / fs * 25 * ppm).astype(int)
+            ys = (base - x / 1000.0 * 10 * ppm).astype(int)
+            cv2.polylines(img, [np.stack([xs, ys], 1).reshape(-1, 1, 2)], False, (0, 0, 0), 2)
+    p = str(tmp_path / "page.png")
+    cv2.imwrite(p, img)
+    return p, ecg
+
+
+def test_digitize_page_finds_layout_and_recovers_rhythm(tmp_path):
+    from cardiolens.layer1_ingestion import digitize_page
+
+    path, ecg = _render_page(tmp_path)
+    page = digitize_page(path)
+    assert abs(page.px_per_mm - 8.0) < 0.2
+    assert set(page.leads) == {"I", "II", "III", "aVR", "aVL", "aVF",
+                               "V1", "V2", "V3", "V4", "V5", "V6"}
+    assert abs(page.rhythm.duration_s - 10.0) < 0.5
+    hr = run_pipeline(page.rhythm, mode="A").measurements.heart_rate_bpm
+    assert hr == pytest.approx(72, abs=4)
+    ref = ecg.lead("V2")[1250:2500]
+    got = resample(page.leads["V2"].lead("V2"), len(ref))
+    assert float(np.corrcoef(ref, got)[0, 1]) > 0.9
+
+
+def test_digitize_page_refuses_unrecognised_layout(tmp_path):
+    from cardiolens.layer1_ingestion import digitize_page
+
+    path, _ = _render_page(tmp_path, with_pulse=False)
+    with pytest.raises(ValueError, match="layout not recognised"):
+        digitize_page(path)
