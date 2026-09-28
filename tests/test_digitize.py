@@ -186,3 +186,22 @@ def test_digitize_page_refuses_unrecognised_layout(tmp_path):
     path, _ = _render_page(tmp_path, with_pulse=False)
     with pytest.raises(ValueError, match="layout not recognised"):
         digitize_page(path)
+
+
+def test_digitize_page_deskews_rotated_photo_and_flags_it(tmp_path):
+    """A page rotated by ~2° is read after deskew, and the correction caps provenance
+    confidence so the report still escalates (D32)."""
+    import cv2
+
+    from cardiolens.layer1_ingestion import digitize_page
+
+    path, _ = _render_page(tmp_path)
+    img = cv2.imread(path)
+    h, w = img.shape[:2]
+    rot = cv2.getRotationMatrix2D((w / 2, h / 2), 2.0, 1.0)
+    cv2.imwrite(path, cv2.warpAffine(img, rot, (w, h), borderValue=(255, 255, 255)))
+    page = digitize_page(path)
+    assert any("deskewed" in n for n in page.notes)
+    assert page.rhythm.provenance.confidence <= 0.5
+    hr = run_pipeline(page.rhythm, mode="A").measurements.heart_rate_bpm
+    assert hr == pytest.approx(72, abs=4)
