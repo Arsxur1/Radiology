@@ -238,13 +238,25 @@ def run_pipeline(
 # call. Each suppression was kept only if it removed more false than true labels
 # on development data (Chapman/Ningbo + PTB-XL outside fold 10). NOT suppressed:
 # sinus_bradycardia (removed as many true as false labels — slow sinus
-# arrhythmia still draws AF calls) and anything under paced_rhythm (the paced
-# call itself is not yet specific enough; suppressing under it lost true labels).
+# arrhythmia still draws AF calls).
 _AF_EXCLUDES = ("sinus_rhythm", "sinus_tachycardia", "first_degree_av_block",
                 "irregular_rhythm")
+# A paced QRS invalidates bundle-branch, axis, voltage and repolarization criteria
+# and the PR interval (D24). Enabled only once the paced call was QRS-locked; on
+# development data every suppression then removed only or mostly false labels
+# (e.g. lbbb +26/-0, t_inversion +43/-2, first_degree_av_block +35/-5).
+# st_elevation is deliberately NOT suppressed: it is a §10 must-not-miss finding
+# and STEMI remains diagnosable in paced rhythm (Sgarbossa criteria).
+_PACED_EXCLUDES = ("lbbb", "rbbb", "wide_qrs_nonspecific", "lvh", "first_degree_av_block",
+                   "sinus_rhythm", "left_axis_deviation", "st_depression", "t_inversion")
 
 
 def _apply_rhythm_hierarchy(findings, m, audit: list[str]) -> None:
+    if findings.by_code("paced_rhythm") is not None:
+        dropped = [f.code for f in findings.findings if f.code in _PACED_EXCLUDES]
+        findings.findings = [f for f in findings.findings if f.code not in _PACED_EXCLUDES]
+        if dropped:
+            audit.append(f"[L4] rhythm hierarchy: paced rhythm, withheld {dropped}")
     af = findings.by_code("atrial_fibrillation")
     if af is None:
         return

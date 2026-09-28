@@ -76,3 +76,16 @@ def test_af_hierarchy_keeps_sinus_bradycardia_and_noop_without_af():
     fs = _fs("sinus_rhythm", "first_degree_av_block")
     _apply_rhythm_hierarchy(fs, Measurements(heart_rate_bpm=70), [])
     assert fs.codes() == {"sinus_rhythm", "first_degree_av_block"}
+
+
+def test_paced_hierarchy_withholds_invalid_criteria_but_keeps_st_elevation():
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.pipeline import _apply_rhythm_hierarchy
+
+    fs = _fs("paced_rhythm", "lbbb", "left_axis_deviation", "t_inversion", "sinus_rhythm",
+             "first_degree_av_block", "st_elevation")
+    audit = []
+    _apply_rhythm_hierarchy(fs, Measurements(heart_rate_bpm=70), audit)
+    # STE is a §10 must-not-miss finding: never silenced by the hierarchy.
+    assert fs.codes() == {"paced_rhythm", "st_elevation"}
+    assert any("paced rhythm, withheld" in a for a in audit)
