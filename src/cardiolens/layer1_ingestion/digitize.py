@@ -275,6 +275,35 @@ def _calibration_pulse(dark: np.ndarray, px_per_mm: float) -> tuple[int, float] 
     return edge, med
 
 
+def _skew_angle(img: np.ndarray) -> float:
+    """Page rotation (degrees, ±5) that makes the grid/trace row projection sharpest."""
+    import cv2
+
+    small = cv2.resize(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), None, fx=0.25, fy=0.25,
+                       interpolation=cv2.INTER_AREA)
+    ink = 255 - small
+    h, w = small.shape
+    best, best_angle = -1.0, 0.0
+    for angle in np.arange(-5.0, 5.01, 0.25):
+        rot = cv2.getRotationMatrix2D((w / 2, h / 2), float(angle), 1.0)
+        prof = cv2.warpAffine(ink, rot, (w, h), borderValue=0).sum(axis=1).astype(float)
+        score = float(np.var(np.diff(prof)))
+        if score > best:
+            best, best_angle = score, float(angle)
+    return best_angle
+
+
+def _flatten_shading(img: np.ndarray) -> np.ndarray:
+    """Divide each channel by its large-scale (median-filtered) background."""
+    import cv2
+
+    out = np.empty_like(img)
+    for c in range(3):
+        bg = cv2.medianBlur(img[:, :, c], 51).astype(np.float32) + 1.0
+        out[:, :, c] = np.clip(img[:, :, c].astype(np.float32) / bg * 235.0, 0, 255).astype(np.uint8)
+    return out
+
+
 def digitize_page(
     path: str | Path,
     *,
@@ -296,6 +325,21 @@ def digitize_page(
     img = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if img is None:
         raise FileNotFoundError(f"cannot read image: {path}")
+    # Photo corrections (D32): undo page rotation, and flatten shading on a
+    # degraded image. Degradation is judged on the ORIGINAL image and any
+    # correction caps provenance confidence below — flattening makes a shaded
+    # photo look clean and must not switch off the escalation.
+    corrections: list[str] = []
+    degraded_orig = bool((img.max(axis=2) < dark_threshold).mean() > _DEGRADED_DARK_FRACTION)
+    angle = _skew_angle(img)
+    if abs(angle) >= 0.25:
+        hh, ww = img.shape[:2]
+        rot = cv2.getRotationMatrix2D((ww / 2, hh / 2), angle, 1.0)
+        img = cv2.warpAffine(img, rot, (ww, hh), borderValue=(255, 255, 255))
+        corrections.append(f"deskewed {angle:+.2f}°")
+    if degraded_orig:
+        img = _flatten_shading(img)
+        corrections.append("shading flattened")
     h, w = img.shape[:2]
     dark = img.max(axis=2) < dark_threshold
     px = _grid_px_per_mm(img)
@@ -340,6 +384,10 @@ def digitize_page(
     if rhythm is None:
         raise ValueError("page layout has no rhythm strip")
     notes = [f"grid {px:.2f} px/mm, calibration pulse {pulse_mm:.1f} mm, rows at {base}"]
+    if corrections:
+        notes.append("photo corrections: " + ", ".join(corrections))
+        for sr in [rhythm, *leads.values()]:
+            sr.provenance.confidence = min(sr.provenance.confidence, _DEGRADED_CONFIDENCE_CAP)
     degraded = [n for n, s in leads.items() if s.provenance.confidence < 0.8]
     if rhythm.provenance.confidence < 0.8 or degraded:
         notes.append("degraded image: low provenance confidence (report escalates)")
