@@ -30,5 +30,12 @@ def test_parse_dx_from_header_comma_and_semicolon():
     assert snomed_dx_to_codes(dx) == {"sinus_rhythm", "left_axis_deviation", "st_elevation"}
 
 
+def test_parse_dx_challenge2021_spaced_comment():
+    """Challenge 2021 headers write '# Dx:' — must not silently yield no gold labels."""
+    header = ("E03527 12 500 5000\n# Age: 51\n# Sex: Male\n"
+              "# Dx: 426783006,164889003\n# Rx: Unknown\n")
+    assert parse_dx_from_header(header) == ["426783006", "164889003"]
+
+
 def test_parse_dx_missing_returns_empty():
     assert parse_dx_from_header("JS 12 500\n#Age: 40\n") == []

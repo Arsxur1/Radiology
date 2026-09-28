@@ -259,11 +259,13 @@ def snomed_dx_to_codes(dx_codes) -> set[str]:
 def parse_dx_from_header(header_text: str) -> list[str]:
     """Extract SNOMED-CT diagnosis ids from a WFDB header's ``#Dx:`` comment.
 
-    ecg-arrhythmia stores labels as a header comment, e.g. ``#Dx: 426783006,39732003``.
+    ecg-arrhythmia stores labels as a header comment, e.g. ``#Dx: 426783006,39732003``;
+    Challenge 2021 writes ``# Dx: ...`` (space after ``#``) — both are accepted.
     """
     for line in header_text.splitlines():
         s = line.strip()
-        if s.lower().startswith("#dx:"):
+        if s.startswith("#") and s[1:].lstrip().lower().startswith("dx:"):
+            s = s[1:].lstrip()
             payload = s.split(":", 1)[1]
             return [c.strip() for c in payload.replace(";", ",").split(",") if c.strip()]
     return []
