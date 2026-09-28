@@ -173,7 +173,7 @@ def _pr_on_lead(lead: np.ndarray, rpeaks: np.ndarray, fs: float) -> float | None
     return _intervals_on_lead(lead, rpeaks, fs)[0]
 
 
-# Leads whose QT enters the multi-lead median (D28); the rhythm lead's QT is added.
+# Leads with an informational per-lead QT (D28); the rhythm lead's QT is added.
 _QT_LEADS = ("V1", "V2", "V5", "aVF")
 _PR_LEADS = ("V1", "V2", "aVF")
 
@@ -294,12 +294,10 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
                 if lead_qt is not None and lead_name in _QT_LEADS:
                     qt_by_lead[lead_name] = round(lead_qt + qt_corr, 1)
             m.pr_ms_by_lead = pr_by_lead
-            # Multi-lead QT (D28): a single lead's T offset is noisy (normal ECGs
-            # read QTc up to ~490 ms at p90); the median over II/V1/V2/V5/aVF raised
-            # long-QT sens and spec together on development data.
+            # Per-lead QT is informational only (D28): a multi-lead median as the
+            # reported QT lost long-QT sensitivity on held-out data, so the
+            # rhythm-lead QT stays the reported value.
             m.qt_ms_by_lead = qt_by_lead
-            if len(qt_by_lead) >= 3:
-                m.intervals.qt_ms = round(float(np.median(list(qt_by_lead.values()))), 1)
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)

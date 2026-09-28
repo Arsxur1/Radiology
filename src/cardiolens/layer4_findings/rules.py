@@ -316,18 +316,15 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
         sex = (sig.patient.sex or "male").lower()
         upper = qtc_norms.get("female_upper" if sex == "female" else "male_upper")
         short_lower = qtc_norms.get("short_lower")
-    # A wide QRS lengthens QT without longer repolarization: the QRS excess over
-    # 100 ms is subtracted before comparing with the limit (D28).
-    qrs = iv.qrs_ms or 0.0
-    qtc_rep = qtc - max(0.0, qrs - 100.0)
-    if upper and qtc_rep > upper:
-        adj = f", поправка на QRS {qrs:.0f} мс → {qtc_rep:.0f}" if qrs > 100 else ""
+    # Plain QTc against the sex-specific limit. A QRS-adjusted limit + multi-lead QT
+    # median improved dev data but lost sensitivity on held-out Georgia (0.48 ->
+    # 0.38) — reverted for this critical finding (D28).
+    if upper and qtc > upper:
         fs.findings.append(Finding(
             code="long_qt", group="interval",
-            label_ru=f"Удлинение QT (QTc {qtc} мс{adj})",
+            label_ru=f"Удлинение QT (QTc {qtc} мс)",
             label_uz=f"QT uzayishi (QTc {qtc} ms)",
-            evidence=_ev(qtc_bazett_ms=qtc, qtc_qrs_adjusted_ms=round(qtc_rep, 1), upper=upper),
-            confidence=0.85,
+            evidence=_ev(qtc_bazett_ms=qtc, upper=upper), confidence=0.85,
         ))
     elif short_lower and qtc < short_lower:
         fs.findings.append(Finding(

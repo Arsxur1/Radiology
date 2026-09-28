@@ -65,7 +65,7 @@ class Measurements(BaseModel):
     # Calibrated PR per lead — multi-lead PR agreement improves first-degree AV
     # block detection (a single lead under-measures PR; §7.3).
     pr_ms_by_lead: dict = Field(default_factory=dict)
-    # Per-lead QT; the reported QT is their median (D28).
+    # Per-lead QT, informational (D28); the reported QT is the rhythm lead's.
     qt_ms_by_lead: dict = Field(default_factory=dict)
     p_wave_ratio: float | None = None         # fraction of beats with a detected P
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
