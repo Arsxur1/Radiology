@@ -43,3 +43,36 @@ def test_audit_log_traceability():
     joined = " ".join(result.audit_log)
     for tag in ("[L2]", "[L3]", "[L4]", "[L5]", "[L6]"):
         assert tag in joined
+
+
+def _fs(*codes):
+    from cardiolens.contracts.findings import Finding, FindingSet
+    return FindingSet(findings=[Finding(code=c, group="rhythm", label_ru=c, label_uz=c,
+                                        confidence=0.7) for c in codes])
+
+
+def test_af_hierarchy_withholds_contradictory_rhythm_labels():
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.pipeline import _apply_rhythm_hierarchy
+
+    fs = _fs("atrial_fibrillation", "sinus_rhythm", "sinus_tachycardia",
+             "first_degree_av_block", "irregular_rhythm", "rbbb")
+    audit = []
+    _apply_rhythm_hierarchy(fs, Measurements(heart_rate_bpm=128), audit)
+    assert fs.codes() == {"atrial_fibrillation", "rbbb"}
+    assert "тахисистолическая" in fs.by_code("atrial_fibrillation").label_ru
+    assert any("rhythm hierarchy" in a for a in audit)
+
+
+def test_af_hierarchy_keeps_sinus_bradycardia_and_noop_without_af():
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.pipeline import _apply_rhythm_hierarchy
+
+    fs = _fs("atrial_fibrillation", "sinus_bradycardia")
+    _apply_rhythm_hierarchy(fs, Measurements(heart_rate_bpm=52), [])
+    assert fs.codes() == {"atrial_fibrillation", "sinus_bradycardia"}  # dev data: not net-positive
+    assert "брадисистолическая" in fs.by_code("atrial_fibrillation").label_ru
+
+    fs = _fs("sinus_rhythm", "first_degree_av_block")
+    _apply_rhythm_hierarchy(fs, Measurements(heart_rate_bpm=70), [])
+    assert fs.codes() == {"sinus_rhythm", "first_degree_av_block"}

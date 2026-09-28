@@ -143,6 +143,7 @@ def run_pipeline(
             evidence=[Evidence(feature="pacing_spike_ratio", value=str(pacing_ratio))],
             confidence=0.8))
         audit.append(f"[L4] paced rhythm: spike_ratio={pacing_ratio}")
+    _apply_rhythm_hierarchy(findings, m, audit)
     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
     # are unreliable, so withhold every R-peak-derived finding and report the poor
@@ -216,6 +217,39 @@ def run_pipeline(
         signal=sig, measurements=m, findings=findings, causal_graph=causal,
         safety=safety, report=report, config=cfg, audit_log=audit, serial=serial,
     )
+
+
+# Rhythm hierarchy (§7.1, DECISIONS D15z): in atrial fibrillation there is no
+# sinus rhythm and no measurable PR, so these co-emitted labels contradict the AF
+# call. Each suppression was kept only if it removed more false than true labels
+# on development data (Chapman/Ningbo + PTB-XL outside fold 10). NOT suppressed:
+# sinus_bradycardia (removed as many true as false labels — slow sinus
+# arrhythmia still draws AF calls) and anything under paced_rhythm (the paced
+# call itself is not yet specific enough; suppressing under it lost true labels).
+_AF_EXCLUDES = ("sinus_rhythm", "sinus_tachycardia", "first_degree_av_block",
+                "irregular_rhythm")
+
+
+def _apply_rhythm_hierarchy(findings, m, audit: list[str]) -> None:
+    af = findings.by_code("atrial_fibrillation")
+    if af is None:
+        return
+    dropped = [f.code for f in findings.findings if f.code in _AF_EXCLUDES]
+    findings.findings = [f for f in findings.findings if f.code not in _AF_EXCLUDES]
+    hr = m.heart_rate_bpm
+    if hr is not None:
+        # Ventricular-rate form of AF (the clinically actionable descriptor).
+        if hr > 100:
+            ru, uz = "тахисистолическая форма", "taxisistolik shakl"
+        elif hr < 60:
+            ru, uz = "брадисистолическая форма", "bradisistolik shakl"
+        else:
+            ru, uz = "нормосистолическая форма", "normosistolik shakl"
+        af.label_ru = f"{af.label_ru}, {ru} (ЧЖС {hr:.0f}/мин)"
+        af.label_uz = f"{af.label_uz}, {uz} (QQS {hr:.0f}/daq)"
+        af.evidence.append(Evidence(feature="ventricular_rate_bpm", value=f"{hr:.0f}"))
+    if dropped:
+        audit.append(f"[L4] rhythm hierarchy: AF present, withheld {dropped}")
 
 
 def _quality_ok(quality, threshold: float) -> bool:
