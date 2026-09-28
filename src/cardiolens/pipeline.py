@@ -82,6 +82,13 @@ def run_pipeline(
     quality, la_ra_reversed = assess_quality(sig, sqi_accept_threshold=pp.sqi_accept_threshold)
     quality_ok = _quality_ok(quality, pp.sqi_accept_threshold)
     audit.append(f"[L2] SQI mean-ok={quality_ok}, flags={quality.flags}")
+    # A trace digitised from a degraded image carries low provenance confidence
+    # (§4, §0): interpret it, but never autonomously as if it were a clean recording.
+    prov = sig.provenance
+    if prov.digitized and prov.confidence < cfg.quality.digitized_confidence_min:
+        quality_ok = False
+        audit.append(f"[L1] digitised image, provenance confidence {prov.confidence} "
+                     f"< {cfg.quality.digitized_confidence_min} — escalate")
 
     # Layer 3 — measurements (TZ §6), re-centred by the configured fiducial-bias
     # correction (DECISIONS.md D15a).

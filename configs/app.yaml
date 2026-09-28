@@ -62,6 +62,11 @@ pacing:
 # while catching pure noise (validated, DECISIONS D15w).
 quality:
   beat_consistency_min: 0.80
+  # Paper-ECG digitisation (§4): a trace recovered from a degraded image (the
+  # adaptive-mask path caps provenance.confidence at 0.5; sparse traces lower it
+  # via column coverage) is not interpreted as if it were a digital recording —
+  # below this quality_ok is forced low so mode B escalates (DECISIONS D15y).
+  digitized_confidence_min: 0.80
 
 # Confidence gating for autonomous mode B (TZ §2, §16).
 confidence:

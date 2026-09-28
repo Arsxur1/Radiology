@@ -95,3 +95,37 @@ def test_digitize_blank_image_raises(tmp_path):
     cv2.imwrite(p, blank)
     with pytest.raises(ValueError):
         digitize_image(p)
+
+
+def test_shaded_image_uses_adaptive_mask_and_escalates(tmp_path):
+    """Shading/creases (large dark areas): trace still recovered, but the image
+    is flagged degraded (capped provenance confidence) and the report escalates."""
+    import cv2
+
+    orig = generate_synthetic_ecg(heart_rate_bpm=75, duration_s=6)
+    lead = orig.lead("II")
+    img = str(tmp_path / "ecg.png")
+    render_ecg_image(lead, orig.sampling_rate_hz, img)
+    im = cv2.imread(img).astype(np.float32)
+    h, w = im.shape[:2]
+    shade = np.ones((h, w), np.float32)
+    shade[:, w // 3: 2 * w // 3] = 0.35  # a dark crease band across the strip
+    im = (im * shade[:, :, None]).astype(np.uint8)
+    cv2.imwrite(img, im)
+
+    dig = digitize_image(img)
+    assert dig.provenance.confidence <= 0.5
+    corr, _ = _recovery(img, lead)
+    assert corr > 0.8
+
+    result = run_pipeline(dig, mode="B")
+    assert any("provenance confidence" in line for line in result.audit_log)
+    assert result.report.escalation_reason
+
+
+def test_clean_digitized_image_is_not_escalated_for_provenance(tmp_path):
+    orig = generate_synthetic_ecg(heart_rate_bpm=75, duration_s=6)
+    img = str(tmp_path / "ecg.png")
+    render_ecg_image(orig.lead("II"), orig.sampling_rate_hz, img)
+    result = run_pipeline(digitize_image(img), mode="B")
+    assert not any("provenance confidence" in line for line in result.audit_log)

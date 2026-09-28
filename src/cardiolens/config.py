@@ -74,8 +74,12 @@ class QualityConfig(BaseModel):
     """Signal-organization quality gate (TZ §5). Below beat_consistency_min the
     QRS complexes are not self-consistent (artifact/noise), so the R-peak-derived
     findings are withheld rather than reported as confident garbage.
+
+    A digitised image whose ``provenance.confidence`` is below
+    digitized_confidence_min forces quality_ok low (mode B escalates).
     """
     beat_consistency_min: float = 0.8
+    digitized_confidence_min: float = 0.8
 
 
 class Versions(BaseModel):

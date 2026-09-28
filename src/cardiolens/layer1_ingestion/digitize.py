@@ -70,6 +70,29 @@ def render_ecg_image(
     return path
 
 
+# Degraded-image switch and adaptive mask, tuned on ecg-image-kit renders (DECISIONS
+# D15y): clean crops have a dark fraction p90 0.07, augmented ones median 0.19.
+# Above 0.10 the adaptive mask lifts median SNR -3.9 -> +1.5 dB on augmented and
+# 7.3 -> 8.7 dB on random-grid-colour renders, with clean renders unchanged.
+_DEGRADED_DARK_FRACTION = 0.10
+_ADAPTIVE_RATIO = 0.70        # trace: darker than 70% of the local background
+_ADAPTIVE_BG_MM = 3.0         # local-background window (median), in mm
+# Degraded-path traces reached only ~1.5 dB median SNR, so they must not pass as
+# interpretable at full confidence (pipeline escalates below
+# quality.digitized_confidence_min).
+_DEGRADED_CONFIDENCE_CAP = 0.5
+
+
+def _adaptive_dark_mask(img: np.ndarray, px_per_mm: float) -> np.ndarray:
+    """Pixels darker than their local (median-filtered) background."""
+    import cv2
+
+    smooth = cv2.GaussianBlur(img, (3, 3), 0)
+    k = int(_ADAPTIVE_BG_MM * px_per_mm) | 1
+    background = cv2.medianBlur(smooth, k).astype(np.float32)
+    return smooth.astype(np.float32) < _ADAPTIVE_RATIO * background
+
+
 def _track_trace(dark: np.ndarray) -> np.ndarray:
     """Row position of one continuous trace per column (NaN where none).
 
@@ -119,16 +142,27 @@ def digitize_image(
         raise FileNotFoundError(f"cannot read image: {path}")
     if img.ndim == 3:
         img = img[:, :, :3].max(axis=2)  # dark only if dark in all channels
+    img = img.astype(np.uint8)
     height, width = img.shape
 
     px_per_s = px_per_mm * mm_per_s
     uv_per_px = 1000.0 / (px_per_mm * mm_per_mv)
     center = height // 2
 
-    trace_px = _track_trace(img < dark_threshold)
+    dark = img < dark_threshold
+    # A clean scan is mostly paper: the trace covers a few % of the pixels. Far
+    # more "dark" means shading, creases or a dark grid, so compare each pixel to
+    # its local background instead of a fixed level — and flag the image as
+    # degraded (capped provenance confidence).
+    degraded = bool(dark.mean() > _DEGRADED_DARK_FRACTION)
+    if degraded:
+        dark = _adaptive_dark_mask(img, px_per_mm)
+
+    trace_px = _track_trace(dark)
 
     found = np.isfinite(trace_px)
     coverage = float(found.mean())
+    confidence = min(coverage, _DEGRADED_CONFIDENCE_CAP) if degraded else coverage
     if found.sum() < 2:
         raise ValueError("no trace detected in image")
     # Interpolate gaps so the signal is continuous.
@@ -142,5 +176,5 @@ def digitize_image(
     return SignalRepresentation(
         signal=signal, sampling_rate_hz=fs, lead_names=[lead_name],
         duration_s=float(width / fs), source="image",
-        provenance=Provenance(digitized=True, confidence=round(coverage, 3)),
+        provenance=Provenance(digitized=True, confidence=round(confidence, 3)),
     )
