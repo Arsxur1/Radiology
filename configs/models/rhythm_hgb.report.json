@@ -26,8 +26,8 @@
     "holdout:ecg-arrhythmia-balanced": {
       "rules": {
         "atrial_fibrillation": {
-          "sens": 0.487,
-          "spec": 0.82,
+          "sens": 0.8,
+          "spec": 0.728,
           "n": 80
         },
         "atrial_flutter": {
@@ -36,23 +36,23 @@
           "n": 187
         },
         "sinus_rhythm": {
-          "sens": 0.9,
-          "spec": 0.767,
+          "sens": 0.887,
+          "spec": 0.839,
           "n": 80
         },
         "sinus_bradycardia": {
-          "sens": 0.939,
-          "spec": 0.965,
+          "sens": 0.93,
+          "spec": 0.976,
           "n": 115
         },
         "sinus_tachycardia": {
-          "sens": 0.946,
-          "spec": 0.844,
+          "sens": 0.914,
+          "spec": 0.89,
           "n": 93
         },
         "first_degree_av_block": {
           "sens": 0.682,
-          "spec": 0.9,
+          "spec": 0.936,
           "n": 85
         },
         "rbbb": {
@@ -180,8 +180,8 @@
       },
       "rules_or_model": {
         "atrial_fibrillation": {
-          "sens": 0.725,
-          "spec": 0.76,
+          "sens": 0.863,
+          "spec": 0.702,
           "n": 80
         },
         "atrial_flutter": {
@@ -190,23 +190,23 @@
           "n": 187
         },
         "sinus_rhythm": {
-          "sens": 0.925,
-          "spec": 0.764,
+          "sens": 0.912,
+          "spec": 0.836,
           "n": 80
         },
         "sinus_bradycardia": {
-          "sens": 0.948,
-          "spec": 0.964,
+          "sens": 0.939,
+          "spec": 0.973,
           "n": 115
         },
         "sinus_tachycardia": {
-          "sens": 0.978,
-          "spec": 0.841,
+          "sens": 0.946,
+          "spec": 0.888,
           "n": 93
         },
         "first_degree_av_block": {
           "sens": 0.718,
-          "spec": 0.891,
+          "spec": 0.927,
           "n": 85
         },
         "rbbb": {
@@ -259,7 +259,7 @@
     "cross:ptbxl": {
       "rules": {
         "atrial_fibrillation": {
-          "sens": 0.407,
+          "sens": 0.545,
           "spec": 0.969,
           "n": 123
         },
@@ -269,23 +269,23 @@
           "n": 73
         },
         "sinus_rhythm": {
-          "sens": 0.833,
-          "spec": 0.676,
-          "n": 1025
+          "sens": 0.829,
+          "spec": 0.779,
+          "n": 1135
         },
         "sinus_bradycardia": {
-          "sens": 0.953,
-          "spec": 0.878,
+          "sens": 0.962,
+          "spec": 0.88,
           "n": 106
         },
         "sinus_tachycardia": {
-          "sens": 0.927,
-          "spec": 0.954,
+          "sens": 0.918,
+          "spec": 0.957,
           "n": 110
         },
         "first_degree_av_block": {
-          "sens": 0.622,
-          "spec": 0.911,
+          "sens": 0.628,
+          "spec": 0.915,
           "n": 188
         },
         "rbbb": {
@@ -346,9 +346,9 @@
           "n": 73
         },
         "sinus_rhythm": {
-          "sens": 0.66,
-          "spec": 0.912,
-          "n": 1025
+          "sens": 0.604,
+          "spec": 0.91,
+          "n": 1135
         },
         "sinus_bradycardia": {
           "sens": 0.953,
@@ -413,8 +413,8 @@
       },
       "rules_or_model": {
         "atrial_fibrillation": {
-          "sens": 0.634,
-          "spec": 0.939,
+          "sens": 0.724,
+          "spec": 0.942,
           "n": 123
         },
         "atrial_flutter": {
@@ -423,9 +423,9 @@
           "n": 73
         },
         "sinus_rhythm": {
-          "sens": 0.844,
-          "spec": 0.675,
-          "n": 1025
+          "sens": 0.84,
+          "spec": 0.777,
+          "n": 1135
         },
         "sinus_bradycardia": {
           "sens": 0.972,
@@ -433,13 +433,13 @@
           "n": 106
         },
         "sinus_tachycardia": {
-          "sens": 0.955,
-          "spec": 0.942,
+          "sens": 0.945,
+          "spec": 0.945,
           "n": 110
         },
         "first_degree_av_block": {
           "sens": 0.644,
-          "spec": 0.901,
+          "spec": 0.905,
           "n": 188
         },
         "rbbb": {

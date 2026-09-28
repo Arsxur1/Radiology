@@ -402,6 +402,56 @@ chosen on. The cost is 3–5 points of family specificity, spent knowingly: the
 alternative (missing half of the AF) is the worse clinical error, and AF is not a
 critical alert in this system.
 
+### Learnable layer — hold-out and cross-dataset (item 5a)
+
+Per-class `HistGradientBoostingClassifier` on 79 Layer-3 features (intervals, axis,
+voltages, per-lead J/J+60/J+80 and net QRS, T-morphology flags, atrial-band
+spectrum, RR statistics). Training: 1584 ecg-arrhythmia records (`fetch_physionet
+--seed 1`, 1322 records from other folders + the 300 slice; 38 hold-out duplicates
+removed). Hold-out: the balanced 664 (same database, disjoint records). Cross-dataset:
+PTB-XL 1692. Threshold 0.5. Numbers are sens / spec for rules alone, model alone,
+and rules ∪ model (the pipeline's effective behaviour when a suggestion is allowed).
+
+| Class | hold-out rules | model | ∪ | PTB-XL rules | model | ∪ |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| atrial_fibrillation | 0.80 / 0.73 | 0.60 / 0.87 | 0.86 / 0.70 | 0.55 / 0.97 | 0.44 / 0.97 | 0.72 / 0.94 |
+| atrial_flutter | 0.01 / 1.00 | 0.62 / 0.87 | 0.62 / 0.87 | 0.51 / 1.00 | 0.51 / 0.93 | 0.71 / 0.93 |
+| sinus_rhythm | 0.89 / 0.84 | 0.76 / 0.97 | 0.91 / 0.84 | 0.83 / 0.78 | 0.60 / 0.91 | 0.84 / 0.78 |
+| sinus_bradycardia | 0.93 / 0.98 | 0.89 / 0.99 | 0.94 / 0.97 | 0.96 / 0.88 | 0.95 / 0.89 | 0.97 / 0.87 |
+| sinus_tachycardia | 0.91 / 0.89 | 0.85 / 0.98 | 0.95 / 0.89 | 0.92 / 0.96 | 0.83 / 0.97 | 0.95 / 0.95 |
+| first_degree_av_block | 0.68 / 0.94 | 0.54 / 0.98 | 0.72 / 0.93 | 0.63 / 0.92 | 0.47 / 0.95 | 0.64 / 0.91 |
+| rbbb | 0.72 / 0.98 | 0.86 / 1.00 | 0.87 / 0.98 | 0.85 / 0.93 | 0.93 / 0.96 | 0.97 / 0.92 |
+| lbbb | 0.71 / 0.94 | 0.70 / 0.98 | 0.87 / 0.92 | 0.57 / 0.88 | 0.73 / 0.97 | 0.88 / 0.86 |
+| lvh | 0.90 / 0.91 | 0.77 / 0.97 | 0.92 / 0.91 | 0.35 / 0.97 | 0.10 / 1.00 | 0.36 / 0.97 |
+| low_qrs_voltage | 0.72 / 0.86 | 0.65 / 0.96 | 0.86 / 0.84 | 0.74 / 0.91 | 0.50 / 0.91 | 0.81 / 0.85 |
+| long_qt | 0.70 / 0.86 | 0.30 / 0.97 | 0.70 / 0.84 | 0.49 / 0.89 | 0.14 / 0.99 | 0.50 / 0.88 |
+| st_depression | 0.48 / 0.82 | 0.55 / 0.93 | 0.65 / 0.79 | 0.23 / 0.80 | 0.27 / 0.90 | 0.36 / 0.77 |
+| st_elevation | 0.38 / 0.98 | 0.64 / 0.98 | 0.66 / 0.97 | 0.00 / 0.97 | 0.00 / 0.96 | 0.00 / 0.94 |
+| left_axis_deviation | 0.87 / 0.86 | 0.76 / 0.91 | 0.94 / 0.84 | 0.36 / 0.84 | 0.27 / 0.89 | 0.41 / 0.82 |
+| right_axis_deviation | 0.69 / 0.96 | 0.71 / 0.97 | 0.84 / 0.96 | 0.89 / 0.96 | 0.84 / 0.97 | 0.91 / 0.96 |
+
+Honest reading:
+
+- The model beats the rules where the rule is a crude threshold over morphology —
+  RBBB, LBBB, ST elevation on the hold-out (0.38 → 0.64 at equal specificity) — and
+  loses where the rule computes a physical quantity (LVH, long QT, low voltage,
+  first-degree AV block): 79 summary features do not see the waveform.
+- Flutter 0.62 on the hold-out is the model learning the Ningbo label's semantics
+  from the same database (irregular response, no organised P); on PTB-XL it equals
+  the rule (0.51) at lower specificity. Cross-dataset, the model degrades more than
+  the rules on almost every class — the rules encode physiology, the model encodes
+  a database.
+- Rules ∪ model buys 5–15 points of sensitivity for 1–5 of specificity nearly
+  everywhere, which is why the integration is "evidence, never authority" (D33):
+  `ml_p` on rule findings, a confidence bump on agreement, and `ml_suggested_*` only
+  for classes with spec ≥ 0.95 on **both** sets and sens ≥ rules on PTB-XL —
+  `rbbb`, `lbbb`, `st_elevation` (the last passes the PTB-XL test vacuously, 0.00 ≥
+  0.00; its real value is the hold-out). The safety layer never reads ML output.
+- Reproducible: `python -m cardiolens.ml.train --train data/ecg-arrhythmia-train
+  data/ecg-arrhythmia --holdout data/ecg-arrhythmia-balanced --cross data/ptbxl
+  --report configs/models/rhythm_hgb.report.json`; the JSON report is committed,
+  the 7 MB joblib is not.
+
 ### Paper-page digitisation benchmark (item 5d)
 
 Synthetic 12-lead pages (3×4 layout + lead-II rhythm strip, 6 px/mm, 25 mm/s,
