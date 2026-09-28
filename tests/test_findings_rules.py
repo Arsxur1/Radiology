@@ -198,3 +198,24 @@ def test_infarct_territory_rule_is_critical():
     g = analyze(fnd, load_rule_base(), _sig().context)
     assert "coronary_occlusion_territory" in g.activated_rules
     assert g.critical_flags  # infarct territory rule is critical
+
+
+def _irbbb_codes(qrs, term):
+    m = Measurements(heart_rate_bpm=72, rhythm_regular=True, qrs_v1_terminal_positive=term,
+                     intervals=Intervals(pr_ms=160, qrs_ms=qrs, qt_ms=380, qtc_bazett_ms=415))
+    return _find(m).codes()
+
+
+def test_incomplete_rbbb_boundaries():
+    assert "incomplete_rbbb" in _irbbb_codes(105, True)
+    # 110-119 ms with an R' in V1 is incomplete RBBB, not a nonspecific delay.
+    codes = _irbbb_codes(115, True)
+    assert "incomplete_rbbb" in codes and "wide_qrs_nonspecific" not in codes
+    assert "rbbb" in _irbbb_codes(130, True) and "incomplete_rbbb" not in _irbbb_codes(130, True)
+    assert "incomplete_rbbb" not in _irbbb_codes(70, True)      # narrow rSr': normal variant
+    assert "incomplete_rbbb" not in _irbbb_codes(105, False)
+    # Children: an rSR' in V1 is a common normal variant -> never incomplete RBBB.
+    m = Measurements(heart_rate_bpm=95, rhythm_regular=True, qrs_v1_terminal_positive=True,
+                     intervals=Intervals(pr_ms=130, qrs_ms=85, qt_ms=320, qtc_bazett_ms=400))
+    kid = detect_findings(_sig(age_years=8), m, norms=load_norms("pediatric"), la_ra_reversed=False)
+    assert "incomplete_rbbb" not in kid.codes()

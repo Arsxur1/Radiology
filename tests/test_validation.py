@@ -70,6 +70,8 @@ def test_real_dataset_scored_labels_derive_from_maps():
     # Flutter is scored on PTB-XL too (AFLT), so a weak detector stays visible.
     assert PTBXL_SCP_TO_CODE["AFLT"] == "atrial_flutter"
     assert PTBXL_SCP_TO_CODE["PVC"] == "ventricular_ectopy"
+    assert PTBXL_SCP_TO_CODE["IRBBB"] == "incomplete_rbbb"
+    assert SNOMED_TO_CODE["713426002"] == "incomplete_rbbb"
     assert SNOMED_TO_CODE["164884008"] == "ventricular_ectopy"  # CPSC 2018 PVC class
 
 

@@ -55,7 +55,7 @@ PTBXL_SCP_TO_CODE = {
     "SR": "sinus_rhythm", "SBRAD": "sinus_bradycardia", "STACH": "sinus_tachycardia",
     "1AVB": "first_degree_av_block", "STE_": "st_elevation", "STD_": "st_depression",
     "CRBBB": "rbbb", "CLBBB": "lbbb", "AFIB": "atrial_fibrillation", "LVH": "lvh",
-    "RVH": "rvh", "PACE": "paced_rhythm", "AFLT": "atrial_flutter", "PVC": "ventricular_ectopy",
+    "RVH": "rvh", "PACE": "paced_rhythm", "AFLT": "atrial_flutter", "PVC": "ventricular_ectopy", "IRBBB": "incomplete_rbbb",
     "SVTAC": "supraventricular_tachycardia", "PSVT": "supraventricular_tachycardia",
 }
 
@@ -245,7 +245,7 @@ SNOMED_TO_CODE = {
     "270492004": "first_degree_av_block",
     "27885002": "complete_av_block",
     "733534002": "lbbb", "164909002": "lbbb",
-    "713427006": "rbbb", "59118001": "rbbb",
+    "713427006": "rbbb", "59118001": "rbbb", "713426002": "incomplete_rbbb",
     "164931005": "st_elevation",
     "429622005": "st_depression",
     "39732003": "left_axis_deviation",

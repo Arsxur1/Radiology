@@ -33,6 +33,8 @@ _AFIB_RR_CV_MIN = 0.12
 _AFIB_RR_MAD_CV_MIN = 0.06
 # Too few beats for a robust dispersion (rr_mad_cv undefined): previous rule.
 _AFIB_RR_CV_MIN_NO_MAD = 0.15
+# Incomplete RBBB: minimum measured QRS (D27).
+_IRBBB_QRS_MIN_MS = 80.0
 
 # Coronary territories and their reciprocal leads (TZ §7.2, §8.1).
 _TERRITORIES = [
@@ -173,7 +175,7 @@ def detect_findings(
                          prolonged_leads=leads_txt), confidence=0.85,
         ))
 
-    _conduction_findings(m, norms, fs)
+    _conduction_findings(m, norms, fs, is_pediatric)
     _qt_findings(iv, norms, is_pediatric, sig, fs)
 
     # Atrial fibrillation: irregularly-irregular rhythm (§7.1). Absent/chaotic P
@@ -420,12 +422,31 @@ def _low_voltage_findings(m: Measurements, norms, fs: FindingSet) -> None:
         ))
 
 
-def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
+def _conduction_findings(m: Measurements, norms, fs: FindingSet, is_pediatric: bool = False) -> None:
     """Classify a wide QRS into WPW / RBBB / LBBB / nonspecific (TZ §7.1)."""
     iv = m.intervals
     qrs_hi = norms.get("intervals_ms", {}).get("qrs", [None, None])[1]
     pr_lo = norms.get("intervals_ms", {}).get("pr", [None, None])[0]
-    if iv.qrs_ms is None or not qrs_hi or iv.qrs_ms <= qrs_hi:
+    if iv.qrs_ms is None or not qrs_hi:
+        return
+    block_min = norms.get("intervals_ms", {}).get("qrs_complete_block") or qrs_hi
+    # Incomplete RBBB (D27): RBBB morphology (terminal R' in V1) with a partly
+    # widened QRS. Adults only — an rSR' in V1 is a common normal variant in
+    # children, and a narrow (<80 ms) rSr' is a normal variant at any age. The
+    # lower bound sits below the textbook 110 ms because the energy width reads
+    # incomplete RBBB short (median 100 ms). Development data (PTB-XL outside
+    # fold 10): sens 0.47, spec 0.968 (0.52 / 0.967 with no lower bound).
+    if _IRBBB_QRS_MIN_MS <= iv.qrs_ms < block_min and m.qrs_v1_terminal_positive is True \
+            and not is_pediatric \
+            and not (pr_lo and iv.pr_ms is not None and iv.pr_ms < pr_lo and iv.qrs_ms > qrs_hi):
+        fs.findings.append(Finding(
+            code="incomplete_rbbb", group="interval",
+            label_ru=f"Неполная блокада правой ножки (QRS {iv.qrs_ms} мс, rSR' в V1)",
+            label_uz=f"O'ng oyoqcha to'liqsiz blokadasi (QRS {iv.qrs_ms} ms, V1 da rSR')",
+            evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="positive"), confidence=0.6,
+        ))
+        return
+    if iv.qrs_ms <= qrs_hi:
         return
     # Short PR + wide QRS -> pre-excitation (WPW): the wide QRS is explained by a
     # delta wave, not by a bundle branch block (TZ §8.1).
@@ -443,7 +464,6 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
     # source of false positives on real records.
     # Complete-block threshold; if a norms config omits it, fall back to the
     # upper QRS norm (prior behaviour) rather than disabling all BBB detection.
-    block_min = norms.get("intervals_ms", {}).get("qrs_complete_block") or qrs_hi
     term = m.qrs_v1_terminal_positive
     complete = iv.qrs_ms >= block_min
     if complete and term is True:

@@ -264,7 +264,7 @@ _AF_EXCLUDES = ("sinus_rhythm", "sinus_tachycardia", "first_degree_av_block",
 # (e.g. lbbb +26/-0, t_inversion +43/-2, first_degree_av_block +35/-5).
 # st_elevation is deliberately NOT suppressed: it is a §10 must-not-miss finding
 # and STEMI remains diagnosable in paced rhythm (Sgarbossa criteria).
-_PACED_EXCLUDES = ("lbbb", "rbbb", "wide_qrs_nonspecific", "lvh", "first_degree_av_block",
+_PACED_EXCLUDES = ("lbbb", "rbbb", "incomplete_rbbb", "wide_qrs_nonspecific", "lvh", "first_degree_av_block",
                    "sinus_rhythm", "left_axis_deviation", "st_depression", "t_inversion")
 
 
