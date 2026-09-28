@@ -240,7 +240,7 @@ first-run column is the table above.
 | low_qrs_voltage | 0.69 / 0.85 | 0.72 / 0.86 | 81 |
 | lvh | 0.88 / 0.91 | 0.90 / 0.91 | 51 |
 | st_elevation (alert) | 0.40 / 0.98 | 0.38 / 0.98 | 58 |
-| *st_elevation_any (family)* | — | *0.81 / 0.84* | 58 |
+| *st_elevation_any (family)* | — | *0.83 / 0.82* | 58 |
 | st_depression | 0.48 / 0.82 | 0.48 / 0.82 | 85 |
 | long_qt | 0.17 / 0.93 | 0.70 / 0.86 | 23 |
 
@@ -264,8 +264,9 @@ Macro sensitivity 0.60 → **0.65**. Reading:
 - **First-degree AV block** 0.73 → 0.68 / 0.89 → 0.94: the AF/flutter/dissociation
   gates suppress PR in more records; the trade favours specificity.
 - **ST elevation (alert)** unchanged at spec 0.98; the neutral `st_elevation_any`
-  descriptor (D32) covers 0.81 of the "ST tilt up" label at 0.84 specificity —
-  the first version without the J+60 plateau fired on half the set (spec 0.51).
+  descriptor (D32, thresholds revised in D37) covers 0.83 of the "ST tilt up" label
+  at 0.82 specificity — the first version without the J+60 plateau fired on half
+  the set (spec 0.51).
 
 ### Measured results — PTB-XL (1692 records, item 4)
 
@@ -291,7 +292,7 @@ before that the axis and ST-territory logic silently ran on 9 leads.
 | lvh | — | 0.35 / 0.97 | 198 |
 | wpw_preexcitation | — | 0.35 / 0.98 | 79 |
 | st_elevation (alert) | — | 0.00 / 0.97 | 28 |
-| *st_elevation_any (family)* | — | *0.18 / 0.80* | 28 |
+| *st_elevation_any (family)* | — | *0.61 / 0.79* | 28 |
 | st_depression | — | 0.23 / 0.80 | 107 |
 | long_qt | — | 0.49 / 0.89 | 117 |
 
@@ -317,12 +318,11 @@ Macro sensitivity 0.44 → **0.57**. Reading, by clinical weight:
 - **Left-axis deviation 0.00 → 0.36**: the 0.00 was the lead-name bug (aVL/aVF
   absent → axis undefined). 0.36 / 0.84 against PTB-XL's `heart_axis` field, which
   its own algorithm assigns; not investigated further.
-- **ST elevation**: none of the 28 STE_ records reaches the STEMI alert, and only 18
-  % reach `st_elevation_any`. The contiguity + J+60 plateau + sex/age V2–V3 rules
-  are stricter than the STE_ label (which includes single-lead and early-
-  repolarisation-like elevation), and the plateau requirement introduced for
-  ecg-arrhythmia's "ST tilt up" over-calling (spec 0.51 → 0.84 there) costs
-  coverage here. This is the clearest open item after this increment.
+- **ST elevation**: none of the 28 STE_ records reaches the STEMI alert — and
+  should not: STE_ is "non-specific ST elevation" (13 of 28 otherwise NORM), not an
+  MI label. The descriptor `st_elevation_any` went from 0.18 to 0.61 at unchanged
+  specificity once it stopped inheriting the STEMI sex/age V2–V3 thresholds (D37,
+  analysis in its own section below).
 - **LVH 0.35 / 0.97** on Sokolow-Lyon alone (PTB-XL's LVH is a mixed voltage +
   strain label); **WPW 0.35**: the short-PR + delta rule misses intermittent
   pre-excitation; **long QT 0.49 / 0.89** with the tangent method (LNGQT includes
