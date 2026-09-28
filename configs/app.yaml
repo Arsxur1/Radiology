@@ -49,8 +49,12 @@ pause:
 # spike_ratio = max|diff| / p99|diff|; >= this flags paced rhythm. Tuned on
 # PTB-XL (60 PACE vs 60 SR): 5.5 is the knee — sens 0.83 / spec 0.95 / PPV 0.94,
 # the highest sensitivity that still holds specificity at 0.95 (DECISIONS.md).
+# D24: an artifact spike also makes an extreme outlier, so the spike must be
+# time-locked to the QRS (5-200 ms before R) on >= coupling_min of the beats.
+# Development data: all 40 false paced calls had coupling <= 0.10.
 pacing:
   spike_ratio_min: 5.5
+  coupling_min: 0.20
 
 # Signal-organization quality gate (TZ §5). Beat-template consistency is the
 # median correlation of each QRS to the median beat: high for real ECG (incl.

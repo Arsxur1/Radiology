@@ -26,7 +26,11 @@ from cardiolens.contracts.report import InterpretationReport
 from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer2_preprocess import assess_quality, preprocess
 from cardiolens.layer3_measure import measure
-from cardiolens.layer3_measure.measure import pacing_spike_ratio
+from cardiolens.layer3_measure.measure import (
+    pacing_spike_coupling,
+    pacing_spike_ratio,
+    pacing_spike_times,
+)
 from cardiolens.layer4_findings import detect_findings
 from cardiolens.layer5_causal import analyze
 from cardiolens.layer6_interpret import InterpretationInput, interpret
@@ -69,6 +73,7 @@ def run_pipeline(
     # Pacing-spike detection runs on the RAW signal (§7.1): the narrow, high-slew
     # pacer spike is removed by the Layer-2 bandpass, so measure it before that.
     pacing_ratio = pacing_spike_ratio(sig)
+    spike_times = pacing_spike_times(sig) if pacing_ratio >= cfg.pacing.spike_ratio_min else []
 
     # Layer 2 — preprocess + quality (TZ §5).
     pp = cfg.preprocessing
@@ -135,14 +140,23 @@ def run_pipeline(
         audit.append(f"[L4] pause: max_rr={m.max_rr_ms} ms ratio={m.pause_ratio}")
     # Paced rhythm (TZ §7.1) — the pacer spike is an extreme slope outlier on the
     # RAW signal (measured above, before the bandpass that would erase it).
-    if pacing_ratio >= cfg.pacing.spike_ratio_min:
+    # The spike must also be time-locked to the QRS: an artifact spike is an
+    # equally extreme slope outlier but lands at random (DECISIONS D24).
+    coupling = pacing_spike_coupling(
+        spike_times, [r / sig.sampling_rate_hz for r in (m.r_peaks_samples or [])])
+    if pacing_ratio >= cfg.pacing.spike_ratio_min and coupling >= cfg.pacing.coupling_min:
         findings.findings.append(Finding(
             code="paced_rhythm", group="rhythm",
-            label_ru=f"Ритм электрокардиостимулятора (спайк ×{pacing_ratio})",
-            label_uz=f"Kardiostimulyator ritmi (spike ×{pacing_ratio})",
-            evidence=[Evidence(feature="pacing_spike_ratio", value=str(pacing_ratio))],
+            label_ru=f"Ритм электрокардиостимулятора (спайк ×{pacing_ratio}, "
+                     f"связан с QRS в {coupling:.0%} ударов)",
+            label_uz=f"Kardiostimulyator ritmi (spike ×{pacing_ratio}, QRS bilan {coupling:.0%})",
+            evidence=[Evidence(feature="pacing_spike_ratio", value=str(pacing_ratio)),
+                      Evidence(feature="spike_qrs_coupling", value=str(coupling))],
             confidence=0.8))
-        audit.append(f"[L4] paced rhythm: spike_ratio={pacing_ratio}")
+        audit.append(f"[L4] paced rhythm: spike_ratio={pacing_ratio} coupling={coupling}")
+    elif pacing_ratio >= cfg.pacing.spike_ratio_min:
+        audit.append(f"[L4] slope outlier ×{pacing_ratio} not QRS-locked "
+                     f"(coupling {coupling}) — not called paced")
     _apply_rhythm_hierarchy(findings, m, audit)
     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)

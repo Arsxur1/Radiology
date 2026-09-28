@@ -128,6 +128,42 @@ def test_pacing_spike_ratio_separates_paced_from_clean():
     assert pacing_spike_ratio(paced) >= 6.0
 
 
+
+def _spiked_ecg(offset_s):
+    """Synthetic ECG with a pacer-like spike at (R peak + offset_s) on every beat."""
+    from cardiolens.pipeline import run_pipeline
+    base = generate_synthetic_ecg(heart_rate_bpm=72)
+    r_s = [r / 500.0 for r in run_pipeline(base.model_copy(deep=True), mode="A")
+           .measurements.r_peaks_samples]
+    sig = generate_synthetic_ecg(heart_rate_bpm=72)
+    fs = sig.sampling_rate_hz
+    ii = sig.lead_names.index("II")
+    amp = float(np.max(np.abs(sig.signal[ii]))) * 3.0   # one-sample step: extreme slope
+    for t in r_s:
+        i = int(round((t + offset_s) * fs))
+        if 0 <= i < sig.signal.shape[1]:
+            sig.signal[ii, i] += amp
+    return sig
+
+
+def test_paced_call_requires_spike_locked_to_qrs():
+    from cardiolens.pipeline import run_pipeline
+    locked = run_pipeline(_spiked_ecg(-0.04), mode="A")      # 40 ms before each R
+    assert "paced_rhythm" in locked.findings.codes()
+    # Same spikes mid-diastole (artifact-like, not QRS-locked) -> not paced.
+    random_ = run_pipeline(_spiked_ecg(+0.40), mode="A")
+    assert "paced_rhythm" not in random_.findings.codes()
+    assert any("not QRS-locked" in a for a in random_.audit_log)
+
+
+def test_pacing_spike_coupling_math():
+    from cardiolens.layer3_measure.measure import pacing_spike_coupling
+    r = [1.0, 2.0, 3.0, 4.0]
+    assert pacing_spike_coupling([0.95, 1.95, 2.95, 3.95], r) == 1.0
+    assert pacing_spike_coupling([1.5, 2.5], r) == 0.0
+    assert pacing_spike_coupling([0.99], r) == 0.25
+
+
 # --- Layer 4: findings ---
 def test_svt_vs_sinus_tachycardia():
     # A regular narrow-complex tachy >=140/min is SVT, not sinus tachycardia.

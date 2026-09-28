@@ -66,8 +66,10 @@ class PauseConfig(BaseModel):
 
 
 class PacingConfig(BaseModel):
-    """Paced-rhythm spike-detection threshold (TZ §7.1)."""
+    """Paced-rhythm spike detection (TZ §7.1): an extreme slope outlier that is
+    also time-locked to the QRS on at least coupling_min of the beats."""
     spike_ratio_min: float = 5.5
+    coupling_min: float = 0.2
 
 
 class QualityConfig(BaseModel):
