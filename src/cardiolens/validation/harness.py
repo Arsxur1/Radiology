@@ -213,8 +213,12 @@ def build_ptbxl_dataset(root: str | Path, limit: int = 50,
 
 
 # SNOMED-CT concept id -> CardioLens finding code, for the PhysioNet
-# ecg-arrhythmia (Chapman-Shaoxing / Ningbo) 12-lead database. Extend as
-# finding coverage grows; unmapped codes are ignored during scoring.
+# ecg-arrhythmia (Chapman-Shaoxing / Ningbo) 12-lead database and the PhysioNet
+# Challenge 2021 sources (Georgia, CPSC 2018, INCART, PTB, ...), which share the
+# same WFDB + ``#Dx:`` SNOMED header format. Only codes whose meaning matches a
+# finding's definition are mapped: e.g. generic "bradycardia" (426627000) and
+# "prolonged PR" (164947007) are left out rather than equated with sinus
+# bradycardia / first-degree AV block. Unmapped codes are ignored when scoring.
 SNOMED_TO_CODE = {
     "426783006": "sinus_rhythm",
     "426177001": "sinus_bradycardia",
@@ -234,6 +238,10 @@ SNOMED_TO_CODE = {
     "89792004": "rvh",
     "251146004": "low_qrs_voltage",
     "111975006": "long_qt",
+    # Challenge 2021 scored classes that match emitted findings.
+    "10370003": "paced_rhythm",                                  # pacing rhythm
+    "59931005": "t_inversion",                                   # T-wave inversion
+    "427172004": "ventricular_ectopy", "17338001": "ventricular_ectopy",  # PVC / VPB
 }
 
 

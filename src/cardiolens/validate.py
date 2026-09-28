@@ -3,6 +3,7 @@
     python -m cardiolens.validate                        # synthetic labelled dataset
     python -m cardiolens.validate --ptbxl <root>         # real PTB-XL (local checkout)
     python -m cardiolens.validate --ecg-arrhythmia <root>  # Chapman/Ningbo (local checkout)
+    python -m cardiolens.validate --challenge2021 <root>   # Challenge 2021 source (e.g. georgia)
 
 Each source scores the finding codes its label map can actually supply
 (``PTBXL_SCORED_LABELS`` / ``ECG_ARRHYTHMIA_SCORED_LABELS``); pass ``--labels``
@@ -31,6 +32,9 @@ def main() -> None:
     ap.add_argument("--ptbxl", help="path to a local PTB-XL checkout")
     ap.add_argument("--ecg-arrhythmia",
                     help="path to a local PhysioNet ecg-arrhythmia (Chapman/Ningbo) checkout")
+    ap.add_argument("--challenge2021",
+                    help="path to a local PhysioNet Challenge 2021 source directory "
+                         "(e.g. training/georgia) — same WFDB + SNOMED #Dx format")
     ap.add_argument("--ludb",
                     help="path to a local LUDB checkout — reports delineation accuracy "
                          "(PR/QRS/QT bias + MAE vs expert annotations) instead of findings")
@@ -60,9 +64,11 @@ def main() -> None:
         cases = build_ptbxl_dataset(args.ptbxl, limit=args.limit, folds=folds)
         source = f"PTB-XL ({args.ptbxl}{f', fold {args.fold}' if folds else ''})"
         labels = PTBXL_SCORED_LABELS
-    elif args.ecg_arrhythmia:
-        cases = build_ecg_arrhythmia_dataset(args.ecg_arrhythmia, limit=args.limit)
-        source = f"ecg-arrhythmia ({args.ecg_arrhythmia})"
+    elif args.ecg_arrhythmia or args.challenge2021:
+        root = args.ecg_arrhythmia or args.challenge2021
+        cases = build_ecg_arrhythmia_dataset(root, limit=args.limit)
+        source = (f"ecg-arrhythmia ({root})" if args.ecg_arrhythmia
+                  else f"PhysioNet Challenge 2021 ({root})")
         labels = ECG_ARRHYTHMIA_SCORED_LABELS
     else:
         cases = build_synthetic_dataset()

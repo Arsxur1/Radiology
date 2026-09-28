@@ -120,3 +120,13 @@ def test_select_ptbxl_rows_filters_official_fold():
     assert list(select_ptbxl_rows(db, folds=[9, 10]).index) == [2, 3, 4, 5]
     # No filter keeps the previous behaviour (first N rows).
     assert list(select_ptbxl_rows(db, limit=2).index) == [1, 2]
+
+
+def test_challenge2021_snomed_codes_map_to_matching_findings():
+    # Challenge 2021 scored classes that match emitted findings.
+    assert SNOMED_TO_CODE["10370003"] == "paced_rhythm"
+    assert SNOMED_TO_CODE["59931005"] == "t_inversion"
+    assert SNOMED_TO_CODE["427172004"] == SNOMED_TO_CODE["17338001"] == "ventricular_ectopy"
+    # Ambiguous codes stay unmapped rather than being equated with a narrower finding.
+    assert "426627000" not in SNOMED_TO_CODE   # generic bradycardia
+    assert "164947007" not in SNOMED_TO_CODE   # prolonged PR (scored separately from IAVB)
