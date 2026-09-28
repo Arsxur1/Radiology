@@ -175,7 +175,9 @@ def _pr_on_lead(lead: np.ndarray, rpeaks: np.ndarray, fs: float) -> float | None
 
 
 # Leads with an informational per-lead QT (D28); the rhythm lead's QT is added.
-_QT_LEADS = ("V1", "V2", "V5", "aVF")
+# Only leads already delineated for PR: an extra delineation per record just
+# for an informational value cost ~20% of measure() time.
+_QT_LEADS = ("V1", "V2", "aVF")
 _PR_LEADS = ("V1", "V2", "aVF")
 
 
