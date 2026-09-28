@@ -219,3 +219,17 @@ def test_incomplete_rbbb_boundaries():
                      intervals=Intervals(pr_ms=130, qrs_ms=85, qt_ms=320, qtc_bazett_ms=400))
     kid = detect_findings(_sig(age_years=8), m, norms=load_norms("pediatric"), la_ra_reversed=False)
     assert "incomplete_rbbb" not in kid.codes()
+
+
+def test_long_qt_is_qrs_adjusted():
+    # QTc 470 with a 140-ms QRS: 40 ms of it is depolarization -> 430, not long QT.
+    wide = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_v1_terminal_positive=False,
+                        intervals=Intervals(pr_ms=160, qrs_ms=140, qt_ms=440, qtc_bazett_ms=470))
+    assert "long_qt" not in _find(wide).codes()
+    # Same QTc with a narrow QRS stays long QT; a clearly long QTc stays long despite a wide QRS.
+    narrow = Measurements(heart_rate_bpm=70, rhythm_regular=True,
+                          intervals=Intervals(pr_ms=160, qrs_ms=90, qt_ms=440, qtc_bazett_ms=470))
+    assert "long_qt" in _find(narrow).codes()
+    very = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_v1_terminal_positive=False,
+                        intervals=Intervals(pr_ms=160, qrs_ms=140, qt_ms=500, qtc_bazett_ms=530))
+    assert "long_qt" in _find(very).codes()

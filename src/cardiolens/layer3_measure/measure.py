@@ -150,17 +150,32 @@ def _apply_correction(value: float | None, offset: float) -> float | None:
     return round(value + offset, 1)
 
 
-def _pr_on_lead(lead: np.ndarray, rpeaks: np.ndarray, fs: float) -> float | None:
-    """Median PR (ms, raw) on one lead, reusing shared R-peaks (§7.3 multi-lead PR)."""
+def _intervals_on_lead(lead: np.ndarray, rpeaks: np.ndarray, fs: float) -> tuple[float | None, float | None]:
+    """Median PR and QT (ms, raw) on one lead, reusing shared R-peaks (§7.3)."""
     waves = _delineate(lead, rpeaks, fs)
     if waves is None:
-        return None
+        return None, None
     p_on = np.asarray(waves.get("ECG_P_Onsets", []), dtype=float)
     qrs_on = np.asarray(waves.get("ECG_R_Onsets", []), dtype=float)
+    t_off = np.asarray(waves.get("ECG_T_Offsets", []), dtype=float)
     n = min(len(p_on), len(qrs_on))
     pr = [qrs_on[i] - p_on[i] for i in range(n)
           if np.isfinite(p_on[i]) and np.isfinite(qrs_on[i])]
-    return _median_ms(pr, fs, lo_ms=80, hi_ms=600)
+    k = min(len(qrs_on), len(t_off))
+    qt = [t_off[i] - qrs_on[i] for i in range(k)
+          if np.isfinite(qrs_on[i]) and np.isfinite(t_off[i])]
+    return (_median_ms(pr, fs, lo_ms=80, hi_ms=600),
+            _median_ms(qt, fs, lo_ms=200, hi_ms=900))
+
+
+def _pr_on_lead(lead: np.ndarray, rpeaks: np.ndarray, fs: float) -> float | None:
+    """Median PR (ms, raw) on one lead (§7.3 multi-lead PR)."""
+    return _intervals_on_lead(lead, rpeaks, fs)[0]
+
+
+# Leads whose QT enters the multi-lead median (D28); the rhythm lead's QT is added.
+_QT_LEADS = ("V1", "V2", "V5", "aVF")
+_PR_LEADS = ("V1", "V2", "aVF")
 
 
 def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
@@ -265,14 +280,26 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             if pr_ms is not None:
                 pr_by_lead["II"] = pr_ms
             pr_corr = getattr(correction, "pr_ms", 0.0) if correction is not None else 0.0
-            for lead_name in ("V1", "V2", "aVF"):
-                if lead_name not in sig.lead_names:
+            qt_corr = getattr(correction, "qt_ms", 0.0) if correction is not None else 0.0
+            qt_by_lead: dict[str, float] = {}
+            if qt_ms is not None:
+                qt_by_lead[sig.lead_names[lead_idx]] = qt_ms
+            for lead_name in dict.fromkeys(_PR_LEADS + _QT_LEADS):
+                if lead_name not in sig.lead_names or lead_name == sig.lead_names[lead_idx]:
                     continue
-                lead_pr = _pr_on_lead(sig.signal[sig.lead_names.index(lead_name)]
-                                      .astype(np.float64), rpeaks, fs)
-                if lead_pr is not None:
+                lead_pr, lead_qt = _intervals_on_lead(
+                    sig.signal[sig.lead_names.index(lead_name)].astype(np.float64), rpeaks, fs)
+                if lead_pr is not None and lead_name in _PR_LEADS:
                     pr_by_lead[lead_name] = round(lead_pr + pr_corr, 1)
+                if lead_qt is not None and lead_name in _QT_LEADS:
+                    qt_by_lead[lead_name] = round(lead_qt + qt_corr, 1)
             m.pr_ms_by_lead = pr_by_lead
+            # Multi-lead QT (D28): a single lead's T offset is noisy (normal ECGs
+            # read QTc up to ~490 ms at p90); the median over II/V1/V2/V5/aVF raised
+            # long-QT sens and spec together on development data.
+            m.qt_ms_by_lead = qt_by_lead
+            if len(qt_by_lead) >= 3:
+                m.intervals.qt_ms = round(float(np.median(list(qt_by_lead.values()))), 1)
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
