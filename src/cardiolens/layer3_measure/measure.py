@@ -37,6 +37,7 @@ from cardiolens.layer3_measure.intervals import (
     qtc_framingham,
     qtc_fridericia,
 )
+from cardiolens.layer3_measure.voltages import measure_voltages
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -51,6 +52,8 @@ P_PRESENCE_FRACTION = 0.15
 
 # PR-segment window used as the ST baseline: [onset-50 ms, onset-10 ms].
 ST_BASELINE_MS = (50.0, 10.0)
+J_REFINE_MS = 40                 # per-lead J may move this far past the envelope QRS offset
+J_REFINE_SLOPE_FRACTION = 0.15   # ... to where the lead's slope is this fraction of its QRS slope
 
 # Non-QRS detection filter: envelope peak below this fraction of the 90th-percentile
 # envelope peak across detections = P or T wave, not a beat.
@@ -300,14 +303,16 @@ def measure(sig: SignalRepresentation) -> Measurements:
     # --- Frontal QRS axis ---
     m.axes = Axes(qrs_deg=_qrs_axis(sig, rpeaks, fs))
 
-    # --- Sokolow-Lyon voltage (LVH) ---
+    # --- Sokolow-Lyon voltage (LVH) + the other hypertrophy voltages ---
     m.sokolow_lyon_uv = _sokolow_lyon(sig, rpeaks, fs)
+    m.voltages = measure_voltages(sig, rpeaks, qrs_on, fs,
+                                  {ld: _lead_mask(sig, ld, rpeaks, fs) for ld in sig.lead_names})
 
     # --- Terminal QRS forces in V1/V6 (RSR' / broad-S typing for BBB) ---
     for lead, attr in (("V1", "qrs_v1_terminal_positive"), ("V6", "qrs_v6_terminal_positive")):
         if lead in sig.lead_names:
             mk = _lead_mask(sig, lead, rpeaks, fs)
-            setattr(m, attr, terminal_qrs_sign(sig.lead(lead), rpeaks[mk], qrs_off[mk], fs))
+            setattr(m, attr, terminal_qrs_sign(sig.lead(lead), rpeaks[mk], qrs_off[mk], fs, qrs_on[mk]))
 
     # --- Limb-lead QRS amplitude (for low-voltage detection, TZ §7.5) ---
     m.qrs_amplitude_limb_uv = _limb_qrs_amplitude(sig, rpeaks, fs)
@@ -426,17 +431,27 @@ def _measure_st(
         return
     s60, s80 = int(0.06 * fs), int(0.08 * fs)
     b_lo, b_hi = int(ST_BASELINE_MS[0] / 1000.0 * fs), int(ST_BASELINE_MS[1] / 1000.0 * fs)
+    j_win = int(J_REFINE_MS / 1000.0 * fs)
     st_list: list[STMeasurement] = []
     all_pairs = [(int(a), int(b), i) for i, (a, b) in enumerate(zip(qrs_on, qrs_off))
                  if np.isfinite(a) and np.isfinite(b) and b > a]
     for li, lead in enumerate(sig.lead_names):
         row = sig.signal[li]
+        # Per-lead J refinement: the multi-lead envelope offset can land on the
+        # upstroke of a deep S wave in V1-V3 (anterior MI), reading the J point on
+        # the S wave; move J forward (<= J_REFINE_MS) to where this lead's slope has
+        # flattened to J_REFINE_SLOPE_FRACTION of its own QRS slope.
+        slope = np.abs(np.convolve(np.diff(row, prepend=row[0]), np.ones(max(1, int(0.005 * fs))) / max(1, int(0.005 * fs)), mode="same"))
         mk = _lead_mask(sig, lead, rpeaks, fs)
         lead_pairs = [(on, j) for on, j, i in all_pairs if mk[i]] or pairs
         j_vals, j60_vals, j80_vals = [], [], []
         for on, j in lead_pairs:
             lo, hi = max(0, on - b_lo), max(1, on - b_hi)
             baseline = float(np.median(row[lo:hi])) if hi > lo else float(row[max(0, on - 1)])
+            if j_win > 0 and j + j_win < len(row) and j > on:
+                qrs_slope = float(np.max(slope[on:j + 1]))
+                flat = np.flatnonzero(slope[j:j + j_win] <= J_REFINE_SLOPE_FRACTION * qrs_slope)
+                j = j + int(flat[0]) if flat.size else j + j_win
             if j < len(row):
                 j_vals.append(row[j] - baseline)
             if j + s60 < len(row):

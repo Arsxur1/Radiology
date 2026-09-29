@@ -133,6 +133,7 @@ def _standalone_codes() -> set[str]:
         "right_axis_deviation", "extreme_axis", "low_qrs_voltage",
         "left_atrial_enlargement", "right_atrial_enlargement",
         "st_elevation_nonspecific", "secondary_st_t_change", "st_elevation_any",
+        "lvh_probable", "rvh",
     }
 
 

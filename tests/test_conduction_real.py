@@ -50,3 +50,32 @@ def test_slow_rate_does_not_double_count_t_waves():
     r = _run(heart_rate_bpm=40, pr_ms=160, seed=20)
     assert r.measurements.heart_rate_bpm == pytest.approx(40, abs=2)
     assert "sinus_bradycardia" in r.findings.codes()
+
+
+def test_terminal_sign_ignores_discordant_st_segment():
+    """LBBB-like V1 (rS with elevated ST after the QRS): the terminal forces must be
+    read inside the lead's own QRS, not in the ST segment that the multi-lead
+    envelope offset can include (D41)."""
+    import numpy as np
+
+    from cardiolens.layer3_measure.delineation import terminal_qrs_sign
+
+    fs = 500.0
+    n = int(2.0 * fs)
+    row = np.zeros(n)
+    r = 500
+    # small r (10 ms), deep broad S (60 ms) returning to a +300 µV elevated ST plateau
+    row[r - 5: r] = 200
+    s_len = int(0.06 * fs)
+    row[r: r + s_len] = -1500 * np.sin(np.linspace(0, np.pi, s_len))
+    row[r + s_len: r + s_len + int(0.20 * fs)] = 300           # discordant ST elevation
+    late_off = np.array([r + s_len + int(0.03 * fs)], dtype=float)   # envelope offset 30 ms into the ST
+    on = np.array([r - 5], dtype=float)
+    assert terminal_qrs_sign(row, np.array([r]), late_off, fs, on) is False
+    # RBBB-like V1: rSR' — terminal forces positive even with the same late offset.
+    row2 = np.zeros(n)
+    row2[r - 5: r] = 300
+    row2[r: r + 20] = -400
+    row2[r + 20: r + 20 + 40] = 900 * np.sin(np.linspace(0, np.pi, 40))       # broad R'
+    late_off2 = np.array([r + 60 + int(0.03 * fs)], dtype=float)
+    assert terminal_qrs_sign(row2, np.array([r]), late_off2, fs, on) is True

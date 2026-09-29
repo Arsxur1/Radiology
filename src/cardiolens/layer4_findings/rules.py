@@ -15,6 +15,7 @@ from typing import Any
 from cardiolens.contracts.features import Measurements
 from cardiolens.contracts.findings import Evidence, Finding, FindingSet
 from cardiolens.contracts.signal import SignalRepresentation
+from cardiolens.layer4_findings.hypertrophy import hypertrophy_findings
 
 # Precordial leads where juvenile T-inversion is a normal variant in children.
 _PEDIATRIC_TINV_OK = {"V1", "V2", "V3", "V4"}
@@ -178,15 +179,11 @@ def detect_findings(
     # ------------------------------------------------------------------ #
     # Hypertrophy — LVH (TZ §7.4)
     # ------------------------------------------------------------------ #
-    lvh_thr = norms.get("voltage_uv", {}).get("sokolow_lyon_lvh")
-    if m.sokolow_lyon_uv is not None and lvh_thr and m.sokolow_lyon_uv > lvh_thr:
-        fs.findings.append(Finding(
-            code="lvh", group="hypertrophy",
-            label_ru=f"Гипертрофия ЛЖ (Соколов-Лайон {m.sokolow_lyon_uv} мкВ)",
-            label_uz=f"Chap qorincha gipertrofiyasi (Sokolow-Lyon {m.sokolow_lyon_uv} µV)",
-            evidence=_ev(sokolow_lyon_uv=m.sokolow_lyon_uv, threshold=lvh_thr),
-            confidence=0.8,
-        ))
+    # Axis first (Romhilt-Estes and the pediatric criteria use it), then
+    # Sokolow-Lyon / Cornell / Romhilt-Estes for adults, age-band voltages for
+    # children (layer4_findings/hypertrophy.py).
+    _axis_findings(m, norms, fs)
+    hypertrophy_findings(m, norms, fs, sig.patient)
 
     # ------------------------------------------------------------------ #
     # Ischemia — ST / T (TZ §7.2). Runs after conduction + LVH so secondary
@@ -221,7 +218,6 @@ def detect_findings(
     # ------------------------------------------------------------------ #
     # Axis deviation (TZ §7.4) and low QRS voltage (TZ §7.5)
     # ------------------------------------------------------------------ #
-    _axis_findings(m, norms, fs)
     _low_voltage_findings(m, norms, fs)
     _atrial_enlargement_findings(m, norms, fs)
 
@@ -439,6 +435,11 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
 
 
 _SECONDARY_ST_CONTEXT = {"rbbb", "lbbb", "wpw_preexcitation", "lvh"}
+# Contexts whose expected repolarisation can mimic ST ELEVATION (discordant to a
+# negative QRS): LBBB, pre-excitation, LVH strain. RBBB is not one of them — its
+# secondary change is ST depression / T inversion in V1-V3, so ST elevation with
+# an RBBB is primary (acute anterior MI with RBBB was vetoed on PTBDB, D38).
+_ELEVATION_MIMIC_CONTEXT = {"lbbb", "wpw_preexcitation", "lvh"}
 
 
 def _st_thresholds(norms, patient, lead: str) -> tuple[float | None, float | None]:
@@ -472,13 +473,14 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
     # With a bundle branch block, pre-excitation or LVH the expected repolarisation
     # is discordant to the QRS; only concordant deviations count as primary.
     secondary_ctx = bool(fs.codes() & _SECONDARY_ST_CONTEXT)
+    elevation_mimic_ctx = bool(fs.codes() & _ELEVATION_MIMIC_CONTEXT)
     elevated, depressed, discordant, any_elevated = [], [], [], []
     for st in m.morphology.st:
         elev, depr = _st_thresholds(norms, patient, st.lead)
         j, j60, j80 = st.j_point_uv, st.j60_uv, st.j80_uv
         # Descriptor needs a persisting elevation (J and J+60): a J-point-only bump
         # (early repolarisation, S-wave tail) fired on half of all records.
-        disc_elev = secondary_ctx and st.qrs_net_uv is not None and st.qrs_net_uv < 0
+        disc_elev = elevation_mimic_ctx and st.qrs_net_uv is not None and st.qrs_net_uv < 0
         if (st.lead != "aVR" and j is not None and j >= any_thr
                 and (j60 is None or j60 >= plateau * any_thr)
                 and (not disc_elev or j >= any_disc_thr)):
@@ -497,8 +499,8 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
             dev = -1
         if dev == 0:
             continue
-        if (secondary_ctx and st.qrs_net_uv is not None
-                and (st.qrs_net_uv > 0) != (dev > 0)):
+        ctx = elevation_mimic_ctx if dev > 0 else secondary_ctx
+        if ctx and st.qrs_net_uv is not None and (st.qrs_net_uv > 0) != (dev > 0):
             discordant.append(st.lead)
             # Discordant ELEVATION is the expected repolarisation of a BBB/LVH and
             # must not raise a STEMI alert. Discordant DEPRESSION is still ST

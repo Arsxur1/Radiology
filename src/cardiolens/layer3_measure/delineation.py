@@ -173,25 +173,46 @@ def refine_p_onsets(
     return p_on
 
 
+TERMINAL_SLOPE_FRACTION = 0.15   # lead-specific QRS end = last point this steep (of the lead's QRS slope)
+
+
 def terminal_qrs_sign(
-    row: np.ndarray, rpeaks: np.ndarray, qrs_off: np.ndarray, fs: float
+    row: np.ndarray, rpeaks: np.ndarray, qrs_off: np.ndarray, fs: float,
+    qrs_on: np.ndarray | None = None,
 ) -> bool | None:
     """Sign of the terminal QRS forces on one lead (True = positive).
 
-    Averages the last ``TERMINAL_MS`` before the QRS offset; when the offset is
-    unknown for a beat, falls back to the 20–60 ms window after R.
+    Averages the last ``TERMINAL_MS`` of the lead's OWN QRS: the multi-lead
+    envelope offset can be later than this lead's last deflection, and the window
+    then swallows the discordant ST segment (LBBB read as RBBB on 26 of 37 PTB-XL
+    misses, D41). The lead's QRS end is the last sample before the envelope offset
+    whose slope is still ``TERMINAL_SLOPE_FRACTION`` of the lead's QRS slope.
+    Baseline = PR segment when ``qrs_on`` is given, else the lead median.
     """
     if len(rpeaks) == 0:
         return None
-    baseline = float(np.median(row))
     w = int(TERMINAL_MS / 1000.0 * fs)
+    k = max(1, int(0.005 * fs))
+    slope = np.abs(np.convolve(np.diff(row, prepend=row[0]), np.ones(k) / k, mode="same"))
     vals = []
     for i, r in enumerate(rpeaks):
-        if i < len(qrs_off) and np.isfinite(qrs_off[i]):
-            b = int(qrs_off[i])
-            a = b - w
+        r = int(r)
+        if qrs_on is not None and i < len(qrs_on) and np.isfinite(qrs_on[i]) and qrs_on[i] > int(0.05 * fs):
+            on = int(qrs_on[i])
+            baseline = float(np.median(row[on - int(0.05 * fs): max(on - int(0.01 * fs), on - int(0.05 * fs) + 1)]))
         else:
-            a, b = int(r) + int(0.02 * fs), int(r) + int(0.06 * fs)
+            baseline = float(np.median(row))
+        if i < len(qrs_off) and np.isfinite(qrs_off[i]) and qrs_off[i] > r:
+            off = int(qrs_off[i])
+            seg = slope[max(0, r - int(0.06 * fs)): off + 1]
+            if seg.size:
+                steep = np.flatnonzero(slope[r: off + 1] >= TERMINAL_SLOPE_FRACTION * float(seg.max()))
+                end = r + int(steep[-1]) + 1 if steep.size else off
+            else:
+                end = off
+            a, b = end - w, end
+        else:
+            a, b = r + int(0.02 * fs), r + int(0.06 * fs)
         if 0 <= a < b <= len(row):
             vals.append(float(np.mean(row[a:b]) - baseline))
     if not vals:

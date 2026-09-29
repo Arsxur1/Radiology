@@ -42,6 +42,22 @@ class STMeasurement(BaseModel):
     qrs_net_uv: float | None = None   # signed net QRS deflection (concordance checks)
 
 
+class Voltages(BaseModel):
+    """Per-lead QRS voltages for hypertrophy criteria (µV / ms; TZ §7.4)."""
+
+    r_avl_uv: float | None = None
+    s_v3_uv: float | None = None
+    r_v5_uv: float | None = None
+    r_v6_uv: float | None = None
+    s_v1_uv: float | None = None
+    s_v2_uv: float | None = None
+    r_v1_uv: float | None = None
+    s_v6_uv: float | None = None
+    r_max_limb_uv: float | None = None          # tallest R or deepest S in any limb lead
+    intrinsicoid_v5_v6_ms: float | None = None  # QRS onset -> R peak (V5/V6, the later one)
+    p_terminal_v1_uv_ms: float | None = None    # negative terminal P force in V1 (|µV| x ms)
+
+
 class Morphology(BaseModel):
     """Waveform morphology descriptors (TZ §6)."""
 
@@ -76,6 +92,7 @@ class Measurements(BaseModel):
     n_beats: int = 0
     r_peaks_samples: list[int] = Field(default_factory=list)
     intervals: Intervals = Field(default_factory=Intervals)
+    voltages: Voltages = Field(default_factory=Voltages)
     axes: Axes = Field(default_factory=Axes)
     morphology: Morphology = Field(default_factory=Morphology)
     # Sokolow-Lyon voltage sum for LVH assessment (µV).

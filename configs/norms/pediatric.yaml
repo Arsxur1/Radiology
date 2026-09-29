@@ -45,6 +45,18 @@ axis_deg:
 
 voltage_uv:
   low_voltage_limb: 400
+  # Age-band 98th-percentile QRS voltages (µV) after Davignon et al. 1979/80 as
+  # reproduced in pediatric ECG references (Park), rounded to the bands used here —
+  # APPROXIMATE transcriptions, not a re-derivation. Adult LVH voltage criteria are
+  # not applied to children: a tall R is normal. LVH = RV6 or SV1 above the band's
+  # 98th percentile with a supporting sign (strain / left axis) or both voltages;
+  # RVH = RV1 and SV6 both above, or one with right axis deviation.
+  pediatric_98th_by_age:
+    - { label: "neonate <=30 d", age_days_max: 30,  r_v1: 2400, s_v1: 2000, r_v6: 1400, s_v6: 1000 }
+    - { label: "infant <=1 y",  age_years_max: 1,  r_v1: 2000, s_v1: 1800, r_v6: 2200, s_v6: 900 }
+    - { label: "1-3 y",         age_years_max: 3,  r_v1: 1800, s_v1: 2100, r_v6: 2300, s_v6: 700 }
+    - { label: "3-8 y",         age_years_max: 8,  r_v1: 1600, s_v1: 2300, r_v6: 2600, s_v6: 500 }
+    - { label: "8-15 y",        age_years_max: 15, r_v1: 1100, s_v1: 2500, r_v6: 2400, s_v6: 400 }
 
 st_uv:
   # Same J-point/plateau logic as adults; V2-V3 use a single 150 µV threshold.
