@@ -13,12 +13,9 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from cardiolens.arrhythmia import (
-    BeatClassifier,
     detect_pvc_beats,
     detect_ventricular_runs,
-    ectopy_findings,
     pvc_findings,
-    summarize_ectopy,
     vt_run_finding,
 )
 from cardiolens.calibration import TemperatureScaler
@@ -125,29 +122,18 @@ def run_pipeline(
     # Layer 4 — findings (TZ §7).
     norms = norms_for_patient(sig.patient.age_years, sig.patient.age_days)
     findings = detect_findings(sig, m, norms=norms, la_ra_reversed=la_ra_reversed)
-    # Ventricular ectopy (TZ §7.1). VT (a §10 alert) stays on the MIT-BIH beat
-    # classifier, tuned to a false-positive-free operating point; isolated PVCs
-    # and bigeminy use the 12-lead PVC rule, which the Holter-trained classifier
-    # under-detects and over-calls on 10-s 12-lead records (DECISIONS D25).
-    beat_model = BeatClassifier.load(configs_dir() / "beat_lda.json")
+    # Ventricular ectopy (TZ §7.1). VT (a §10 alert): runs of premature, abnormally
+    # shaped beats on the 12-lead strip (D40); sustained fast VT is also caught by the
+    # wide-complex tachycardia rule (D37). The MIT-BIH beat-classifier VT path was
+    # removed (D41): 0 of 153 development V runs, and every one of its 12-lead calls
+    # was a wide sinus/AF/SVT rhythm or pacing. Isolated PVCs and bigeminy use the
+    # 12-lead PVC rule (D25).
     vt_called = False
-    if beat_model.fitted and m.r_peaks_samples:
-        lead_idx = sig.lead_names.index("II") if "II" in sig.lead_names else 0
-        summary = summarize_ectopy(sig.signal[lead_idx], m.r_peaks_samples,
-                                   sig.sampling_rate_hz, beat_model)
-        vt = ectopy_findings(summary, vt_only=True)
-        findings.findings.extend(vt)
-        vt_called = bool(vt)
-        audit.append(f"[L4] beat classifier: {summary.n_ventricular}/{summary.n_beats} V, "
-                     f"VT={summary.vt}")
-    # Short ventricular runs on the 12-lead strip (D40): the MIT-BIH beat classifier
-    # missed every V run >= 3 on INCART 10-s windows.
-    if not vt_called:
-        runs = detect_ventricular_runs(sig, m.r_peaks_samples or [], sig.sampling_rate_hz)
-        if runs:
-            findings.findings.append(vt_run_finding(runs))
-            vt_called = True
-            audit.append(f"[L4] ventricular run(s) (first beat, beats, rate): {runs}")
+    runs = detect_ventricular_runs(sig, m.r_peaks_samples or [], sig.sampling_rate_hz)
+    if runs:
+        findings.findings.append(vt_run_finding(runs))
+        vt_called = True
+        audit.append(f"[L4] ventricular run(s) (first beat, beats, rate): {runs}")
     pvc_idx = detect_pvc_beats(sig, m.r_peaks_samples or [], sig.sampling_rate_hz)
     if pvc_idx and not vt_called:
         findings.findings.extend(pvc_findings(pvc_idx, len(m.r_peaks_samples)))
