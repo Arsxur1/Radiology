@@ -374,6 +374,36 @@ was not touched: its 54 PTB-XL false positives are mostly elderly patients with 
 elevation, some under an LBBB the detector missed (no secondary context → the
 discordant elevation counts as primary); there is no STEMI gold here to trade against.
 
+### Flutter on the Ningbo label — the records, seen (open item 3, D40)
+
+187 records of the balanced ecg-arrhythmia set carry the SNOMED flutter code and
+score 0.01 on `atrial_flutter`. Montages (II, V1, aVF, 5 s) of all 187 plus zoomed
+3-s views of 12 were rendered and ~55 inspected by eye:
+
+| What the traces show | Share of the inspected records |
+|---|:-:|
+| wide-QRS rhythms (LBBB-like / paced morphology), flat baseline, no sawtooth | ~40 % (a contiguous block JS131xx–JS132xx) |
+| narrow QRS with visible P waves before each beat (sinus, some irregular) | ~35 % |
+| narrow regular tachycardia 130–150 /min where 2:1 flutter is *possible* but no F-waves are visible | ~10 % |
+| AF-like irregular narrow QRS / low voltage, undecidable | ~15 % |
+
+Quantitatively, the F-wave spectral features (Welch peak in 3–6.5 Hz after QRS
+blanking, peak sharpness, band-power ratio) are no higher in these records than in
+the same set's sinus records at any gate setting; on PTB-XL the same features
+separate the classes:
+
+| Gate (sharpness / band ratio / leads agreeing) | PTB-XL AFLT 73 | PTB-XL sinus 1127 | Ningbo "flutter" 186 | Ningbo sinus 80 |
+|---|:-:|:-:|:-:|:-:|
+| ≥ 10 / ≥ 1.0 / ≥ 2 (current) | 0.68 | 0.048 | 0.03 | 0.037 |
+| ≥ 10 / ≥ 1.0 / ≥ 3 | 0.59 | 0.020 | 0.03 | 0.025 |
+| ≥ 6 / ≥ 0.5 / ≥ 2 | 0.89 | 0.245 | 0.07 | 0.188 |
+| ≥ 4 / ≥ 0.2 / ≥ 3 | 0.96 | 0.486 | 0.19 | 0.438 |
+
+Conclusion: the Ningbo flutter label does not describe visible atrial flutter in
+this subset, and no detector setting can recover it without flagging sinus records
+first. The detector keeps its D28 gates (PTB-XL AFLT 0.51 at spec 0.997 through the
+full pipeline); the AF-or-flutter family remains the honest number on this set.
+
 ### Pediatric stratum — PTB-XL, 64 records aged ≤ 15 (item 5b)
 
 `validate --ptbxl data/ptbxl --age-max 15`. All 64 children of PTB-XL are in the
