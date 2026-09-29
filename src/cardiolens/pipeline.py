@@ -15,9 +15,11 @@ import numpy as np
 from cardiolens.arrhythmia import (
     BeatClassifier,
     detect_pvc_beats,
+    detect_ventricular_runs,
     ectopy_findings,
     pvc_findings,
     summarize_ectopy,
+    vt_run_finding,
 )
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
@@ -138,6 +140,14 @@ def run_pipeline(
         vt_called = bool(vt)
         audit.append(f"[L4] beat classifier: {summary.n_ventricular}/{summary.n_beats} V, "
                      f"VT={summary.vt}")
+    # Short ventricular runs on the 12-lead strip (D40): the MIT-BIH beat classifier
+    # missed every V run >= 3 on INCART 10-s windows.
+    if not vt_called:
+        runs = detect_ventricular_runs(sig, m.r_peaks_samples or [], sig.sampling_rate_hz)
+        if runs:
+            findings.findings.append(vt_run_finding(runs))
+            vt_called = True
+            audit.append(f"[L4] ventricular run(s) (first beat, beats, rate): {runs}")
     pvc_idx = detect_pvc_beats(sig, m.r_peaks_samples or [], sig.sampling_rate_hz)
     if pvc_idx and not vt_called:
         findings.findings.extend(pvc_findings(pvc_idx, len(m.r_peaks_samples)))

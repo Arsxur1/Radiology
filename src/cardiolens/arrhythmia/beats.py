@@ -290,6 +290,82 @@ def detect_pvc_beats(sig, rpeaks, fs: float) -> list[int]:
     return out
 
 
+# Ventricular runs (non-sustained VT) on a 10-s strip (D40; first iteration D38).
+# Chosen on MIT-BIH DS1+DS2, INCART windows and PTB-XL/Chapman development records.
+_RUN_LEADS = ("II", "MLII", "V1", "V5")
+_RUN_TEMPLATE_PRE_MIN = 0.92   # template beats: not premature (pre-RR >= 0.92 x median)
+_RUN_CORR_MAX = 0.80           # every run beat: mean correlation to that template
+_RUN_CORR_CORE = 0.70          # ... and at least one clearly abnormal beat
+_RUN_MIN_BEATS = 3
+_RUN_PRE_MAX = 0.90            # the run starts early: RR <= 0.90 x the RR before it
+_RUN_MAX_RR_MS = 600.0         # >= 100/min inside the run
+
+
+def detect_ventricular_runs(sig, rpeaks, fs: float) -> list[tuple[int, int, float]]:
+    """Runs of >= 3 consecutive premature, abnormally shaped beats at >= 100/min.
+
+    Returns ``(first_beat, n_beats, rate_per_min)`` per run. The template is built
+    from beats that are not premature, so a run that is a large share of the strip
+    does not become the template itself; a run must be followed by a beat (a run
+    cut by the strip end is indistinguishable from end-of-strip filter artefact).
+    """
+    rp = np.asarray(rpeaks, dtype=int)
+    if rp.size < 6:
+        return []
+    leads = [n for n in _RUN_LEADS if n in sig.lead_names] or list(sig.lead_names[:3])
+    half = int(_PVC_HALF_S * fs)
+    n_samples = sig.signal.shape[1]
+    ok = [i for i, r in enumerate(rp) if r - half >= 0 and r + half < n_samples]
+    if len(ok) < 5:
+        return []
+    segs = {n: np.stack([sig.lead(n)[rp[i] - half:rp[i] + half].astype(float) for i in ok])
+            for n in leads}
+    rr = np.diff(rp).astype(float)
+    med = float(np.median(rr)) or 1.0
+    timing_normal = [k for k, i in enumerate(ok) if i >= 1 and rr[i - 1] >= _RUN_TEMPLATE_PRE_MIN * med]
+    pick = timing_normal if len(timing_normal) >= 3 else list(range(len(ok)))
+    tmpl = {n: np.median(segs[n][pick], axis=0) for n in leads}
+    corr = np.ones(len(rp))
+    for k, i in enumerate(ok):
+        corr[i] = np.mean([np.corrcoef(segs[n][k], tmpl[n])[0, 1] for n in leads])
+    abnormal = corr <= _RUN_CORR_MAX
+    out = []
+    j = 0
+    while j < len(rp):
+        if not abnormal[j]:
+            j += 1
+            continue
+        e = j
+        while e < len(rp) and abnormal[e]:
+            e += 1
+        inner_ms = rr[j:e - 1] / fs * 1000.0
+        # Prematurity against the preceding cycle, not the strip median: with frequent
+        # ectopy the median itself is short (D38 missed 19 INCART runs this way).
+        if (e - j >= _RUN_MIN_BEATS and j >= 2 and e < len(rp)
+                and float(corr[j:e].min()) <= _RUN_CORR_CORE
+                and rr[j - 1] <= _RUN_PRE_MAX * rr[j - 2]
+                and float(np.mean(inner_ms)) <= _RUN_MAX_RR_MS):
+            out.append((j, e - j, round(60000.0 / float(np.mean(inner_ms)))))
+        j = e
+    return out
+
+
+def vt_run_finding(runs: list[tuple[int, int, float]]):
+    """ventricular_tachycardia (critical) for the longest detected run (D40)."""
+    from cardiolens.contracts.findings import Evidence, Finding
+
+    _, n, rate = max(runs, key=lambda r: r[1])
+    return Finding(
+        code="ventricular_tachycardia", group="rhythm",
+        label_ru=f"Пробежка желудочковой тахикардии ({n} комплексов, ~{int(rate)}/мин)",
+        label_uz=f"Ventrikulyar taxikardiya yugurishi ({n} kompleks, ~{int(rate)}/daq)",
+        evidence=[Evidence(feature="run_beats", value=str(n)),
+                  Evidence(feature="run_rate_per_min", value=str(int(rate))),
+                  Evidence(feature="runs", value=str(len(runs)))],
+        confidence=0.7, critical=True,
+    )
+
+
 def pvc_findings(pvc_idx: list[int], n_beats: int):
     """ventricular_bigeminy (PVC on alternate beats) or ventricular_ectopy (D25)."""
     from itertools import pairwise

@@ -132,3 +132,23 @@ def test_pvc_explains_af_like_irregularity():
     rr_af = list(rng.uniform(450, 1100, 14))
     rp_af = np.cumsum([0] + rr_af)
     assert _pvc_explains_irregularity(rp_af, [6])[0] is False
+
+
+def test_ventricular_run_detector():
+    from cardiolens.arrhythmia import detect_ventricular_runs, vt_run_finding
+
+    # Sinus 75/min, then three premature wide beats at 125/min, then sinus again.
+    rr = [800] * 5 + [500, 480, 480, 1100] + [800] * 4
+    sig, rp = _pulse_train(rr, odd={6, 7, 8})
+    runs = detect_ventricular_runs(sig, rp, 500.0)
+    assert runs == [(6, 3, 125)]
+    f = vt_run_finding(runs)
+    assert f.code == "ventricular_tachycardia" and f.critical
+    # A couplet is not a run; a slow run (idioventricular, < 100/min) is not VT.
+    sig, rp = _pulse_train([800] * 5 + [500, 480, 1100] + [800] * 5, odd={6, 7})
+    assert detect_ventricular_runs(sig, rp, 500.0) == []
+    sig, rp = _pulse_train([800] * 5 + [700, 700, 700, 1100] + [800] * 4, odd={6, 7, 8})
+    assert detect_ventricular_runs(sig, rp, 500.0) == []
+    # Same-shaped premature beats (atrial run) and plain sinus: no ventricular run.
+    sig, rp = _pulse_train(rr)
+    assert detect_ventricular_runs(sig, rp, 500.0) == []
