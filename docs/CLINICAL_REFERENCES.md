@@ -729,6 +729,78 @@ Honest reading:
   --report configs/models/rhythm_hgb.report.json`; the JSON report is committed,
   the 7 MB joblib is not.
 
+### Learnable layer v2 — waveform features, mixed sources, the transfer gap (open item 8, D46)
+
+What changed: (1) **feature set v2** = the 79 summary features + 300 shape
+features (per lead the median beat, −250 … +450 ms around R, PR baseline,
+amplitude-normalised by the lead's QRS peak, 24 points, plus QRS/T energy
+ratios); the set is versioned in the artifact and in the feature cache, an
+artifact of another version is refused; (2) **mixed-source training**:
+ecg-arrhythmia 1322 + 300 and PTB-XL strat-folds 1–8 (1352) → 2936 records;
+hold-outs = the balanced 664 (same source) and PTB-XL folds 9–10 (340,
+patient-disjoint); cross = the pediatric cohort (1838); (3) a **transfer report**:
+train on one database only, test on the other, both directions — that is the
+transfer gap the item asked for. Command:
+`python -m cardiolens.ml.train --train data/ecg-arrhythmia-train data/ecg-arrhythmia
+data/ptbxl --holdout data/ecg-arrhythmia-balanced --cross data/ecg-arrhythmia-pediatric
+--transfer ecgarr=data/ecg-arrhythmia-train ptbxl=data/ptbxl --report
+configs/models/rhythm_hgb.report.json` (the JSON is committed, the 18 MB joblib is
+not; features re-extracted after D45).
+
+**Transfer gap, v1 → v2 features, model trained on ecg-arrhythmia only and tested on
+PTB-XL (1692):**
+
+| Class | rules | v1 model (79 features) | v2 model (379) |
+|---|:-:|:-:|:-:|
+| rbbb | 0.87 / 0.96 | 0.93 / 0.96 | 0.93 / 0.97 |
+| lbbb | 0.85 / 0.87 | 0.73 / 0.97 | **0.84 / 0.97** |
+| st_depression | 0.28 / 0.81 | 0.27 / 0.90 | 0.34 / 0.92 |
+| first_degree_av_block | 0.63 / 0.92 | 0.47 / 0.95 | 0.53 / 0.93 |
+| low_qrs_voltage | 0.74 / 0.91 | 0.50 / 0.91 | 0.56 / 0.92 |
+| lvh | 0.48 / 0.93 | 0.10 / 1.00 | 0.11 / 0.99 |
+| long_qt | 0.49 / 0.89 | 0.14 / 0.99 | 0.11 / 0.99 |
+| atrial_fibrillation | 0.55 / 0.97 | 0.44 / 0.97 | 0.28 / 0.99 |
+| sinus_rhythm | 0.83 / 0.78 | 0.60 / 0.91 | 0.55 / 0.92 |
+| right_axis_deviation | 0.89 / 0.96 | 0.84 / 0.97 | 0.76 / 0.97 |
+
+The beat shape helps exactly where a morphology class was being read from summary
+numbers (LBBB +11 points across databases at unchanged specificity, ST depression
++7) and does nothing for classes that are a physical quantity (LVH, long QT — the
+rule measures them, a normalised beat shape does not contain them), and it costs a
+little on the rhythm classes (AF, sinus rhythm, RAD: more features fitted to one
+database's beat shapes). The **rules still transfer better than any model** on
+10 of 15 classes; the model is evidence, not a second reader.
+
+<!-- ML_V2_TABLES -->
+<!-- /ML_V2_TABLES -->
+
+Reading the mixed-source model:
+
+- **Same-source hold-out (664)** vs the v1 single-source model: AF 0.60 → 0.72,
+  sinus rhythm 0.76 → 0.89, 1° AV block 0.54 → 0.73, LVH 0.77 → 0.84 improved;
+  **flutter 0.62 → 0.43 and ST elevation 0.64 → 0.38 dropped** — mixing in PTB-XL
+  taught the model PTB-XL's AFLT / STE_ semantics, which disagree with the Ningbo
+  labels ("ST tilt up", flutter without F waves, D40/D37). Label semantics differ
+  between databases and a mixed model averages them; that is the price of the
+  smaller transfer gap, not a bug.
+- **PTB-XL folds 9–10 (340)**: the mixed model reaches LVH 0.54 / 0.97 where the
+  ecg-arrhythmia-only model had 0.11 — it learned PTB-XL's LVH label from folds
+  1–8, not LVH physiology (the transfer table shows that: 0.11 the moment the
+  database is unseen).
+- **Pediatric cross set (1838)**: the model is useless for the adult-labelled
+  tachycardias (0.47 vs rules 0.87) and reads RAD in children at 0.62 where the
+  rules deliberately say 0.07 (pediatric normal axis); rules ∪ model would undo
+  the pediatric norm table. Another reason the model is not authority.
+- **Suggestion policy (D46)**: a class may raise `ml_suggested_*` on its own only if
+  spec ≥ 0.95 on every set **and** sens ≥ rules on every foreign set with ≥ 20
+  positives, *in both transfer directions*; a class no large foreign set ever
+  voted on is not eligible. Under that criterion **no class qualifies** (RBBB
+  loses to the rule in the PTB-XL → ecg-arrhythmia direction, 0.75 < 0.83; LBBB
+  loses both ways by 1–9 points; ST elevation 0.00 < 0.40 towards
+  ecg-arrhythmia). The earlier list (rbbb, lbbb, st_elevation) rested on a single
+  transfer direction. `ml_p` on rule findings and the agreement bump stay; the
+  safety layer never reads ML output.
+
 ### Paper-page digitisation v3 — self-calibration and photo perspective (open item 6, D43)
 
 Added: grid-pitch estimation (px/mm from the grid's periodicity, tile-wise, with

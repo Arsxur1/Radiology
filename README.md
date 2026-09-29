@@ -143,16 +143,20 @@ CLINICAL_REFERENCES.
 
 ### Обучаемый слой поверх правил (ТЗ §17)
 
-`cardiolens.ml`: 79 признаков Слоя 3 → per-class HistGradientBoosting (sklearn).
+`cardiolens.ml`: признаки v2 — 79 сводных признаков Слоя 3 + 300 признаков формы
+среднего комплекса по отведениям (D46) → per-class HistGradientBoosting (sklearn);
+набор признаков версионируется, артефакт другой версии отвергается.
 Модель — **свидетельство, не авторитет** (D33): вероятность попадает в evidence
 находки (`ml_p`), согласие поднимает уверенность, несогласие только фиксируется,
-`ml_suggested_<код>` появляется лишь для классов, где модель на hold-out **и** на
-чужом датасете точнее 0.95 и чувствительнее правил. Safety-слой ML не видит.
+`ml_suggested_<код>` — лишь для классов, где модель точна (spec ≥ 0.95) на всех
+наборах и не хуже правил на каждом чужом наборе в обе стороны переноса (≥ 20
+позитивов); сейчас таких классов **нет**. Safety-слой ML не видит.
 
 ```bash
-python -m cardiolens.ml.train --train data/ecg-arrhythmia-train data/ecg-arrhythmia \
-    --holdout data/ecg-arrhythmia-balanced --cross data/ptbxl \
-    --report configs/models/rhythm_hgb.report.json     # артефакт 7 МБ не коммитится
+python -m cardiolens.ml.train --train data/ecg-arrhythmia-train data/ecg-arrhythmia data/ptbxl \
+    --holdout data/ecg-arrhythmia-balanced --cross data/ecg-arrhythmia-pediatric \
+    --transfer ecgarr=data/ecg-arrhythmia-train ptbxl=data/ptbxl \
+    --report configs/models/rhythm_hgb.report.json     # артефакт 18 МБ не коммитится
 # configs/app.yaml -> ml.enabled / ml.model_path; без артефакта — только правила
 ```
 
