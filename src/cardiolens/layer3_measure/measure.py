@@ -22,7 +22,7 @@ from cardiolens.contracts.features import (
     STMeasurement,
 )
 from cardiolens.contracts.signal import SignalRepresentation
-from cardiolens.layer3_measure.global_beat import global_intervals
+from cardiolens.layer3_measure.global_beat import global_intervals, global_q_waves
 from cardiolens.layer3_measure.intervals import (
     qtc_bazett,
     qtc_framingham,
@@ -313,6 +313,8 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             # reported QT lost long-QT sensitivity on held-out data, so the
             # rhythm-lead QT stays the reported value.
             m.qt_ms_by_lead = qt_by_lead
+            # Initial Q waves per lead on the median beat (pathological Q, D36).
+            m.morphology.q_waves = global_q_waves(sig.signal, rpeaks, fs, list(sig.lead_names))
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)

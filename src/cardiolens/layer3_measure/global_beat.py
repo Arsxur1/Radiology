@@ -103,6 +103,42 @@ def global_fiducials(X: np.ndarray, a: int, fs: float, rr_s: float | None,
     return out
 
 
+def global_q_waves(signal: np.ndarray, rpeaks, fs: float,
+                   lead_names: list[str]) -> dict[str, tuple[float, float, float, bool]]:
+    """Per-lead initial Q wave on the median beat within the global QRS (D36).
+
+    Returns ``{lead: (q_ms, q_depth_uv, r_uv, qs)}``: the initial deflection (the first
+    sample more than 20 µV from the pre-QRS baseline) is a Q wave when negative, its
+    duration runs to the return across the baseline; ``qs`` is an all-negative complex
+    (R < 50 µV with a trough below -200 µV). Empty when no median beat can be formed.
+    """
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return {}
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    f = global_fiducials(X, a, fs, rr_s)
+    on, off = int(f["qrs_on"]), int(f["qrs_off"])
+    out: dict[str, tuple[float, float, float, bool]] = {}
+    for i, name in enumerate(lead_names):
+        x = X[i].astype(float)
+        base = float(np.median(x[max(0, on - int(0.04 * fs)):on])) if on > 0 else float(x[0])
+        y = x[on:off + 1] - base
+        if y.size < 5:
+            continue
+        r_amp = float(max(y.max(), 0.0))
+        q_ms = q_depth = 0.0
+        first = np.flatnonzero(np.abs(y) > 20.0)
+        if first.size and y[first[0]] < 0:
+            k = int(first[0])
+            while k < y.size and y[k] < 0:
+                k += 1
+            q_ms, q_depth = k / fs * 1000.0, float(-y[:k].min())
+        qs = r_amp < 50.0 and float(y.min()) < -200.0
+        out[name] = (round(q_ms, 1), round(q_depth, 1), round(r_amp, 1), bool(qs))
+    return out
+
+
 def global_intervals(signal: np.ndarray, rpeaks, fs: float) -> tuple[float | None, float | None]:
     """(PR ms, QT ms) from the global fiducials, uncorrected; None where not found."""
     X, a = median_beats(signal, rpeaks, fs)

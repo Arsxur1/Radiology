@@ -179,6 +179,7 @@ def detect_findings(
 
     _conduction_findings(m, norms, fs, is_pediatric)
     _qt_findings(iv, norms, is_pediatric, sig, fs)
+    _q_wave_findings(m, norms, fs)
 
     # Atrial fibrillation: irregularly-irregular rhythm (§7.1). Absent/chaotic P
     # waves are the classic confirmatory sign, but automated P-wave delineation is
@@ -304,6 +305,57 @@ def detect_findings(
         ))
 
     return fs
+
+
+def _q_wave_findings(m: Measurements, norms, fs: FindingSet) -> None:
+    """Pathological Q waves in >= 2 contiguous leads — possible prior infarction (D36).
+
+    Q criteria are not interpretable with LBBB or pre-excitation (both create QS
+    complexes and pseudo-Q waves), so those suppress the finding here; pacing is
+    handled by the rhythm hierarchy in the pipeline.
+    """
+    qn = norms.get("q_wave")
+    if not qn or not m.morphology.q_waves:
+        return
+    if fs.by_code("lbbb") is not None or fs.by_code("wpw_preexcitation") is not None:
+        return
+    patho = set()
+    for lead, (q_ms, q_depth, r_amp, qs) in m.morphology.q_waves.items():
+        if lead in ("aVR", "V1"):
+            continue
+        if lead in ("V2", "V3"):
+            hit = qs or q_ms > qn["v2v3_q_ms_max"]
+        else:
+            hit = qs or (q_ms >= qn["q_ms_min"] and q_depth >= qn["q_depth_uv_min"]
+                         and q_depth >= qn["q_depth_r_ratio_min"] * max(r_amp, 1.0))
+        if hit:
+            patho.add(lead)
+    pairs = [(a, b) for a, b in _Q_CONTIGUOUS if a in patho and b in patho]
+    if not pairs:
+        return
+    leads = [ld for ld in _Q_LEAD_ORDER if ld in {x for p in pairs for x in p}]
+    walls = [(ru, uz) for ru, uz, group in _Q_WALLS if group & set(leads)]
+    wall_ru = ", ".join(ru for ru, _ in walls) + (" стенки" if len(walls) > 1 else " стенка")
+    wall_uz = ", ".join(uz for _, uz in walls) + (" devorlar" if len(walls) > 1 else " devor")
+    leads_txt = ",".join(leads)
+    fs.findings.append(Finding(
+        code="pathological_q_waves", group="ischemia",
+        label_ru=f"Патологические зубцы Q ({leads_txt}) — возможен перенесённый инфаркт "
+                 f"({wall_ru})",
+        label_uz=f"Patologik Q to'lqinlar ({leads_txt}) — o'tkazilgan infarkt ehtimoli "
+                 f"({wall_uz})",
+        evidence=_ev(leads=leads_txt, **{f"q_{ld}": m.morphology.q_waves[ld] for ld in leads}),
+        confidence=0.6,
+    ))
+
+
+# Contiguous lead pairs and walls for pathological Q waves (D36).
+_Q_CONTIGUOUS = [("I", "aVL"), ("II", "III"), ("III", "aVF"), ("II", "aVF"),
+                 ("V1", "V2"), ("V2", "V3"), ("V3", "V4"), ("V4", "V5"), ("V5", "V6")]
+_Q_LEAD_ORDER = ["I", "II", "III", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+_Q_WALLS = [("нижняя", "pastki", {"II", "III", "aVF"}),
+            ("передняя", "old", {"V1", "V2", "V3", "V4"}),
+            ("боковая", "yon", {"I", "aVL", "V5", "V6"})]
 
 
 def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:

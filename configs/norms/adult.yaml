@@ -61,6 +61,18 @@ st_uv:
   elevation_significant_v2v3: 200
   depression_significant: 100
 
+# Pathological Q waves (4th Universal Definition of MI, D36), on the 12-lead median
+# beat: in V2-V3 any Q > 20 ms or QS; elsewhere (aVR, V1 never count) QS or a Q
+# >= q_ms_min deep >= q_depth_uv_min and >= q_depth_r_ratio_min x R. Called in >= 2
+# contiguous leads. Chosen on PTB-XL development folds (1363 records, 396 MI):
+# sens 0.30 / spec 0.973 / PPV 0.82 after LBBB/paced/WPW suppression. Adult-only
+# key (childhood Q norms differ; the pediatric table omits it).
+q_wave:
+  v2v3_q_ms_max: 20
+  q_ms_min: 30
+  q_depth_uv_min: 100
+  q_depth_r_ratio_min: 0.25
+
 # P-wave criteria for atrial enlargement (ecglibrary / 150 ECG Problems).
 p_wave:
   duration_upper_ms: 120       # > 120 ms -> left atrial enlargement (P-mitrale)

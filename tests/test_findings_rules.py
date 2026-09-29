@@ -227,3 +227,49 @@ def test_long_qt_uses_plain_qtc_even_with_wide_qrs():
     wide = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_v1_terminal_positive=False,
                         intervals=Intervals(pr_ms=160, qrs_ms=140, qt_ms=440, qtc_bazett_ms=470))
     assert "long_qt" in _find(wide).codes()
+
+
+def _q_codes(q_waves, qrs_ms=95, v1_term=None, pr_ms=160, norms="adult", age_years=60):
+    m = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_v1_terminal_positive=v1_term,
+                     intervals=Intervals(pr_ms=pr_ms, qrs_ms=qrs_ms, qt_ms=390, qtc_bazett_ms=420),
+                     morphology=Morphology(q_waves=q_waves))
+    return detect_findings(_sig(age_years=age_years), m, norms=load_norms(norms), la_ra_reversed=False)
+
+
+_NO_Q = (0.0, 0.0, 800.0, False)
+
+
+def test_pathological_q_inferior_contiguous_leads():
+    q = {ld: _NO_Q for ld in STANDARD_12_LEADS}
+    q["III"] = (44.0, 300.0, 400.0, False)
+    q["aVF"] = (40.0, 250.0, 500.0, False)
+    fs = _q_codes(q)
+    f = fs.by_code("pathological_q_waves")
+    assert f is not None and "III,aVF" in f.label_ru and "нижняя" in f.label_ru
+
+
+def test_pathological_q_needs_two_contiguous_leads_and_real_depth():
+    q = {ld: _NO_Q for ld in STANDARD_12_LEADS}
+    q["III"] = (44.0, 300.0, 400.0, False)                 # isolated Q in III: normal variant
+    assert "pathological_q_waves" not in _q_codes(q).codes()
+    q["aVF"] = (40.0, 60.0, 900.0, False)                  # shallow Q (< 100 µV, < 25% of R)
+    assert "pathological_q_waves" not in _q_codes(q).codes()
+    q["aVL"] = (40.0, 300.0, 300.0, False)                 # I-aVL / III-aVL are not contiguous
+    assert "pathological_q_waves" not in _q_codes(q).codes()
+
+
+def test_pathological_q_v2_v3_lower_limit_and_v1_ignored():
+    q = {ld: _NO_Q for ld in STANDARD_12_LEADS}
+    q["V1"] = (0.0, 0.0, 10.0, True)                       # QS in V1 alone: normal variant
+    q["V2"] = (25.0, 80.0, 600.0, False)                   # any Q > 20 ms counts in V2-V3
+    assert "pathological_q_waves" not in _q_codes(q).codes()
+    q["V3"] = (0.0, 0.0, 20.0, True)
+    assert "pathological_q_waves" in _q_codes(q).codes()
+
+
+def test_pathological_q_suppressed_by_lbbb_and_absent_in_children():
+    q = {ld: _NO_Q for ld in STANDARD_12_LEADS}
+    q["V2"] = q["V3"] = (0.0, 0.0, 20.0, True)             # QS V1-V3 is expected in LBBB
+    assert "pathological_q_waves" in _q_codes(q).codes()
+    assert "pathological_q_waves" not in _q_codes(q, qrs_ms=150, v1_term=False).codes()
+    assert "pathological_q_waves" not in _q_codes(q, norms="pediatric", age_years=8).codes()

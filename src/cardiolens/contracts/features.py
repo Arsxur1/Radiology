@@ -49,6 +49,9 @@ class Morphology(BaseModel):
     inverted_t_leads: list[str] = Field(default_factory=list)
     u_wave_leads: list[str] = Field(default_factory=list)
     pathological_q_leads: list[str] = Field(default_factory=list)
+    # Per-lead initial Q wave on the 12-lead median beat (D36):
+    # lead -> (Q duration ms, Q depth µV, R amplitude µV, QS complex).
+    q_waves: dict[str, tuple[float, float, float, bool]] = Field(default_factory=dict)
 
 
 class Measurements(BaseModel):

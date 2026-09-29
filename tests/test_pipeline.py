@@ -83,9 +83,15 @@ def test_paced_hierarchy_withholds_invalid_criteria_but_keeps_st_elevation():
     from cardiolens.pipeline import _apply_rhythm_hierarchy
 
     fs = _fs("paced_rhythm", "lbbb", "left_axis_deviation", "t_inversion", "sinus_rhythm",
-             "first_degree_av_block", "st_elevation")
+             "first_degree_av_block", "st_elevation", "pathological_q_waves")
     audit = []
     _apply_rhythm_hierarchy(fs, Measurements(heart_rate_bpm=70), audit)
     # STE is a §10 must-not-miss finding: never silenced by the hierarchy.
     assert fs.codes() == {"paced_rhythm", "st_elevation"}
     assert any("paced rhythm, withheld" in a for a in audit)
+
+
+def test_normal_synthetic_ecg_has_q_measures_but_no_pathological_q():
+    result = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=70, duration_s=10), mode="A")
+    assert len(result.measurements.morphology.q_waves) == 12
+    assert "pathological_q_waves" not in result.findings.codes()
