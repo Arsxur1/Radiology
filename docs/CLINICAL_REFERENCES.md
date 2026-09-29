@@ -754,41 +754,139 @@ PTB-XL (1692):**
 |---|:-:|:-:|:-:|
 | rbbb | 0.87 / 0.96 | 0.93 / 0.96 | 0.93 / 0.97 |
 | lbbb | 0.85 / 0.87 | 0.73 / 0.97 | **0.84 / 0.97** |
-| st_depression | 0.28 / 0.81 | 0.27 / 0.90 | 0.34 / 0.92 |
-| first_degree_av_block | 0.63 / 0.92 | 0.47 / 0.95 | 0.53 / 0.93 |
-| low_qrs_voltage | 0.74 / 0.91 | 0.50 / 0.91 | 0.56 / 0.92 |
-| lvh | 0.48 / 0.93 | 0.10 / 1.00 | 0.11 / 0.99 |
+| st_depression | 0.28 / 0.81 | 0.27 / 0.90 | 0.35 / 0.93 |
+| first_degree_av_block | 0.63 / 0.92 | 0.47 / 0.95 | 0.52 / 0.93 |
+| low_qrs_voltage | 0.74 / 0.91 | 0.50 / 0.91 | 0.59 / 0.92 |
+| lvh | 0.48 / 0.93 | 0.10 / 1.00 | 0.12 / 0.99 |
 | long_qt | 0.49 / 0.89 | 0.14 / 0.99 | 0.11 / 0.99 |
-| atrial_fibrillation | 0.55 / 0.97 | 0.44 / 0.97 | 0.28 / 0.99 |
-| sinus_rhythm | 0.83 / 0.78 | 0.60 / 0.91 | 0.55 / 0.92 |
-| right_axis_deviation | 0.89 / 0.96 | 0.84 / 0.97 | 0.76 / 0.97 |
+| atrial_fibrillation | 0.55 / 0.97 | 0.44 / 0.97 | 0.29 / 0.99 |
+| sinus_rhythm | 0.83 / 0.78 | 0.60 / 0.91 | 0.54 / 0.93 |
+| right_axis_deviation | 0.89 / 0.96 | 0.84 / 0.97 | 0.82 / 0.97 |
 
 The beat shape helps exactly where a morphology class was being read from summary
 numbers (LBBB +11 points across databases at unchanged specificity, ST depression
-+7) and does nothing for classes that are a physical quantity (LVH, long QT — the
-rule measures them, a normalised beat shape does not contain them), and it costs a
-little on the rhythm classes (AF, sinus rhythm, RAD: more features fitted to one
++8, low voltage +9) and does nothing for classes that are a physical quantity (LVH,
+long QT — the rule measures them, a normalised beat shape does not contain them),
+and it costs on AF and sinus rhythm (−15 and −6: more features fitted to one
 database's beat shapes). The **rules still transfer better than any model** on
 10 of 15 classes; the model is evidence, not a second reader.
 
 <!-- ML_V2_TABLES -->
+**Mixed-source model (2936 records) — hold-out ecg-arrhythmia 664 (rules / model / rules ∪ model, sens / spec):**
+| class | n | rules | model | ∪ |
+|---|--:|:-:|:-:|:-:|
+| atrial_fibrillation | 80 | 0.80 / 0.73 | 0.71 / 0.81 | 0.91 / 0.69 |
+| atrial_flutter | 187 | 0.01 / 1.00 | 0.47 / 0.88 | 0.47 / 0.88 |
+| sinus_rhythm | 80 | 0.90 / 0.84 | 0.89 / 0.92 | 0.95 / 0.82 |
+| sinus_bradycardia | 115 | 0.93 / 0.98 | 0.86 / 0.99 | 0.94 / 0.98 |
+| sinus_tachycardia | 93 | 0.91 / 0.89 | 0.87 / 0.99 | 0.95 / 0.89 |
+| first_degree_av_block | 85 | 0.68 / 0.94 | 0.72 / 0.98 | 0.80 / 0.93 |
+| rbbb | 71 | 0.72 / 0.99 | 0.79 / 1.00 | 0.86 / 0.99 |
+| lbbb | 83 | 0.77 / 0.94 | 0.68 / 0.99 | 0.85 / 0.93 |
+| lvh | 51 | 0.84 / 0.87 | 0.82 / 0.95 | 0.96 / 0.86 |
+| low_qrs_voltage | 81 | 0.72 / 0.86 | 0.58 / 0.97 | 0.80 / 0.85 |
+| long_qt | 23 | 0.70 / 0.86 | 0.48 / 0.98 | 0.74 / 0.85 |
+| st_depression | 85 | 0.49 / 0.82 | 0.52 / 0.95 | 0.67 / 0.79 |
+| st_elevation | 58 | 0.41 / 0.98 | 0.40 / 0.99 | 0.60 / 0.98 |
+| left_axis_deviation | 83 | 0.87 / 0.86 | 0.68 / 0.94 | 0.93 / 0.84 |
+| right_axis_deviation | 80 | 0.69 / 0.96 | 0.68 / 0.97 | 0.78 / 0.96 |
+| wpw_preexcitation | 3 | 0.00 / 0.98 | 0.00 / 1.00 | 0.00 / 0.97 |
+
+**Hold-out PTB-XL strat-folds 9–10 (340, patient-disjoint):**
+| class | n | rules | model | ∪ |
+|---|--:|:-:|:-:|:-:|
+| atrial_fibrillation | 32 | 0.53 / 0.97 | 0.59 / 0.97 | 0.72 / 0.95 |
+| atrial_flutter | 14 | 0.43 / 1.00 | 0.79 / 0.98 | 0.79 / 0.98 |
+| sinus_rhythm | 219 | 0.81 / 0.76 | 0.87 / 0.82 | 0.91 / 0.74 |
+| sinus_bradycardia | 24 | 0.96 / 0.88 | 0.83 / 0.93 | 0.96 / 0.88 |
+| sinus_tachycardia | 23 | 0.91 / 0.96 | 0.87 / 0.97 | 0.91 / 0.95 |
+| first_degree_av_block | 37 | 0.62 / 0.91 | 0.70 / 0.94 | 0.81 / 0.89 |
+| rbbb | 15 | 0.87 / 0.97 | 0.80 / 0.97 | 0.93 / 0.97 |
+| lbbb | 18 | 0.72 / 0.88 | 0.61 / 0.98 | 0.94 / 0.87 |
+| lvh | 52 | 0.44 / 0.93 | 0.52 / 0.96 | 0.61 / 0.90 |
+| low_qrs_voltage | 37 | 0.76 / 0.91 | 0.76 / 0.94 | 0.84 / 0.89 |
+| long_qt | 23 | 0.56 / 0.90 | 0.39 / 0.98 | 0.70 / 0.89 |
+| st_depression | 29 | 0.24 / 0.81 | 0.38 / 0.93 | 0.45 / 0.78 |
+| st_elevation | 6 | 0.00 / 0.97 | 0.00 / 0.98 | 0.00 / 0.96 |
+| left_axis_deviation | 63 | 0.35 / 0.87 | 0.51 / 0.87 | 0.64 / 0.79 |
+| right_axis_deviation | 17 | 1.00 / 0.95 | 1.00 / 0.96 | 1.00 / 0.95 |
+| wpw_preexcitation | 15 | 0.40 / 0.97 | 0.40 / 0.99 | 0.67 / 0.97 |
+
+**Cross set — pediatric cohort (1838):**
+| class | n | rules | model | ∪ |
+|---|--:|:-:|:-:|:-:|
+| atrial_fibrillation | 0 | — / 0.95 | — / 0.99 | — / 0.95 |
+| atrial_flutter | 19 | 0.00 / 0.99 | 0.53 / 0.98 | 0.53 / 0.97 |
+| sinus_rhythm | 329 | 0.90 / 0.61 | 0.63 / 0.91 | 0.91 / 0.60 |
+| sinus_bradycardia | 84 | 0.92 / 0.98 | 0.81 / 0.99 | 0.94 / 0.98 |
+| sinus_tachycardia | 772 | 0.87 / 0.96 | 0.47 / 0.97 | 0.97 / 0.94 |
+| first_degree_av_block | 11 | 0.73 / 0.97 | 0.46 / 1.00 | 0.82 / 0.96 |
+| rbbb | 14 | 0.64 / 0.99 | 0.64 / 1.00 | 0.64 / 0.99 |
+| lbbb | 2 | 0.50 / 0.99 | 0.50 / 0.99 | 0.50 / 0.98 |
+| lvh | 4 | 0.25 / 0.98 | 0.50 / 0.98 | 0.75 / 0.97 |
+| low_qrs_voltage | 3 | 0.67 / 0.98 | 0.33 / 0.99 | 0.67 / 0.98 |
+| long_qt | 6 | 0.17 / 0.99 | 0.33 / 1.00 | 0.33 / 0.99 |
+| st_depression | 7 | 0.57 / 0.93 | 0.29 / 1.00 | 0.57 / 0.93 |
+| st_elevation | 7 | 0.43 / 0.97 | 0.43 / 0.99 | 0.71 / 0.97 |
+| left_axis_deviation | 16 | 0.56 / 0.97 | 0.56 / 0.99 | 0.69 / 0.97 |
+| right_axis_deviation | 40 | 0.07 / 0.99 | 0.65 / 0.91 | 0.68 / 0.91 |
+| wpw_preexcitation | 6 | 0.00 / 1.00 | 0.17 / 1.00 | 0.17 / 1.00 |
+
+**Transfer: trained on ecg-arrhythmia only (1322), tested on PTB-XL (1692):**
+| class | n | rules | model |
+|---|--:|:-:|:-:|
+| atrial_fibrillation | 123 | 0.55 / 0.97 | 0.29 / 0.99 |
+| atrial_flutter | 73 | 0.51 / 1.00 | 0.44 / 0.93 |
+| sinus_rhythm | 1135 | 0.83 / 0.78 | 0.54 / 0.93 |
+| sinus_bradycardia | 106 | 0.96 / 0.88 | 0.93 / 0.90 |
+| sinus_tachycardia | 110 | 0.92 / 0.96 | 0.84 / 0.98 |
+| first_degree_av_block | 188 | 0.63 / 0.92 | 0.52 / 0.93 |
+| rbbb | 86 | 0.87 / 0.96 | 0.93 / 0.96 |
+| lbbb | 85 | 0.85 / 0.87 | 0.83 / 0.98 |
+| lvh | 198 | 0.48 / 0.93 | 0.12 / 0.99 |
+| low_qrs_voltage | 182 | 0.74 / 0.91 | 0.59 / 0.92 |
+| long_qt | 117 | 0.49 / 0.89 | 0.11 / 0.99 |
+| st_depression | 125 | 0.28 / 0.81 | 0.35 / 0.93 |
+| st_elevation | 28 | 0.00 / 0.97 | 0.04 / 0.96 |
+| left_axis_deviation | 305 | 0.36 / 0.84 | 0.25 / 0.89 |
+| right_axis_deviation | 93 | 0.89 / 0.96 | 0.82 / 0.97 |
+
+**Transfer: trained on PTB-XL only (1692), tested on ecg-arrhythmia (1322):**
+| class | n | rules | model |
+|---|--:|:-:|:-:|
+| atrial_fibrillation | 150 | 0.77 / 0.80 | 0.83 / 0.78 |
+| atrial_flutter | 319 | 0.05 / 0.99 | 0.13 / 0.97 |
+| sinus_rhythm | 150 | 0.95 / 0.86 | 0.97 / 0.67 |
+| sinus_bradycardia | 325 | 1.00 / 0.94 | 0.20 / 1.00 |
+| sinus_tachycardia | 164 | 0.91 / 0.92 | 0.82 / 0.98 |
+| first_degree_av_block | 153 | 0.74 / 0.93 | 0.56 / 0.96 |
+| rbbb | 154 | 0.82 / 0.98 | 0.75 / 0.98 |
+| lbbb | 56 | 0.57 / 0.95 | 0.48 / 1.00 |
+| lvh | 138 | 0.85 / 0.88 | 0.91 / 0.90 |
+| low_qrs_voltage | 151 | 0.68 / 0.86 | 0.41 / 0.94 |
+| long_qt | 76 | 0.49 / 0.90 | 0.13 / 0.98 |
+| st_depression | 157 | 0.64 / 0.84 | 0.26 / 0.97 |
+| st_elevation | 156 | 0.40 / 0.98 | 0.00 / 1.00 |
+| left_axis_deviation | 156 | 0.86 / 0.90 | 0.36 / 0.94 |
+| right_axis_deviation | 119 | 0.87 / 0.94 | 0.74 / 0.97 |
+| wpw_preexcitation | 5 | 0.20 / 0.98 | 0.40 / 0.99 |
 <!-- /ML_V2_TABLES -->
 
 Reading the mixed-source model:
 
-- **Same-source hold-out (664)** vs the v1 single-source model: AF 0.60 → 0.72,
-  sinus rhythm 0.76 → 0.89, 1° AV block 0.54 → 0.73, LVH 0.77 → 0.84 improved;
-  **flutter 0.62 → 0.43 and ST elevation 0.64 → 0.38 dropped** — mixing in PTB-XL
+- **Same-source hold-out (664)** vs the v1 single-source model: AF 0.60 → 0.71,
+  sinus rhythm 0.76 → 0.89, 1° AV block 0.54 → 0.72, LVH 0.77 → 0.82 improved;
+  **flutter 0.62 → 0.47 and ST elevation 0.64 → 0.40 dropped** — mixing in PTB-XL
   taught the model PTB-XL's AFLT / STE_ semantics, which disagree with the Ningbo
   labels ("ST tilt up", flutter without F waves, D40/D37). Label semantics differ
   between databases and a mixed model averages them; that is the price of the
   smaller transfer gap, not a bug.
-- **PTB-XL folds 9–10 (340)**: the mixed model reaches LVH 0.54 / 0.97 where the
-  ecg-arrhythmia-only model had 0.11 — it learned PTB-XL's LVH label from folds
-  1–8, not LVH physiology (the transfer table shows that: 0.11 the moment the
+- **PTB-XL folds 9–10 (340)**: the mixed model reaches LVH 0.52 / 0.96 where the
+  ecg-arrhythmia-only model had 0.12 — it learned PTB-XL's LVH label from folds
+  1–8, not LVH physiology (the transfer table shows that: 0.12 the moment the
   database is unseen).
 - **Pediatric cross set (1838)**: the model is useless for the adult-labelled
-  tachycardias (0.47 vs rules 0.87) and reads RAD in children at 0.62 where the
+  tachycardias (0.47 vs rules 0.87) and reads RAD in children at 0.65 where the
   rules deliberately say 0.07 (pediatric normal axis); rules ∪ model would undo
   the pediatric norm table. Another reason the model is not authority.
 - **Suggestion policy (D46)**: a class may raise `ml_suggested_*` on its own only if
