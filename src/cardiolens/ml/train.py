@@ -124,22 +124,35 @@ def evaluate(model: RhythmModel, data: dict, threshold: float) -> dict:
     return out
 
 
-def suggest_classes(model: RhythmModel, min_spec: float = 0.95) -> list[str]:
-    """Classes the model may *suggest* on its own: precise on every evaluation set
-    and at least as sensitive as the rules on the cross-dataset sets."""
-    reports = model.meta.get("reports", {})
+def suggest_classes(model: RhythmModel, min_spec: float = 0.95, min_positives: int = 20) -> list[str]:
+    """Classes the model may *suggest* on its own (D33, D46).
+
+    Precise (spec >= ``min_spec``) on every evaluation set, and at least as
+    sensitive as the rules on every set that stands for "another database":
+    the ``cross:*`` reports and **both directions** of the transfer report.
+    A sensitivity comparison needs ``min_positives`` gold positives, otherwise
+    the set does not vote (a 6-record pediatric class must not decide policy).
+    """
+    reports = dict(model.meta.get("reports", {}))
+    reports.update({f"transfer:{k}": v for k, v in model.meta.get("transfer", {}).items()})
     if not reports:
         return []
     out = []
     for c in model.classes:
-        ok = True
+        ok, voted = True, False
         for name, rep in reports.items():
-            mm, rr = rep["model"][c], rep["rules"][c]
+            mm, rr = rep["model"].get(c), rep["rules"].get(c)
+            if mm is None or rr is None:
+                continue
             if mm["spec"] is None or mm["spec"] < min_spec:
                 ok = False
-            if name.startswith("cross") and mm["sens"] is not None and rr["sens"] is not None and mm["sens"] < rr["sens"]:
-                ok = False
-        if ok:
+            foreign = name.startswith(("cross", "transfer"))
+            if foreign and rr["n"] >= min_positives and mm["sens"] is not None and rr["sens"] is not None:
+                voted = True
+                if mm["sens"] < rr["sens"]:
+                    ok = False
+        # No foreign set large enough to compare is absence of evidence, not eligibility.
+        if ok and voted:
             out.append(c)
     return out
 
@@ -199,8 +212,8 @@ def main(argv: list[str] | None = None) -> None:
             sources[label] = extract(Path(root))
         model.meta["transfer"] = transfer_report(sources, args.threshold, args.min_positives)
     model.meta["suggest_classes"] = suggest_classes(model)
-    _log(f"[ml] suggestion-eligible classes (spec >= 0.95 on hold-out and cross, sens >= rules on cross): "
-         f"{model.meta['suggest_classes']}")
+    _log("[ml] suggestion-eligible classes (spec >= 0.95 everywhere, sens >= rules on every cross/transfer "
+         f"set with >= 20 positives): {model.meta['suggest_classes']}")
     model.save(args.out)
     if args.report:
         Path(args.report).write_text(json.dumps(model.meta, indent=2), encoding="utf-8")
