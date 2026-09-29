@@ -618,9 +618,16 @@ fixed as a **norm-table entry**, not a model:
 | Symptom (before) | Cause | Change | After |
 |---|---|---|---|
 | `lbbb` on 38 / 971 (4–8 y, spec 0.961) and 78 / 620 (9–15 y) | QRS upper normal 90 ms was also the BBB threshold; the 98th percentile of the cohort is 101–102 ms | `intervals_ms_by_age` upper limits per band + `intervals_ms.qrs_bbb: 110` | 6 / 971 (spec 0.994), 7 / 620 (0.989); after D45 (zero leads excluded) 0 / 971 and 2 / 620 (0.997) |
-| `lead_reversal_la_ra` on 96 / 971 and 49 / 620 | I inverted + aVR upright is the signature of a physiological rightward axis in a child | the reversal hypothesis is raised only when the axis lies outside the pediatric normal range | see counts below |
-| `flat_t_waves` on 684 / 971 (70 %) | absolute 100 µV threshold vs small pediatric limb-lead T waves | flat T also requires T < 15 % of the QRS amplitude | see counts below |
-| `short_qt` on 120 / 971 (12 %) and 47 / 620 | 2nd percentile of QTc(F) in the cohort is 321–329 ms | `qtc_ms.short_lower` 340 → 320 | see counts below |
+| `lead_reversal_la_ra` on 96 / 971 and 49 / 620 | I inverted + aVR upright is the signature of a physiological rightward axis in a child | the reversal hypothesis is raised only when the axis lies outside the pediatric normal range | 21 / 971, 10 / 620 |
+| `flat_t_waves` on 684 / 971 (70 %) and 234 / 620 | first diagnosis "small pediatric T waves vs a 100 µV cut" was **wrong**: the relative condition (T < 15 % QRS) removed 15 of 684. The flat leads were V4–V6 in 113 of 120 records checked — **the precordial channels are all zero** in 673 / 971 and 166 / 620 records (limb-only recordings stored as 12 leads) | D45: a lead with no signal (< 10 µV span, the Layer-2 lead-off criterion) is not measured by Layer 3 — no T morphology, no ST, no R/S voltage (None, not 0), no terminal sign | 15 / 971, 44 / 620 |
+| `short_qt` on 120 / 971 (12 %) and 47 / 620 | 2nd percentile of QTc(F) in the cohort is 321–329 ms | `qtc_ms.short_lower` 340 → 320 | 14 / 971, 13 / 620 |
+
+D45 also explains the "R V6 median 0" in the 4–8 y row of the distribution table
+(half of that band has no V6) and removed the last false LBBB calls: the V1/V6
+terminal sign was being read from a zero channel. On the adult sets D45 is
+neutral (15 of the 664 records have a zero lead; PTB-XL none): 664 macro 0.653 and
+PTB-XL 0.596 / lvh 0.48 / lbbb 0.85 / rbbb 0.87 / st_elevation spec 0.974, all as
+before.
 
 Per-class results after the change, `validate --ecg-arrhythmia
 data/ecg-arrhythmia-pediatric --age-min 1 --age-max 15` (1591 records; the bands
@@ -633,14 +640,14 @@ in brackets are 4–8 y / 9–15 y):
 | sinus_bradycardia | 0.90 (0.80 / 0.93) | 0.98 | 68 | |
 | first_degree_av_block | 0.71 (1 / 3 · 4 / 4) | 0.97 | 7 | |
 | rbbb | 0.50 (3 / 5 · 2 / 5) | 0.999 | 10 | |
-| lbbb | 0 / 1 | 0.992 | 1 | before: 0.961 / 0.87 by band |
+| lbbb | 0 / 1 | 0.999 | 1 | before D44/D45: 0.961 / 0.87 by band |
 | left_axis_deviation | 0.40 | 0.98 | 10 | |
 | right_axis_deviation | 0.00 | 1.00 | 35 | adult label (> +90°); the pediatric normal axis reaches +180°, deliberately |
 | wpw_preexcitation | 0 / 6 | 1.00 | 6 | real gap: the delta-wave/short-PR rule misses the pediatric WPW (also 1 / 2 in PTB-XL) |
 | st_elevation (alert) / st_elevation_any | 1 / 3 · 3 / 3 | 0.98 / 0.89 | 3 | |
 | st_depression | 1 / 4 | 0.94 | 4 | |
 | long_qt | 0 / 2 | 0.996 | 2 | |
-| atrial_fibrillation ∪ flutter | — | 0.95 | 0 | after the conducted-P gate of D36 |
+| atrial_fibrillation ∪ flutter | — | 0.96 | 0 | after the conducted-P gate of D36 |
 | lvh / rvh | — | 1.00 | 0 | no LVH label in the cohort; PTB-XL children: 1 / 5 |
 
 Macro sensitivity 0.37 over the labels present (unchanged by the fixes: the
