@@ -1,8 +1,10 @@
 {
-  "train_records": 1584,
+  "feature_set": "v2",
+  "train_records": 2936,
   "train_sets": [
     "data/ecg-arrhythmia-train",
-    "data/ecg-arrhythmia"
+    "data/ecg-arrhythmia",
+    "data/ptbxl"
   ],
   "classes": [
     "atrial_fibrillation",
@@ -19,7 +21,8 @@
     "st_depression",
     "st_elevation",
     "left_axis_deviation",
-    "right_axis_deviation"
+    "right_axis_deviation",
+    "wpw_preexcitation"
   ],
   "threshold": 0.5,
   "reports": {
@@ -36,13 +39,13 @@
           "n": 187
         },
         "sinus_rhythm": {
-          "sens": 0.887,
+          "sens": 0.9,
           "spec": 0.839,
           "n": 80
         },
         "sinus_bradycardia": {
           "sens": 0.93,
-          "spec": 0.976,
+          "spec": 0.978,
           "n": 115
         },
         "sinus_tachycardia": {
@@ -52,22 +55,22 @@
         },
         "first_degree_av_block": {
           "sens": 0.682,
-          "spec": 0.936,
+          "spec": 0.938,
           "n": 85
         },
         "rbbb": {
           "sens": 0.718,
-          "spec": 0.981,
+          "spec": 0.992,
           "n": 71
         },
         "lbbb": {
-          "sens": 0.711,
+          "sens": 0.771,
           "spec": 0.938,
           "n": 83
         },
         "lvh": {
-          "sens": 0.902,
-          "spec": 0.914,
+          "sens": 0.843,
+          "spec": 0.871,
           "n": 51
         },
         "low_qrs_voltage": {
@@ -81,13 +84,13 @@
           "n": 23
         },
         "st_depression": {
-          "sens": 0.482,
-          "spec": 0.824,
+          "sens": 0.494,
+          "spec": 0.82,
           "n": 85
         },
         "st_elevation": {
-          "sens": 0.379,
-          "spec": 0.982,
+          "sens": 0.414,
+          "spec": 0.985,
           "n": 58
         },
         "left_axis_deviation": {
@@ -99,104 +102,114 @@
           "sens": 0.688,
           "spec": 0.961,
           "n": 80
+        },
+        "wpw_preexcitation": {
+          "sens": 0.0,
+          "spec": 0.976,
+          "n": 3
         }
       },
       "model": {
         "atrial_fibrillation": {
-          "sens": 0.6,
-          "spec": 0.868,
+          "sens": 0.725,
+          "spec": 0.817,
           "n": 80
         },
         "atrial_flutter": {
-          "sens": 0.615,
-          "spec": 0.87,
+          "sens": 0.428,
+          "spec": 0.874,
           "n": 187
         },
         "sinus_rhythm": {
-          "sens": 0.762,
-          "spec": 0.974,
+          "sens": 0.887,
+          "spec": 0.909,
           "n": 80
         },
         "sinus_bradycardia": {
-          "sens": 0.887,
-          "spec": 0.991,
+          "sens": 0.852,
+          "spec": 0.993,
           "n": 115
         },
         "sinus_tachycardia": {
-          "sens": 0.849,
-          "spec": 0.981,
+          "sens": 0.871,
+          "spec": 0.986,
           "n": 93
         },
         "first_degree_av_block": {
-          "sens": 0.541,
+          "sens": 0.729,
           "spec": 0.979,
           "n": 85
         },
         "rbbb": {
-          "sens": 0.859,
-          "spec": 0.995,
+          "sens": 0.789,
+          "spec": 0.997,
           "n": 71
         },
         "lbbb": {
-          "sens": 0.699,
-          "spec": 0.979,
+          "sens": 0.675,
+          "spec": 0.995,
           "n": 83
         },
         "lvh": {
-          "sens": 0.765,
-          "spec": 0.974,
+          "sens": 0.843,
+          "spec": 0.948,
           "n": 51
         },
         "low_qrs_voltage": {
-          "sens": 0.654,
-          "spec": 0.964,
+          "sens": 0.568,
+          "spec": 0.967,
           "n": 81
         },
         "long_qt": {
-          "sens": 0.304,
-          "spec": 0.973,
+          "sens": 0.391,
+          "spec": 0.981,
           "n": 23
         },
         "st_depression": {
-          "sens": 0.553,
-          "spec": 0.927,
+          "sens": 0.471,
+          "spec": 0.943,
           "n": 85
         },
         "st_elevation": {
-          "sens": 0.638,
-          "spec": 0.979,
+          "sens": 0.379,
+          "spec": 0.993,
           "n": 58
         },
         "left_axis_deviation": {
-          "sens": 0.759,
-          "spec": 0.909,
+          "sens": 0.711,
+          "spec": 0.919,
           "n": 83
         },
         "right_axis_deviation": {
-          "sens": 0.713,
-          "spec": 0.966,
+          "sens": 0.7,
+          "spec": 0.974,
           "n": 80
+        },
+        "wpw_preexcitation": {
+          "sens": 0.0,
+          "spec": 0.998,
+          "n": 3
         }
       },
       "rules_or_model": {
         "atrial_fibrillation": {
-          "sens": 0.863,
-          "spec": 0.702,
+          "sens": 0.925,
+          "spec": 0.695,
           "n": 80
         },
         "atrial_flutter": {
-          "sens": 0.615,
-          "spec": 0.87,
+          "sens": 0.428,
+          "spec": 0.872,
           "n": 187
         },
         "sinus_rhythm": {
-          "sens": 0.912,
-          "spec": 0.836,
+          "sens": 0.963,
+          "spec": 0.825,
           "n": 80
         },
         "sinus_bradycardia": {
           "sens": 0.939,
-          "spec": 0.973,
+          "spec": 0.976,
           "n": 115
         },
         "sinus_tachycardia": {
@@ -205,58 +218,561 @@
           "n": 93
         },
         "first_degree_av_block": {
-          "sens": 0.718,
-          "spec": 0.927,
+          "sens": 0.824,
+          "spec": 0.929,
           "n": 85
         },
         "rbbb": {
-          "sens": 0.873,
-          "spec": 0.981,
+          "sens": 0.859,
+          "spec": 0.988,
           "n": 71
         },
         "lbbb": {
-          "sens": 0.867,
-          "spec": 0.924,
+          "sens": 0.843,
+          "spec": 0.935,
           "n": 83
         },
         "lvh": {
-          "sens": 0.922,
-          "spec": 0.912,
+          "sens": 0.961,
+          "spec": 0.856,
           "n": 51
         },
         "low_qrs_voltage": {
-          "sens": 0.864,
-          "spec": 0.84,
+          "sens": 0.778,
+          "spec": 0.851,
           "n": 81
         },
         "long_qt": {
-          "sens": 0.696,
-          "spec": 0.842,
+          "sens": 0.739,
+          "spec": 0.85,
           "n": 23
         },
         "st_depression": {
-          "sens": 0.647,
+          "sens": 0.659,
           "spec": 0.791,
           "n": 85
         },
         "st_elevation": {
-          "sens": 0.655,
-          "spec": 0.97,
+          "sens": 0.603,
+          "spec": 0.982,
           "n": 58
         },
         "left_axis_deviation": {
-          "sens": 0.94,
-          "spec": 0.84,
+          "sens": 0.952,
+          "spec": 0.838,
           "n": 83
         },
         "right_axis_deviation": {
-          "sens": 0.838,
-          "spec": 0.955,
+          "sens": 0.787,
+          "spec": 0.961,
           "n": 80
+        },
+        "wpw_preexcitation": {
+          "sens": 0.0,
+          "spec": 0.974,
+          "n": 3
         }
       }
     },
-    "cross:ptbxl": {
+    "holdout:ptbxl-folds-9-10": {
+      "rules": {
+        "atrial_fibrillation": {
+          "sens": 0.531,
+          "spec": 0.968,
+          "n": 32
+        },
+        "atrial_flutter": {
+          "sens": 0.429,
+          "spec": 1.0,
+          "n": 14
+        },
+        "sinus_rhythm": {
+          "sens": 0.813,
+          "spec": 0.76,
+          "n": 219
+        },
+        "sinus_bradycardia": {
+          "sens": 0.958,
+          "spec": 0.88,
+          "n": 24
+        },
+        "sinus_tachycardia": {
+          "sens": 0.913,
+          "spec": 0.956,
+          "n": 23
+        },
+        "first_degree_av_block": {
+          "sens": 0.622,
+          "spec": 0.914,
+          "n": 37
+        },
+        "rbbb": {
+          "sens": 0.867,
+          "spec": 0.966,
+          "n": 15
+        },
+        "lbbb": {
+          "sens": 0.722,
+          "spec": 0.879,
+          "n": 18
+        },
+        "lvh": {
+          "sens": 0.442,
+          "spec": 0.927,
+          "n": 52
+        },
+        "low_qrs_voltage": {
+          "sens": 0.757,
+          "spec": 0.911,
+          "n": 37
+        },
+        "long_qt": {
+          "sens": 0.565,
+          "spec": 0.896,
+          "n": 23
+        },
+        "st_depression": {
+          "sens": 0.241,
+          "spec": 0.807,
+          "n": 29
+        },
+        "st_elevation": {
+          "sens": 0.0,
+          "spec": 0.973,
+          "n": 6
+        },
+        "left_axis_deviation": {
+          "sens": 0.349,
+          "spec": 0.87,
+          "n": 63
+        },
+        "right_axis_deviation": {
+          "sens": 1.0,
+          "spec": 0.95,
+          "n": 17
+        },
+        "wpw_preexcitation": {
+          "sens": 0.4,
+          "spec": 0.972,
+          "n": 15
+        }
+      },
+      "model": {
+        "atrial_fibrillation": {
+          "sens": 0.594,
+          "spec": 0.974,
+          "n": 32
+        },
+        "atrial_flutter": {
+          "sens": 0.786,
+          "spec": 0.975,
+          "n": 14
+        },
+        "sinus_rhythm": {
+          "sens": 0.863,
+          "spec": 0.835,
+          "n": 219
+        },
+        "sinus_bradycardia": {
+          "sens": 0.875,
+          "spec": 0.924,
+          "n": 24
+        },
+        "sinus_tachycardia": {
+          "sens": 0.87,
+          "spec": 0.975,
+          "n": 23
+        },
+        "first_degree_av_block": {
+          "sens": 0.676,
+          "spec": 0.947,
+          "n": 37
+        },
+        "rbbb": {
+          "sens": 0.8,
+          "spec": 0.978,
+          "n": 15
+        },
+        "lbbb": {
+          "sens": 0.611,
+          "spec": 0.978,
+          "n": 18
+        },
+        "lvh": {
+          "sens": 0.538,
+          "spec": 0.969,
+          "n": 52
+        },
+        "low_qrs_voltage": {
+          "sens": 0.757,
+          "spec": 0.95,
+          "n": 37
+        },
+        "long_qt": {
+          "sens": 0.435,
+          "spec": 0.981,
+          "n": 23
+        },
+        "st_depression": {
+          "sens": 0.379,
+          "spec": 0.929,
+          "n": 29
+        },
+        "st_elevation": {
+          "sens": 0.0,
+          "spec": 0.985,
+          "n": 6
+        },
+        "left_axis_deviation": {
+          "sens": 0.492,
+          "spec": 0.859,
+          "n": 63
+        },
+        "right_axis_deviation": {
+          "sens": 1.0,
+          "spec": 0.96,
+          "n": 17
+        },
+        "wpw_preexcitation": {
+          "sens": 0.4,
+          "spec": 0.994,
+          "n": 15
+        }
+      },
+      "rules_or_model": {
+        "atrial_fibrillation": {
+          "sens": 0.719,
+          "spec": 0.955,
+          "n": 32
+        },
+        "atrial_flutter": {
+          "sens": 0.786,
+          "spec": 0.975,
+          "n": 14
+        },
+        "sinus_rhythm": {
+          "sens": 0.913,
+          "spec": 0.752,
+          "n": 219
+        },
+        "sinus_bradycardia": {
+          "sens": 0.958,
+          "spec": 0.88,
+          "n": 24
+        },
+        "sinus_tachycardia": {
+          "sens": 0.913,
+          "spec": 0.95,
+          "n": 23
+        },
+        "first_degree_av_block": {
+          "sens": 0.811,
+          "spec": 0.888,
+          "n": 37
+        },
+        "rbbb": {
+          "sens": 0.933,
+          "spec": 0.963,
+          "n": 15
+        },
+        "lbbb": {
+          "sens": 0.944,
+          "spec": 0.873,
+          "n": 18
+        },
+        "lvh": {
+          "sens": 0.654,
+          "spec": 0.906,
+          "n": 52
+        },
+        "low_qrs_voltage": {
+          "sens": 0.838,
+          "spec": 0.901,
+          "n": 37
+        },
+        "long_qt": {
+          "sens": 0.739,
+          "spec": 0.89,
+          "n": 23
+        },
+        "st_depression": {
+          "sens": 0.448,
+          "spec": 0.775,
+          "n": 29
+        },
+        "st_elevation": {
+          "sens": 0.0,
+          "spec": 0.961,
+          "n": 6
+        },
+        "left_axis_deviation": {
+          "sens": 0.651,
+          "spec": 0.798,
+          "n": 63
+        },
+        "right_axis_deviation": {
+          "sens": 1.0,
+          "spec": 0.947,
+          "n": 17
+        },
+        "wpw_preexcitation": {
+          "sens": 0.667,
+          "spec": 0.966,
+          "n": 15
+        }
+      }
+    },
+    "cross:ecg-arrhythmia-pediatric": {
+      "rules": {
+        "atrial_fibrillation": {
+          "sens": null,
+          "spec": 0.952,
+          "n": 0
+        },
+        "atrial_flutter": {
+          "sens": 0.0,
+          "spec": 0.99,
+          "n": 19
+        },
+        "sinus_rhythm": {
+          "sens": 0.9,
+          "spec": 0.608,
+          "n": 329
+        },
+        "sinus_bradycardia": {
+          "sens": 0.917,
+          "spec": 0.978,
+          "n": 84
+        },
+        "sinus_tachycardia": {
+          "sens": 0.87,
+          "spec": 0.96,
+          "n": 772
+        },
+        "first_degree_av_block": {
+          "sens": 0.727,
+          "spec": 0.966,
+          "n": 11
+        },
+        "rbbb": {
+          "sens": 0.643,
+          "spec": 0.995,
+          "n": 14
+        },
+        "lbbb": {
+          "sens": 0.5,
+          "spec": 0.984,
+          "n": 2
+        },
+        "lvh": {
+          "sens": 0.25,
+          "spec": 0.984,
+          "n": 4
+        },
+        "low_qrs_voltage": {
+          "sens": 0.667,
+          "spec": 0.984,
+          "n": 3
+        },
+        "long_qt": {
+          "sens": 0.167,
+          "spec": 0.989,
+          "n": 6
+        },
+        "st_depression": {
+          "sens": 0.571,
+          "spec": 0.93,
+          "n": 7
+        },
+        "st_elevation": {
+          "sens": 0.429,
+          "spec": 0.975,
+          "n": 7
+        },
+        "left_axis_deviation": {
+          "sens": 0.562,
+          "spec": 0.97,
+          "n": 16
+        },
+        "right_axis_deviation": {
+          "sens": 0.075,
+          "spec": 0.993,
+          "n": 40
+        },
+        "wpw_preexcitation": {
+          "sens": 0.0,
+          "spec": 0.996,
+          "n": 6
+        }
+      },
+      "model": {
+        "atrial_fibrillation": {
+          "sens": null,
+          "spec": 0.994,
+          "n": 0
+        },
+        "atrial_flutter": {
+          "sens": 0.526,
+          "spec": 0.98,
+          "n": 19
+        },
+        "sinus_rhythm": {
+          "sens": 0.626,
+          "spec": 0.906,
+          "n": 329
+        },
+        "sinus_bradycardia": {
+          "sens": 0.798,
+          "spec": 0.993,
+          "n": 84
+        },
+        "sinus_tachycardia": {
+          "sens": 0.472,
+          "spec": 0.968,
+          "n": 772
+        },
+        "first_degree_av_block": {
+          "sens": 0.545,
+          "spec": 0.997,
+          "n": 11
+        },
+        "rbbb": {
+          "sens": 0.643,
+          "spec": 0.996,
+          "n": 14
+        },
+        "lbbb": {
+          "sens": 0.5,
+          "spec": 0.993,
+          "n": 2
+        },
+        "lvh": {
+          "sens": 0.25,
+          "spec": 0.983,
+          "n": 4
+        },
+        "low_qrs_voltage": {
+          "sens": 0.333,
+          "spec": 0.992,
+          "n": 3
+        },
+        "long_qt": {
+          "sens": 0.333,
+          "spec": 0.997,
+          "n": 6
+        },
+        "st_depression": {
+          "sens": 0.286,
+          "spec": 0.996,
+          "n": 7
+        },
+        "st_elevation": {
+          "sens": 0.429,
+          "spec": 0.986,
+          "n": 7
+        },
+        "left_axis_deviation": {
+          "sens": 0.562,
+          "spec": 0.986,
+          "n": 16
+        },
+        "right_axis_deviation": {
+          "sens": 0.625,
+          "spec": 0.905,
+          "n": 40
+        },
+        "wpw_preexcitation": {
+          "sens": 0.167,
+          "spec": 1.0,
+          "n": 6
+        }
+      },
+      "rules_or_model": {
+        "atrial_fibrillation": {
+          "sens": null,
+          "spec": 0.951,
+          "n": 0
+        },
+        "atrial_flutter": {
+          "sens": 0.526,
+          "spec": 0.973,
+          "n": 19
+        },
+        "sinus_rhythm": {
+          "sens": 0.912,
+          "spec": 0.599,
+          "n": 329
+        },
+        "sinus_bradycardia": {
+          "sens": 0.94,
+          "spec": 0.978,
+          "n": 84
+        },
+        "sinus_tachycardia": {
+          "sens": 0.97,
+          "spec": 0.937,
+          "n": 772
+        },
+        "first_degree_av_block": {
+          "sens": 0.818,
+          "spec": 0.964,
+          "n": 11
+        },
+        "rbbb": {
+          "sens": 0.643,
+          "spec": 0.993,
+          "n": 14
+        },
+        "lbbb": {
+          "sens": 0.5,
+          "spec": 0.978,
+          "n": 2
+        },
+        "lvh": {
+          "sens": 0.5,
+          "spec": 0.974,
+          "n": 4
+        },
+        "low_qrs_voltage": {
+          "sens": 0.667,
+          "spec": 0.979,
+          "n": 3
+        },
+        "long_qt": {
+          "sens": 0.333,
+          "spec": 0.986,
+          "n": 6
+        },
+        "st_depression": {
+          "sens": 0.571,
+          "spec": 0.928,
+          "n": 7
+        },
+        "st_elevation": {
+          "sens": 0.714,
+          "spec": 0.971,
+          "n": 7
+        },
+        "left_axis_deviation": {
+          "sens": 0.688,
+          "spec": 0.965,
+          "n": 16
+        },
+        "right_axis_deviation": {
+          "sens": 0.65,
+          "spec": 0.899,
+          "n": 40
+        },
+        "wpw_preexcitation": {
+          "sens": 0.167,
+          "spec": 0.996,
+          "n": 6
+        }
+      }
+    }
+  },
+  "transfer": {
+    "ecgarr->ptbxl": {
       "rules": {
         "atrial_fibrillation": {
           "sens": 0.545,
@@ -285,22 +801,22 @@
         },
         "first_degree_av_block": {
           "sens": 0.628,
-          "spec": 0.915,
+          "spec": 0.916,
           "n": 188
         },
         "rbbb": {
-          "sens": 0.849,
-          "spec": 0.927,
+          "sens": 0.872,
+          "spec": 0.963,
           "n": 86
         },
         "lbbb": {
-          "sens": 0.565,
-          "spec": 0.881,
+          "sens": 0.847,
+          "spec": 0.867,
           "n": 85
         },
         "lvh": {
-          "sens": 0.348,
-          "spec": 0.972,
+          "sens": 0.48,
+          "spec": 0.932,
           "n": 198
         },
         "low_qrs_voltage": {
@@ -314,13 +830,13 @@
           "n": 117
         },
         "st_depression": {
-          "sens": 0.234,
-          "spec": 0.804,
-          "n": 107
+          "sens": 0.28,
+          "spec": 0.806,
+          "n": 125
         },
         "st_elevation": {
           "sens": 0.0,
-          "spec": 0.968,
+          "spec": 0.974,
           "n": 28
         },
         "left_axis_deviation": {
@@ -336,90 +852,90 @@
       },
       "model": {
         "atrial_fibrillation": {
-          "sens": 0.439,
-          "spec": 0.966,
+          "sens": 0.276,
+          "spec": 0.991,
           "n": 123
         },
         "atrial_flutter": {
           "sens": 0.507,
-          "spec": 0.926,
+          "spec": 0.923,
           "n": 73
         },
         "sinus_rhythm": {
-          "sens": 0.604,
-          "spec": 0.91,
+          "sens": 0.546,
+          "spec": 0.923,
           "n": 1135
         },
         "sinus_bradycardia": {
-          "sens": 0.953,
-          "spec": 0.892,
+          "sens": 0.915,
+          "spec": 0.9,
           "n": 106
         },
         "sinus_tachycardia": {
-          "sens": 0.827,
-          "spec": 0.972,
+          "sens": 0.845,
+          "spec": 0.982,
           "n": 110
         },
         "first_degree_av_block": {
-          "sens": 0.468,
-          "spec": 0.948,
+          "sens": 0.527,
+          "spec": 0.93,
           "n": 188
         },
         "rbbb": {
           "sens": 0.93,
-          "spec": 0.958,
+          "spec": 0.965,
           "n": 86
         },
         "lbbb": {
-          "sens": 0.729,
-          "spec": 0.966,
+          "sens": 0.835,
+          "spec": 0.974,
           "n": 85
         },
         "lvh": {
-          "sens": 0.096,
-          "spec": 0.996,
+          "sens": 0.106,
+          "spec": 0.992,
           "n": 198
         },
         "low_qrs_voltage": {
-          "sens": 0.5,
-          "spec": 0.909,
+          "sens": 0.56,
+          "spec": 0.915,
           "n": 182
         },
         "long_qt": {
-          "sens": 0.137,
-          "spec": 0.986,
+          "sens": 0.111,
+          "spec": 0.987,
           "n": 117
         },
         "st_depression": {
-          "sens": 0.271,
-          "spec": 0.902,
-          "n": 107
+          "sens": 0.344,
+          "spec": 0.92,
+          "n": 125
         },
         "st_elevation": {
-          "sens": 0.0,
-          "spec": 0.959,
+          "sens": 0.036,
+          "spec": 0.964,
           "n": 28
         },
         "left_axis_deviation": {
-          "sens": 0.269,
-          "spec": 0.889,
+          "sens": 0.252,
+          "spec": 0.888,
           "n": 305
         },
         "right_axis_deviation": {
-          "sens": 0.839,
-          "spec": 0.966,
+          "sens": 0.763,
+          "spec": 0.972,
           "n": 93
         }
       },
       "rules_or_model": {
         "atrial_fibrillation": {
-          "sens": 0.724,
-          "spec": 0.942,
+          "sens": 0.634,
+          "spec": 0.963,
           "n": 123
         },
         "atrial_flutter": {
-          "sens": 0.712,
-          "spec": 0.925,
+          "sens": 0.699,
+          "spec": 0.921,
           "n": 73
         },
         "sinus_rhythm": {
@@ -429,63 +945,311 @@
         },
         "sinus_bradycardia": {
           "sens": 0.972,
-          "spec": 0.872,
+          "spec": 0.875,
           "n": 106
         },
         "sinus_tachycardia": {
-          "sens": 0.945,
-          "spec": 0.945,
+          "sens": 0.955,
+          "spec": 0.95,
           "n": 110
         },
         "first_degree_av_block": {
-          "sens": 0.644,
-          "spec": 0.905,
+          "sens": 0.686,
+          "spec": 0.887,
           "n": 188
         },
         "rbbb": {
           "sens": 0.965,
-          "spec": 0.919,
+          "spec": 0.957,
           "n": 86
         },
         "lbbb": {
-          "sens": 0.882,
+          "sens": 0.918,
           "spec": 0.862,
           "n": 85
         },
         "lvh": {
-          "sens": 0.359,
-          "spec": 0.971,
+          "sens": 0.5,
+          "spec": 0.927,
           "n": 198
         },
         "low_qrs_voltage": {
-          "sens": 0.813,
-          "spec": 0.854,
+          "sens": 0.83,
+          "spec": 0.861,
           "n": 182
         },
         "long_qt": {
-          "sens": 0.504,
-          "spec": 0.884,
+          "sens": 0.496,
+          "spec": 0.883,
           "n": 117
         },
         "st_depression": {
-          "sens": 0.364,
-          "spec": 0.768,
-          "n": 107
+          "sens": 0.44,
+          "spec": 0.775,
+          "n": 125
         },
         "st_elevation": {
-          "sens": 0.0,
-          "spec": 0.942,
+          "sens": 0.036,
+          "spec": 0.95,
           "n": 28
         },
         "left_axis_deviation": {
-          "sens": 0.41,
-          "spec": 0.823,
+          "sens": 0.416,
+          "spec": 0.821,
           "n": 305
         },
         "right_axis_deviation": {
-          "sens": 0.914,
-          "spec": 0.957,
+          "sens": 0.925,
+          "spec": 0.959,
           "n": 93
+        }
+      }
+    },
+    "ptbxl->ecgarr": {
+      "rules": {
+        "atrial_fibrillation": {
+          "sens": 0.773,
+          "spec": 0.797,
+          "n": 150
+        },
+        "atrial_flutter": {
+          "sens": 0.053,
+          "spec": 0.988,
+          "n": 319
+        },
+        "sinus_rhythm": {
+          "sens": 0.947,
+          "spec": 0.859,
+          "n": 150
+        },
+        "sinus_bradycardia": {
+          "sens": 1.0,
+          "spec": 0.942,
+          "n": 325
+        },
+        "sinus_tachycardia": {
+          "sens": 0.909,
+          "spec": 0.917,
+          "n": 164
+        },
+        "first_degree_av_block": {
+          "sens": 0.745,
+          "spec": 0.93,
+          "n": 153
+        },
+        "rbbb": {
+          "sens": 0.825,
+          "spec": 0.982,
+          "n": 154
+        },
+        "lbbb": {
+          "sens": 0.571,
+          "spec": 0.937,
+          "n": 56
+        },
+        "lvh": {
+          "sens": 0.862,
+          "spec": 0.88,
+          "n": 138
+        },
+        "low_qrs_voltage": {
+          "sens": 0.675,
+          "spec": 0.861,
+          "n": 151
+        },
+        "long_qt": {
+          "sens": 0.487,
+          "spec": 0.896,
+          "n": 76
+        },
+        "st_depression": {
+          "sens": 0.643,
+          "spec": 0.843,
+          "n": 157
+        },
+        "st_elevation": {
+          "sens": 0.397,
+          "spec": 0.979,
+          "n": 156
+        },
+        "left_axis_deviation": {
+          "sens": 0.859,
+          "spec": 0.903,
+          "n": 156
+        },
+        "right_axis_deviation": {
+          "sens": 0.866,
+          "spec": 0.945,
+          "n": 119
+        },
+        "wpw_preexcitation": {
+          "sens": 0.2,
+          "spec": 0.978,
+          "n": 5
+        }
+      },
+      "model": {
+        "atrial_fibrillation": {
+          "sens": 0.833,
+          "spec": 0.778,
+          "n": 150
+        },
+        "atrial_flutter": {
+          "sens": 0.129,
+          "spec": 0.968,
+          "n": 319
+        },
+        "sinus_rhythm": {
+          "sens": 0.967,
+          "spec": 0.674,
+          "n": 150
+        },
+        "sinus_bradycardia": {
+          "sens": 0.197,
+          "spec": 0.994,
+          "n": 325
+        },
+        "sinus_tachycardia": {
+          "sens": 0.823,
+          "spec": 0.983,
+          "n": 164
+        },
+        "first_degree_av_block": {
+          "sens": 0.562,
+          "spec": 0.962,
+          "n": 153
+        },
+        "rbbb": {
+          "sens": 0.753,
+          "spec": 0.989,
+          "n": 154
+        },
+        "lbbb": {
+          "sens": 0.482,
+          "spec": 0.999,
+          "n": 56
+        },
+        "lvh": {
+          "sens": 0.913,
+          "spec": 0.899,
+          "n": 138
+        },
+        "low_qrs_voltage": {
+          "sens": 0.411,
+          "spec": 0.94,
+          "n": 151
+        },
+        "long_qt": {
+          "sens": 0.132,
+          "spec": 0.982,
+          "n": 76
+        },
+        "st_depression": {
+          "sens": 0.261,
+          "spec": 0.973,
+          "n": 157
+        },
+        "st_elevation": {
+          "sens": 0.0,
+          "spec": 1.0,
+          "n": 156
+        },
+        "left_axis_deviation": {
+          "sens": 0.359,
+          "spec": 0.937,
+          "n": 156
+        },
+        "right_axis_deviation": {
+          "sens": 0.739,
+          "spec": 0.97,
+          "n": 119
+        },
+        "wpw_preexcitation": {
+          "sens": 0.4,
+          "spec": 0.995,
+          "n": 5
+        }
+      },
+      "rules_or_model": {
+        "atrial_fibrillation": {
+          "sens": 0.927,
+          "spec": 0.745,
+          "n": 150
+        },
+        "atrial_flutter": {
+          "sens": 0.157,
+          "spec": 0.958,
+          "n": 319
+        },
+        "sinus_rhythm": {
+          "sens": 0.987,
+          "spec": 0.621,
+          "n": 150
+        },
+        "sinus_bradycardia": {
+          "sens": 1.0,
+          "spec": 0.942,
+          "n": 325
+        },
+        "sinus_tachycardia": {
+          "sens": 0.939,
+          "spec": 0.906,
+          "n": 164
+        },
+        "first_degree_av_block": {
+          "sens": 0.771,
+          "spec": 0.905,
+          "n": 153
+        },
+        "rbbb": {
+          "sens": 0.935,
+          "spec": 0.972,
+          "n": 154
+        },
+        "lbbb": {
+          "sens": 0.643,
+          "spec": 0.937,
+          "n": 56
+        },
+        "lvh": {
+          "sens": 0.942,
+          "spec": 0.849,
+          "n": 138
+        },
+        "low_qrs_voltage": {
+          "sens": 0.695,
+          "spec": 0.845,
+          "n": 151
+        },
+        "long_qt": {
+          "sens": 0.513,
+          "spec": 0.886,
+          "n": 76
+        },
+        "st_depression": {
+          "sens": 0.713,
+          "spec": 0.829,
+          "n": 157
+        },
+        "st_elevation": {
+          "sens": 0.397,
+          "spec": 0.979,
+          "n": 156
+        },
+        "left_axis_deviation": {
+          "sens": 0.878,
+          "spec": 0.873,
+          "n": 156
+        },
+        "right_axis_deviation": {
+          "sens": 0.899,
+          "spec": 0.941,
+          "n": 119
+        },
+        "wpw_preexcitation": {
+          "sens": 0.4,
+          "spec": 0.973,
+          "n": 5
         }
       }
     }
@@ -493,6 +1257,8 @@
   "suggest_classes": [
     "rbbb",
     "lbbb",
-    "st_elevation"
+    "long_qt",
+    "st_elevation",
+    "wpw_preexcitation"
   ]
 }
