@@ -15,6 +15,11 @@ preprocessing:
   bandpass_high_hz: 40.0    # keep ST intact, remove HF noise
   # Signal Quality Index below this marks a lead as low-quality (0..1).
   sqi_accept_threshold: 0.5
+  # CardioLens interprets resting ECGs (~10 s). Longer recordings (Holter) are
+  # analysed on their first max_analysis_s seconds, with a note in the audit log:
+  # delineation time grows faster than linearly with the beat count (a 30-min
+  # INCART record took > 20 min; D37).
+  max_analysis_s: 60
 
 # Additive calibration (ms) for the delineator's systematic fiducial bias,
 # measured against LUDB expert annotations (DECISIONS.md D15a): the dwt

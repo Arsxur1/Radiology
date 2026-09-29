@@ -46,6 +46,8 @@ class Preprocessing(BaseModel):
     bandpass_low_hz: float
     bandpass_high_hz: float
     sqi_accept_threshold: float
+    # Longer recordings are analysed on their first max_analysis_s seconds (D37).
+    max_analysis_s: float = 60.0
 
 
 class DelineationCorrection(BaseModel):

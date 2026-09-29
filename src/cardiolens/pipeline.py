@@ -79,6 +79,14 @@ def run_pipeline(
         calibrator = TemperatureScaler.load(configs_dir() / "calibrator.json")
     audit: list[str] = []
 
+    # Resting-ECG interpreter: a long recording is analysed on its leading window.
+    max_s = cfg.preprocessing.max_analysis_s
+    if max_s and sig.duration_s > max_s:
+        n = int(round(max_s * sig.sampling_rate_hz))
+        audit.append(f"[L1] recording {sig.duration_s:.0f} s > {max_s:.0f} s: "
+                     f"analysed the first {max_s:.0f} s only")
+        sig = sig.model_copy(update={"signal": sig.signal[:, :n], "duration_s": n / sig.sampling_rate_hz})
+
     # Pacing-spike detection runs on the RAW signal (§7.1): the narrow, high-slew
     # pacer spike is removed by the Layer-2 bandpass, so measure it before that.
     pacing_ratio = pacing_spike_ratio(sig)

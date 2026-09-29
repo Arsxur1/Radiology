@@ -95,3 +95,10 @@ def test_normal_synthetic_ecg_has_q_measures_but_no_pathological_q():
     result = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=70, duration_s=10), mode="A")
     assert len(result.measurements.morphology.q_waves) == 12
     assert "pathological_q_waves" not in result.findings.codes()
+
+
+def test_long_recording_is_analysed_on_leading_window():
+    sig = generate_synthetic_ecg(heart_rate_bpm=70, duration_s=75)
+    result = run_pipeline(sig, mode="A")
+    assert any("analysed the first 60 s" in line for line in result.audit_log)
+    assert result.measurements.heart_rate_bpm is not None
