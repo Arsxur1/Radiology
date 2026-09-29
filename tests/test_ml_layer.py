@@ -109,7 +109,29 @@ def test_tiny_model_end_to_end(tmp_path):
 @pytest.mark.parametrize("hr", [55.0, 75.0, 120.0])
 def test_feature_vector_is_sized_and_mostly_defined(hr):
     sig = generate_synthetic_ecg(heart_rate_bpm=hr, duration_s=10.0)
-    m = run_pipeline(sig, mode="A").measurements
-    x = features_from_measurements(m, sig.sampling_rate_hz)
+    from cardiolens.ml.features import features_from_result
+
+    x = features_from_result(run_pipeline(sig, mode="A"))
     assert x.shape == (len(FEATURE_NAMES),)
     assert np.isfinite(x).mean() > 0.8   # NaN allowed (HGB handles missing), but not many
+
+
+def test_feature_set_v2_has_beat_shape_and_old_artifacts_are_refused(tmp_path):
+    from cardiolens.ml.features import FEATURE_SET, SHAPE_FEATURE_NAMES, SUMMARY_FEATURE_NAMES
+
+    assert FEATURE_SET == "v2" and len(FEATURE_NAMES) == len(SUMMARY_FEATURE_NAMES) + len(SHAPE_FEATURE_NAMES)
+    sig = generate_synthetic_ecg(heart_rate_bpm=75, duration_s=10.0)
+    r = run_pipeline(sig, mode="A")
+    from cardiolens.ml.features import features_from_result
+
+    x = features_from_result(r)
+    shape = x[len(SUMMARY_FEATURE_NAMES):]
+    assert np.isfinite(shape).mean() > 0.9          # every lead yields a median beat
+    beat_ii = shape[24 * 1: 24 * 2]                  # lead II median beat, QRS-peak normalised
+    assert beat_ii.max() > 0.5 and np.abs(shape[:24 * 12]).max() < 5.0   # 24-point resampling clips the R peak
+    # An artifact from another feature set is refused, not misread.
+    from cardiolens.ml.model import RhythmModel
+
+    old = RhythmModel(classes=["rbbb"], feature_names=list(FEATURE_NAMES[:79]), meta={"feature_set": "v1"})
+    old.save(tmp_path / "old.joblib")
+    assert load_model(tmp_path / "old.joblib") is None

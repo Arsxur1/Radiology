@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cardiolens.ml.features import FEATURE_NAMES, features_from_result
+from cardiolens.ml.features import FEATURE_NAMES, FEATURE_SET, features_from_result
 from cardiolens.ml.model import RhythmModel, fit_model
 from cardiolens.validation.metrics import score_findings
 
@@ -49,7 +49,9 @@ def extract(root: Path) -> dict:
     cache = root / ".ml_features.npz"
     if cache.exists():
         z = np.load(cache, allow_pickle=True)
-        return {k: z[k] for k in ("x", "gold", "rules", "names")}
+        if "feature_set" in z.files and str(z["feature_set"]) == FEATURE_SET and z["x"].shape[1] == len(FEATURE_NAMES):
+            return {k: z[k] for k in ("x", "gold", "rules", "names")}
+        _log(f"[ml] {root.name}: cache is from another feature set, re-extracting")
     from cardiolens.layer6_interpret import StubProvider
     from cardiolens.pipeline import run_pipeline
 
@@ -64,7 +66,43 @@ def extract(root: Path) -> dict:
         if i % 200 == 0:
             _log(f"[ml] {root.name}: {i}/{len(cases)}")
     out = {"x": np.vstack(xs), "gold": np.array(golds), "rules": np.array(rules), "names": np.array(names)}
-    np.savez(cache, **out)
+    np.savez(cache, feature_set=np.array(FEATURE_SET), **out)
+    return out
+
+
+def split_ptbxl_folds(data: dict, root: Path, train_folds: set[int]) -> tuple[dict, dict]:
+    """Split an extracted PTB-XL set by ``strat_fold`` (ptbxl_database.csv) into
+    (train part, test part) — the folds are PTB-XL's own patient-disjoint split."""
+    import csv
+
+    fold = {}
+    with (root / "ptbxl_database.csv").open(encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            fold[f"ptbxl_{row['ecg_id']}"] = int(float(row["strat_fold"]))
+    is_train = np.array([fold.get(n, 0) in train_folds for n in data["names"]])
+    sub = lambda mask: {k: v[mask] for k, v in data.items()}
+    return sub(is_train), sub(~is_train)
+
+
+def _subset_names(data: dict, exclude: set[str]) -> dict:
+    keep = np.array([n not in exclude for n in data["names"]])
+    return {k: v[keep] for k, v in data.items()}
+
+
+def transfer_report(sources: dict[str, dict], threshold: float, min_positives: int) -> dict:
+    """Train on each source, test on every other: the cross-database gap per class."""
+    out = {}
+    for name, data in sources.items():
+        model = fit_model(data["x"], _targets(data["gold"]), FEATURE_NAMES, min_positives=min_positives)
+        for other, test in sources.items():
+            if other == name:
+                continue
+            rep = evaluate(model, _subset_names(test, set(data["names"].tolist())), threshold)
+            out[f"{name}->{other}"] = rep
+            _log(f"[ml] transfer {name} -> {other}:")
+            for c in model.classes:
+                r, m_ = rep["rules"][c], rep["model"][c]
+                _log(f"     {c:22s} n={r['n']:4d} rules {r['sens']}/{r['spec']}  model {m_['sens']}/{m_['spec']}")
     return out
 
 
@@ -115,11 +153,26 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--min-positives", type=int, default=20)
     ap.add_argument("--report", default=None, help="write metrics JSON here")
+    ap.add_argument("--ptbxl-train-folds", default="1-8",
+                    help="a PTB-XL root given in --train is split by strat_fold: these folds train, the rest are a hold-out")
+    ap.add_argument("--transfer", nargs="*", default=[],
+                    help="named sources 'label=root' for a train-on-one/test-on-other transfer report")
     args = ap.parse_args(argv)
 
+    lo, hi = (int(v) for v in args.ptbxl_train_folds.split("-"))
+    train_folds = set(range(lo, hi + 1))
     holdouts = [extract(Path(p)) for p in args.holdout]
+    holdout_names = list(args.holdout)
+    train_parts = []
+    for p in args.train:
+        data = extract(Path(p))
+        if (Path(p) / "ptbxl_database.csv").exists():
+            data, rest = split_ptbxl_folds(data, Path(p), train_folds)
+            holdouts.append(rest)
+            holdout_names.append(f"{Path(p).name}-folds-{max(train_folds) + 1}-10")
+            _log(f"[ml] {Path(p).name}: folds {args.ptbxl_train_folds} train ({len(data['x'])}), rest hold-out ({len(rest['x'])})")
+        train_parts.append(data)
     exclude = {n for h in holdouts for n in h["names"].tolist()}
-    train_parts = [extract(Path(p)) for p in args.train]
     x = np.vstack([t["x"] for t in train_parts])
     gold = np.concatenate([t["gold"] for t in train_parts])
     names = np.concatenate([t["names"] for t in train_parts])
@@ -128,17 +181,23 @@ def main(argv: list[str] | None = None) -> None:
     _log(f"[ml] training on {len(x)} records ({int((~keep).sum())} removed as hold-out duplicates)")
 
     model = fit_model(x, _targets(gold), FEATURE_NAMES, min_positives=args.min_positives)
-    model.meta = {"train_records": int(len(x)), "train_sets": args.train, "classes": model.classes,
-                  "threshold": args.threshold, "reports": {}}
-    for label, roots in (("holdout", args.holdout), ("cross", args.cross)):
-        for root in roots:
-            data = extract(Path(root)) if root not in args.holdout else holdouts[args.holdout.index(root)]
-            rep = evaluate(model, data, args.threshold)
-            model.meta["reports"][f"{label}:{Path(root).name}"] = rep
-            _log(f"[ml] {label} {Path(root).name}: {len(data['x'])} records")
-            for c in model.classes:
-                r, m_, o = rep["rules"][c], rep["model"][c], rep["rules_or_model"][c]
-                _log(f"     {c:22s} n={r['n']:4d} rules {r['sens']}/{r['spec']}  model {m_['sens']}/{m_['spec']}  or {o['sens']}/{o['spec']}")
+    model.meta.update({"train_records": int(len(x)), "train_sets": args.train, "classes": model.classes,
+                       "threshold": args.threshold, "reports": {}})
+    evals = [("holdout", Path(n).name, d) for n, d in zip(holdout_names, holdouts)]
+    evals += [("cross", Path(root).name, extract(Path(root))) for root in args.cross]
+    for label, name, data in evals:
+        rep = evaluate(model, data, args.threshold)
+        model.meta["reports"][f"{label}:{name}"] = rep
+        _log(f"[ml] {label} {name}: {len(data['x'])} records")
+        for c in model.classes:
+            r, m_, o = rep["rules"][c], rep["model"][c], rep["rules_or_model"][c]
+            _log(f"     {c:22s} n={r['n']:4d} rules {r['sens']}/{r['spec']}  model {m_['sens']}/{m_['spec']}  or {o['sens']}/{o['spec']}")
+    if args.transfer:
+        sources = {}
+        for item in args.transfer:
+            label, root = item.split("=", 1)
+            sources[label] = extract(Path(root))
+        model.meta["transfer"] = transfer_report(sources, args.threshold, args.min_positives)
     model.meta["suggest_classes"] = suggest_classes(model)
     _log(f"[ml] suggestion-eligible classes (spec >= 0.95 on hold-out and cross, sens >= rules on cross): "
          f"{model.meta['suggest_classes']}")

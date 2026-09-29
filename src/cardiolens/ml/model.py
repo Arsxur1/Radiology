@@ -33,11 +33,19 @@ def load_model(path: str | Path) -> RhythmModel | None:
     """Load a saved model, or None when the artifact is absent (rules-only mode)."""
     import joblib
 
+    from cardiolens.ml.features import FEATURE_NAMES, FEATURE_SET
+
     p = Path(path)
     if not p.exists():
         return None
     obj = joblib.load(p)
-    return obj if isinstance(obj, RhythmModel) else None
+    if not isinstance(obj, RhythmModel):
+        return None
+    # An artifact built on another feature set would be silently misread: refuse
+    # it (rules-only mode) rather than feed shifted columns to the trees.
+    if obj.meta.get("feature_set") != FEATURE_SET or list(obj.feature_names) != list(FEATURE_NAMES):
+        return None
+    return obj
 
 
 def fit_model(
@@ -47,7 +55,9 @@ def fit_model(
     """Fit one classifier per code with at least ``min_positives`` positives."""
     from sklearn.ensemble import HistGradientBoostingClassifier
 
-    model = RhythmModel(classes=[], feature_names=list(feature_names))
+    from cardiolens.ml.features import FEATURE_SET
+
+    model = RhythmModel(classes=[], feature_names=list(feature_names), meta={"feature_set": FEATURE_SET})
     for code, target in y.items():
         pos = int(target.sum())
         if pos < min_positives or pos > len(target) - min_positives:
