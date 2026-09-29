@@ -657,6 +657,33 @@ Honest reading:
   --report configs/models/rhythm_hgb.report.json`; the JSON report is committed,
   the 7 MB joblib is not.
 
+### Paper-page digitisation v3 — self-calibration and photo perspective (open item 6, D43)
+
+Added: grid-pitch estimation (px/mm from the grid's periodicity, tile-wise, with
+the layout's 32-mm row pitch as the primary scale), calibration-pulse reading
+(mm/mV from the 1 mV × 200 ms rectangle), perspective rectification from the grid's
+vanishing points, and a phone-photo degradation model (perspective, vignette, paper
+texture). Synthetic pages, auto-calibrated (no px/mm or mm/mV given), 3 seeds:
+
+| Degradation | 6 px/mm: mean r / min r | 8 px/mm: mean r / min r | scale error | mm/mV read |
+|---|:-:|:-:|:-:|:-:|
+| clean, rotation 3°, JPEG 40, shadow 50 %, salt 0.5 % | 0.93 / 0.89 | 0.96 / 0.93 | < 1 % | 9.8–9.95 |
+| blur 2 px | 0.91 / 0.87 | 0.96 / 0.93 | < 1 % | 9.8 |
+| scan combo (−2°, blur, JPEG 40, shadow, salt) | 0.92 / 0.88 | 0.96 / 0.93 | < 1 % | 9.8 |
+| photo: perspective 2 %, vignette, texture, blur, JPEG 45, 1.5° | 0.76 (0.44 / 0.92 / 0.92) / 0.63 | 0.94 / 0.89 | 2–3 % | 9.9 |
+| perspective 3.5 % alone | 0.23 | 0.29 | — | — |
+| photo strong (3.5 %, vignette 0.6, texture 0.5, JPEG 40, −2.5°, salt) | 0.27 | 0.07 | — | — |
+
+The vanishing-point rectification works to about 2 % corner displacement and fails
+beyond it (the segment-angle fit is no longer reliable and the self-check rejects or
+mis-accepts the warp) — a stated limit, not tuned around. A JPEG-specific bug was
+found on the way: Hough skew estimation chained 8×8 block edges into "lines" and
+read a 3° rotation as 0.3° (maxLineGap 20 → 5).
+
+**Pages rendered from real PTB-XL signals (100 records, auto-calibrated):** see the
+table below, filled from `dig_ptbxl_eval.py` — finding agreement between the digital
+record and its digitised page is the clinically meaningful number.
+
 ### Paper-page digitisation benchmark (item 5d)
 
 Synthetic 12-lead pages (3×4 layout + lead-II rhythm strip, 6 px/mm, 25 mm/s,

@@ -75,7 +75,7 @@ class _KeepAlive:
             conn = http.client.HTTPSConnection(host, 443, context=ctx, timeout=90)
         return conn
 
-    def get(self, url: str, attempts: int = 4, max_bytes: int | None = None) -> bytes:
+    def get(self, url: str, attempts: int = 8, max_bytes: int | None = None) -> bytes:
         """GET the body; with ``max_bytes`` only the first bytes (HTTP Range)."""
         path = urllib.parse.urlparse(url).path
         delay = 1.0
@@ -99,7 +99,7 @@ class _KeepAlive:
                     raise
                 _log(f"[fetch] retry {i + 1}/{attempts - 1} after {type(e).__name__}: {url}")
                 time.sleep(delay)
-                delay *= 2
+                delay = min(delay * 2, 30.0)   # the egress proxy resets in bursts; wait them out
         raise RuntimeError("unreachable")
 
 
@@ -108,6 +108,12 @@ _CLIENT = _KeepAlive()
 
 def fetch_bytes(url: str, max_bytes: int | None = None) -> bytes:
     return _CLIENT.get(url, max_bytes=max_bytes)
+
+
+def parse_age_from_header(text: str) -> float | None:
+    """``#Age: 7`` -> 7.0 (None when absent or NaN)."""
+    m = re.search(r"^#\s*Age:\s*([0-9.]+)\s*$", text, flags=re.MULTILINE)
+    return float(m.group(1)) if m else None
 
 
 def parse_records(text: str) -> list[str]:
@@ -167,12 +173,14 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--per-class", type=int, default=80)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--age-max", type=float, default=None,
+                    help="pediatric mode: take EVERY record whose #Age is <= this (no per-class cap)")
     args = ap.parse_args(argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    folders = choose_folders(parse_records(fetch_bytes(BASE_URL + "RECORDS").decode()),
-                             args.folders, args.seed)
+    all_folders = parse_records(fetch_bytes(BASE_URL + "RECORDS").decode())
+    folders = all_folders if args.folders <= 0 else choose_folders(all_folders, args.folders, args.seed)
     _log(f"[fetch] {len(folders)} folders chosen")
 
     # 1. Headers for every record in the chosen folders.
@@ -203,9 +211,14 @@ def main(argv: list[str] | None = None) -> None:
                 headers[nm] = (folder, text)
             _log(f"[fetch] headers {i}/{len(folders)} folders, {len(headers)} records")
 
-    # 2. Balanced selection by mapped label.
+    # 2. Balanced selection by mapped label — or every child in pediatric mode.
     labels = {nm: snomed_dx_to_codes(parse_dx_from_header(text)) for nm, (_, text) in headers.items()}
-    chosen = select_balanced(labels, args.per_class, args.seed)
+    if args.age_max is not None:
+        ages = {nm: parse_age_from_header(text) for nm, (_, text) in headers.items()}
+        chosen = sorted(nm for nm, age in ages.items() if age is not None and age <= args.age_max)
+        _log(f"[fetch] pediatric mode: {len(chosen)} records with age <= {args.age_max}")
+    else:
+        chosen = select_balanced(labels, args.per_class, args.seed)
     support = Counter(c for nm in chosen for c in (labels[nm] or {UNLABELED}))
     _log(f"[fetch] selected {len(chosen)} of {len(headers)} records; support: {dict(support)}")
 
@@ -227,7 +240,8 @@ def main(argv: list[str] | None = None) -> None:
 
     manifest = {
         "source": BASE_URL, "seed": args.seed, "folders": folders, "per_class": args.per_class,
-        "records": [{"record": nm, "folder": headers[nm][0], "labels": sorted(labels[nm])}
+        "records": [{"record": nm, "folder": headers[nm][0], "labels": sorted(labels[nm]),
+                     "age": parse_age_from_header(headers[nm][1])}
                     for nm in chosen],
         "support": dict(support),
     }
