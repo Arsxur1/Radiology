@@ -617,7 +617,7 @@ fixed as a **norm-table entry**, not a model:
 
 | Symptom (before) | Cause | Change | After |
 |---|---|---|---|
-| `lbbb` on 38 / 971 (4–8 y, spec 0.961) and 78 / 620 (9–15 y) | QRS upper normal 90 ms was also the BBB threshold; the 98th percentile of the cohort is 101–102 ms | `intervals_ms_by_age` upper limits per band + `intervals_ms.qrs_bbb: 110` | 6 / 971 (spec 0.994), 7 / 620 (0.989); all 1–15 y: 13 / 1591 (0.992) |
+| `lbbb` on 38 / 971 (4–8 y, spec 0.961) and 78 / 620 (9–15 y) | QRS upper normal 90 ms was also the BBB threshold; the 98th percentile of the cohort is 101–102 ms | `intervals_ms_by_age` upper limits per band + `intervals_ms.qrs_bbb: 110` | 6 / 971 (spec 0.994), 7 / 620 (0.989); after D45 (zero leads excluded) 0 / 971 and 2 / 620 (0.997) |
 | `lead_reversal_la_ra` on 96 / 971 and 49 / 620 | I inverted + aVR upright is the signature of a physiological rightward axis in a child | the reversal hypothesis is raised only when the axis lies outside the pediatric normal range | see counts below |
 | `flat_t_waves` on 684 / 971 (70 %) | absolute 100 µV threshold vs small pediatric limb-lead T waves | flat T also requires T < 15 % of the QRS amplitude | see counts below |
 | `short_qt` on 120 / 971 (12 %) and 47 / 620 | 2nd percentile of QTc(F) in the cohort is 321–329 ms | `qtc_ms.short_lower` 340 → 320 | see counts below |
@@ -745,9 +745,36 @@ mis-accepts the warp) — a stated limit, not tuned around. A JPEG-specific bug 
 found on the way: Hough skew estimation chained 8×8 block edges into "lines" and
 read a 3° rotation as 0.3° (maxLineGap 20 → 5).
 
-**Pages rendered from real PTB-XL signals (100 records, auto-calibrated):** see the
-table below, filled from `dig_ptbxl_eval.py` — finding agreement between the digital
-record and its digitised page is the clinically meaningful number.
+**Pages rendered from real PTB-XL signals (100 random records of the 1692, 6 px/mm,
+calibration pulse, auto-calibrated).** The digital record goes through the pipeline,
+its filtered signal is rendered as a 3×4 page, the page is degraded and digitised,
+and the digitised signal goes through the same pipeline. Agreement digital ↔ page:
+per-lead r, HR / axis / QRS-width deltas, and the Jaccard overlap of the scored
+finding codes — the clinically meaningful number.
+
+| Page | fail | mean r | r p10 | HR MAE (≤ 3 bpm) | axis MAE (≤ 15°) | QRS MAE | codes Jaccard | identical |
+|---|--:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| clean | 0 | 0.90 | 0.82 | 4.1 (80 %) | 11° (87 %) | 25 ms | 0.57 | 18 % |
+| scan (1°, blur 1 px, JPEG 60) | 0 | 0.89 | 0.82 | 3.2 (81 %) | 12° (84 %) | 24 ms | 0.48 | 9 % |
+| photo (2 % perspective, vignette, texture, JPEG 45, 1.5°) | 0 | 0.61 | 0.18 | 9.8 (39 %) | 31° (46 %) | 40 ms | 0.33 | 0 % |
+| photo strong (3.5 %, −2.5°, salt) | 11 | 0.24 | 0.02 | 11 (37 %) | 64° (16 %) | 45 ms | 0.31 | 0 % |
+
+Reading: on a clean page from a real record the waveform and the rhythm survive
+(r 0.90, HR within 3 bpm in 80 %, axis within 15° in 87 %) but the **finding set
+does not**: only 18 % of pages reproduce the digital record's codes exactly and the
+average overlap is 0.57. The dominant cause is a systematic **QRS widening of
++24 ms (median; +31 mean)** on the digitised trace — 15 clean pages checked one by
+one: a 2-px stroke rendered at 150 px/s (6 px/mm × 25 mm/s) and the per-column
+median of the stroke turn an 80–90-ms QRS into 100–130 ms, which pushes normal
+records over the 120-ms BBB threshold (`lbbb` appeared on 6 of the 15) and shifts
+QT by +15–25 ms (`long_qt` on 2). Everything downstream of QRS width (BBB typing,
+wide-QRS context for ST, QT) inherits it. The 2 % photo halves the agreement again
+(r 0.61, axis within 15° in 46 %); the strong photo is beyond the de-warp's limit
+(11 pages fail, r 0.24), as on the synthetic set. So the honest statement for a
+digitised page today: rhythm and rate are reliable, morphology-dependent findings
+are not, and the QRS-width bias is the next thing to fix (render-independent
+stroke-thinning / skeletonisation before the column median, and a QRS-width
+correction from the measured stroke width). Real photographs remain unmeasured.
 
 ### Paper-page digitisation benchmark (item 5d)
 
