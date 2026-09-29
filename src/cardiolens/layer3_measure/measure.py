@@ -22,6 +22,7 @@ from cardiolens.contracts.features import (
     STMeasurement,
 )
 from cardiolens.contracts.signal import SignalRepresentation
+from cardiolens.layer2_preprocess.quality import is_lead_off
 from cardiolens.layer3_measure.atrial import atrial_activity
 from cardiolens.layer3_measure.delineation import (
     P_ONSET_MIN_FRACTION,
@@ -95,12 +96,22 @@ def _reject_non_qrs_detections(signal: np.ndarray, rpeaks: np.ndarray, fs: float
     return rpeaks[peaks >= OVERSENSE_ENV_FRACTION * ref]
 
 
+def _lead_off(sig: SignalRepresentation, lead: str) -> bool:
+    """True when ``lead`` carries no signal (Layer-2 lead-off criterion)."""
+    return lead in sig.lead_names and is_lead_off(sig.lead(lead))
+
+
 def _lead_mask(sig: SignalRepresentation, lead: str, rpeaks: np.ndarray, fs: float) -> np.ndarray:
     """Beats that fall inside ``lead``'s valid time window (all, when no windows).
 
     A digitised 3x4 page carries each lead for 2.5 s only; per-lead statistics
     must ignore beats outside that window (the samples there are zero, not data).
+    A lead that carries no signal at all (lead-off / unrecorded channel) has no
+    valid beats — callers that fall back to "all beats" on an empty mask must
+    check ``_lead_off`` first (D45).
     """
+    if _lead_off(sig, lead):
+        return np.zeros(len(rpeaks), dtype=bool)
     windows = getattr(sig.provenance, "lead_windows", None)
     if not windows or lead not in windows:
         return np.ones(len(rpeaks), dtype=bool)
@@ -306,11 +317,12 @@ def measure(sig: SignalRepresentation) -> Measurements:
     # --- Sokolow-Lyon voltage (LVH) + the other hypertrophy voltages ---
     m.sokolow_lyon_uv = _sokolow_lyon(sig, rpeaks, fs)
     m.voltages = measure_voltages(sig, rpeaks, qrs_on, fs,
-                                  {ld: _lead_mask(sig, ld, rpeaks, fs) for ld in sig.lead_names})
+                                  {ld: _lead_mask(sig, ld, rpeaks, fs) for ld in sig.lead_names},
+                                  exclude={ld for ld in sig.lead_names if _lead_off(sig, ld)})
 
     # --- Terminal QRS forces in V1/V6 (RSR' / broad-S typing for BBB) ---
     for lead, attr in (("V1", "qrs_v1_terminal_positive"), ("V6", "qrs_v6_terminal_positive")):
-        if lead in sig.lead_names:
+        if lead in sig.lead_names and not _lead_off(sig, lead):
             mk = _lead_mask(sig, lead, rpeaks, fs)
             setattr(m, attr, terminal_qrs_sign(sig.lead(lead), rpeaks[mk], qrs_off[mk], fs, qrs_on[mk]))
 
@@ -341,6 +353,8 @@ def _qrs_amplitude(row: np.ndarray, rpeaks: np.ndarray, fs: float) -> float:
 def _qrs_axis(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
     if not {"I", "aVF"}.issubset(set(sig.lead_names)) or len(rpeaks) == 0:
         return None
+    if _lead_off(sig, "I") or _lead_off(sig, "aVF"):
+        return None
     rp_i, rp_f = rpeaks[_lead_mask(sig, "I", rpeaks, fs)], rpeaks[_lead_mask(sig, "aVF", rpeaks, fs)]
     if len(rp_i) == 0 or len(rp_f) == 0:
         return None
@@ -352,6 +366,8 @@ def _qrs_axis(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float
 def _sokolow_lyon(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
     names = set(sig.lead_names)
     if not {"V1", "V5", "V6"}.issubset(names) or len(rpeaks) == 0:
+        return None
+    if any(_lead_off(sig, ld) for ld in ("V1", "V5", "V6")):
         return None
     win = int(0.05 * fs)
 
@@ -396,7 +412,7 @@ def _p_amplitude(sig: SignalRepresentation, p_on: np.ndarray, p_off: np.ndarray)
 
 def _limb_qrs_amplitude(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
     """Median QRS peak-to-peak across the limb leads I/II/III (µV, TZ §7.5)."""
-    limb = [ln for ln in ("I", "II", "III") if ln in sig.lead_names]
+    limb = [ln for ln in ("I", "II", "III") if ln in sig.lead_names and not _lead_off(sig, ln)]
     if not limb or len(rpeaks) == 0:
         return None
     win = int(0.05 * fs)
@@ -437,6 +453,8 @@ def _measure_st(
                  if np.isfinite(a) and np.isfinite(b) and b > a]
     for li, lead in enumerate(sig.lead_names):
         row = sig.signal[li]
+        if _lead_off(sig, lead):
+            continue  # no ST measurement for a lead that was not recorded (D45)
         # Per-lead J refinement: the multi-lead envelope offset can land on the
         # upstroke of a deep S wave in V1-V3 (anterior MI), reading the J point on
         # the S wave; move J forward (<= J_REFINE_MS) to where this lead's slope has
@@ -481,6 +499,8 @@ def _measure_t_morphology(
     t_end = min(int(0.45 * fs), rr - 1)
     for li, lead in enumerate(sig.lead_names):
         row = sig.signal[li]
+        if _lead_off(sig, lead):
+            continue  # an unrecorded lead is not a flat T wave (D45)
         rp = rpeaks[_lead_mask(sig, lead, rpeaks, fs)]
         if len(rp) == 0:
             continue

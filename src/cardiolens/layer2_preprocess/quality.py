@@ -12,6 +12,21 @@ import numpy as np
 
 from cardiolens.contracts.signal import Quality, SignalRepresentation
 
+# A lead whose whole span is under this is not a recording: a lead-off electrode
+# or an unrecorded channel stored as zeros (ecg-arrhythmia has limb-only
+# paediatric records written as 12 leads with V1-V6 all zero — 673 of 971 records
+# aged 4-8 y). Layer 3 measures nothing in such a lead (D45).
+LEAD_OFF_PTP_UV = 10.0
+
+
+def is_lead_off(row: np.ndarray) -> bool:
+    return float(np.ptp(np.asarray(row, dtype=np.float64))) < LEAD_OFF_PTP_UV
+
+
+def lead_off_leads(sig: SignalRepresentation) -> set[str]:
+    """Names of the leads that carry no signal (see ``LEAD_OFF_PTP_UV``)."""
+    return {name for name, row in zip(sig.lead_names, sig.signal) if is_lead_off(row)}
+
 
 def per_lead_sqi(sig: SignalRepresentation) -> list[float]:
     """Heuristic per-lead SQI in [0, 1] (TZ §5).
@@ -22,8 +37,7 @@ def per_lead_sqi(sig: SignalRepresentation) -> list[float]:
     scores: list[float] = []
     for i in range(sig.n_leads):
         row = sig.signal[i].astype(np.float64)
-        ptp = float(np.ptp(row))
-        if ptp < 10.0:  # <10 µV span -> essentially flat (lead-off)
+        if is_lead_off(row):  # essentially flat (lead-off / unrecorded channel)
             scores.append(0.0)
             continue
         # High-frequency noise proxy: std of sample-to-sample difference.

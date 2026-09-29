@@ -36,11 +36,14 @@ def _baseline(row: np.ndarray, qrs_on: np.ndarray, fs: float) -> float:
 
 
 def measure_voltages(sig: SignalRepresentation, rpeaks: np.ndarray, qrs_on: np.ndarray,
-                     fs: float, masks: dict[str, np.ndarray] | None = None) -> Voltages:
+                     fs: float, masks: dict[str, np.ndarray] | None = None,
+                     exclude: set[str] | None = None) -> Voltages:
+    """Hypertrophy voltages per lead; ``exclude`` names leads that carry no
+    signal (lead-off) and stay ``None`` instead of reading as 0 µV (D45)."""
     v = Voltages()
     if len(rpeaks) == 0:
         return v
-    names = set(sig.lead_names)
+    names = set(sig.lead_names) - (exclude or set())
 
     def beats(lead: str) -> np.ndarray:
         mk = masks.get(lead) if masks else None
