@@ -499,5 +499,8 @@ def _measure_t_morphology(
             m.morphology.inverted_t_leads.append(lead)
         elif ratio > 0.5 and t_amp > 400.0:
             m.morphology.peaked_t_leads.append(lead)
-        elif abs(t_amp) < 100.0:
+        elif abs(t_amp) < 100.0 and abs(ratio) < 0.15:
+            # "Flat" needs to be small in absolute AND relative terms: a 100 uV
+            # absolute cut alone flagged 70 % of children (small limb-lead
+            # voltages) (D44).
             m.morphology.flat_t_leads.append(lead)

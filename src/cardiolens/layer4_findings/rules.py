@@ -43,6 +43,23 @@ def _ev(**kv: Any) -> list[Evidence]:
     return [Evidence(feature=k, value=str(v)) for k, v in kv.items()]
 
 
+def _interval_norms(norms: dict[str, Any], patient) -> dict[str, Any]:
+    """The ``intervals_ms`` table, replaced by the patient's age band when the norm
+    table has ``intervals_ms_by_age`` (pediatric, D44)."""
+    base = dict(norms.get("intervals_ms", {}))
+    bands = norms.get("intervals_ms_by_age") or []
+    age_days = getattr(patient, "age_days", None)
+    age_years = getattr(patient, "age_years", None)
+    for band in bands:
+        if "age_days_max" in band and age_days is not None and age_days <= band["age_days_max"]:
+            base.update({k: v for k, v in band.items() if not k.startswith("age_")})
+            return base
+        if "age_years_max" in band and age_years is not None and age_years <= band["age_years_max"]:
+            base.update({k: v for k, v in band.items() if not k.startswith("age_")})
+            return base
+    return base
+
+
 def _hr_range(norms: dict[str, Any], patient) -> tuple[float, float] | None:
     """Resolve HR norm range, honouring pediatric age-banding (TZ §6)."""
     if "heart_rate_bpm" in norms:
@@ -133,7 +150,7 @@ def detect_findings(
         ))
 
     iv = m.intervals
-    _, pr_hi = norms.get("intervals_ms", {}).get("pr", [None, None])
+    _, pr_hi = _interval_norms(norms, sig.patient).get("pr", [None, None])
     # A PR interval needs P waves: organised P (AF gate) or a refined P onset on
     # most beats; and it is meaningless in atrial fibrillation.
     p_present = (m.p_wave_ratio is None or m.p_wave_ratio >= 0.5
@@ -148,7 +165,7 @@ def detect_findings(
             evidence=_ev(pr_ms=iv.pr_ms, norm_high=pr_hi), confidence=0.85,
         ))
 
-    _conduction_findings(m, norms, fs)
+    _conduction_findings(m, norms, fs, sig.patient)
     _qt_findings(iv, norms, is_pediatric, sig, fs)
 
     # Complete (third-degree) AV block: atrioventricular dissociation (§7.1, §10).
@@ -224,7 +241,14 @@ def detect_findings(
     # ------------------------------------------------------------------ #
     # Artifact hypothesis from Layer 2 (TZ §5, feeds §8.3)
     # ------------------------------------------------------------------ #
-    if la_ra_reversed:
+    # In children a rightward axis is physiological, and lead I then looks
+    # "inverted" with an upright aVR: the reversal hypothesis is only raised when
+    # the axis is outside the pediatric normal range (D44).
+    axis_ok_for_age = True
+    if is_pediatric and m.axes.qrs_deg is not None:
+        lo_ax, hi_ax = norms.get("axis_deg", {}).get("qrs_normal", [-30, 180])
+        axis_ok_for_age = lo_ax <= m.axes.qrs_deg <= hi_ax
+    if la_ra_reversed and not (is_pediatric and axis_ok_for_age):
         fs.findings.append(Finding(
             code="lead_reversal_la_ra", group="other",
             label_ru="Подозрение на реверс электродов LA/RA",
@@ -387,11 +411,12 @@ def _low_voltage_findings(m: Measurements, norms, fs: FindingSet) -> None:
         ))
 
 
-def _conduction_findings(m: Measurements, norms, fs: FindingSet) -> None:
+def _conduction_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
     """Classify a wide QRS into WPW / RBBB / LBBB / nonspecific (TZ §7.1)."""
     iv = m.intervals
-    qrs_hi = norms.get("intervals_ms", {}).get("qrs", [None, None])[1]
-    pr_lo = norms.get("intervals_ms", {}).get("pr", [None, None])[0]
+    ivn = _interval_norms(norms, patient)
+    qrs_hi = ivn.get("qrs_bbb") or ivn.get("qrs", [None, None])[1]
+    pr_lo = ivn.get("pr", [None, None])[0]
     if iv.qrs_ms is None or not qrs_hi or iv.qrs_ms <= qrs_hi:
         return
     # Short PR + wide QRS -> pre-excitation (WPW): the wide QRS is explained by a

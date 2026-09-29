@@ -123,3 +123,43 @@ def test_infarct_territory_rule_is_critical():
     g = analyze(fnd, load_rule_base(), _sig().context)
     assert "coronary_occlusion_territory" in g.activated_rules
     assert g.critical_flags  # infarct territory rule is critical
+
+
+def test_pediatric_interval_bands_and_bbb_threshold():
+    """A 12-year-old with a 100-ms QRS is inside the 9-15 y band: no bundle branch
+    block; a 125-ms QRS still is one (qrs_bbb 110, D44)."""
+    from cardiolens.config import norms_for_patient
+    from cardiolens.contracts.signal import Patient
+    from cardiolens.layer1_ingestion import generate_synthetic_ecg
+    from cardiolens.layer4_findings import detect_findings
+
+    sig = generate_synthetic_ecg(age_years=12.0)
+    sig.patient = Patient(age_years=12.0, sex="male")
+    norms = norms_for_patient(12.0, None)
+    m = Measurements(heart_rate_bpm=85, rhythm_regular=True, rr_cv=0.03, p_wave_ratio=1.0,
+                     qrs_v1_terminal_positive=False, intervals=Intervals(pr_ms=150, qrs_ms=100, qt_ms=360, qtc_bazett_ms=410))
+    assert not detect_findings(sig, m, norms=norms).codes() & {"lbbb", "rbbb", "wide_qrs_nonspecific"}
+    m2 = m.model_copy(update={"intervals": Intervals(pr_ms=150, qrs_ms=125, qt_ms=360, qtc_bazett_ms=410)})
+    assert "lbbb" in detect_findings(sig, m2, norms=norms).codes()
+
+
+def test_pediatric_right_axis_does_not_raise_lead_reversal():
+    from cardiolens.config import norms_for_patient
+    from cardiolens.contracts.features import Axes
+    from cardiolens.contracts.signal import Patient
+    from cardiolens.layer1_ingestion import generate_synthetic_ecg
+    from cardiolens.layer4_findings import detect_findings
+
+    m = Measurements(heart_rate_bpm=110, rhythm_regular=True, rr_cv=0.03, p_wave_ratio=1.0,
+                     intervals=Intervals(pr_ms=120, qrs_ms=70, qt_ms=300, qtc_bazett_ms=400), axes=Axes(qrs_deg=115.0))
+    child = generate_synthetic_ecg(age_years=2.0); child.patient = Patient(age_years=2.0)
+    assert "lead_reversal_la_ra" not in detect_findings(child, m, norms=norms_for_patient(2.0, None), la_ra_reversed=True).codes()
+    adult = generate_synthetic_ecg(age_years=40.0); adult.patient = Patient(age_years=40.0)
+    assert "lead_reversal_la_ra" in detect_findings(adult, m, norms=norms_for_patient(40.0, None), la_ra_reversed=True).codes()
+
+
+def test_header_age_zero_is_unknown():
+    from cardiolens.validation.harness import parse_patient_from_header
+
+    assert parse_patient_from_header("#Age: 0\n#Sex: Male") == (None, "male")
+    assert parse_patient_from_header("#Age: 7\n#Sex: Female") == (7.0, "female")

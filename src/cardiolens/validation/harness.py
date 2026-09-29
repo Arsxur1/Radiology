@@ -394,6 +394,10 @@ def parse_patient_from_header(header_text: str) -> tuple[float | None, str | Non
                 age = float(s.split(":", 1)[1].strip())
             except ValueError:
                 age = None
+            # ecg-arrhythmia writes 0 for an unknown age: the 247 "age 0" records
+            # measure like adults (HR median 78, QRS 90 ms), not like infants (D44).
+            if age == 0:
+                age = None
         elif s.startswith("#sex:"):
             v = s.split(":", 1)[1].strip()
             sex = "female" if v.startswith("f") else "male" if v.startswith("m") else None

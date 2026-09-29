@@ -27,14 +27,31 @@ rhythm:
   af_pr_std_max_ms: 40
 
 intervals_ms:
-  pr: [90, 170]        # shorter than adult
+  pr: [90, 170]        # shorter than adult (fallback when no band matches)
   qrs: [50, 90]
   qt: [300, 440]
+  # A bundle branch block is called from this width, not from the band's upper
+  # normal: the 9-15 y upper normal (~100 ms) is far below the adult BBB
+  # threshold and read 13 % of teenagers as LBBB (D44).
+  qrs_bbb: 110
+
+# Upper normals by age band (98th percentiles; QRS from the 1838-record
+# ecg-arrhythmia pediatric cohort with this envelope measurement, PR/QT from
+# Davignon/Rijnbeek as reproduced in pediatric references, rounded). Band = first
+# entry whose age limit the patient is under.
+intervals_ms_by_age:
+  - { age_days_max: 30,  pr: [70, 140], qrs: [40, 80],  qt: [250, 400] }
+  - { age_years_max: 1,  pr: [70, 150], qrs: [40, 80],  qt: [250, 400] }
+  - { age_years_max: 3,  pr: [80, 150], qrs: [45, 85],  qt: [270, 420] }
+  - { age_years_max: 8,  pr: [90, 170], qrs: [50, 100], qt: [290, 430] }
+  - { age_years_max: 15, pr: [90, 180], qrs: [55, 105], qt: [300, 440] }
 
 qtc_ms:
   formula: fridericia
   upper: 460
-  short_lower: 340
+  # 2nd percentile of Fridericia QTc in the pediatric cohort is 321-329 ms; the
+  # adult 340 flagged 12 % of 4-8-year-olds as short QT (D44).
+  short_lower: 320
 
 # Right-axis deviation is a normal variant in neonates/infants (TZ §6), so the
 # pediatric normal QRS-axis range is intentionally wide to avoid over-calling.
