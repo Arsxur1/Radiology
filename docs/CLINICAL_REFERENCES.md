@@ -404,6 +404,135 @@ this subset, and no detector setting can recover it without flagging sinus recor
 first. The detector keeps its D28 gates (PTB-XL AFLT 0.51 at spec 0.997 through the
 full pipeline); the AF-or-flutter family remains the honest number on this set.
 
+### ST depression — re-measured, thresholds kept (open item 5, D42)
+
+Same method as for elevation: per-lead J / J+60 / J+80 (PR baseline, refined J)
+on every PTB-XL and 664 record, rule variants scored on train/test halves (record
+hash). Gold: PTB-XL `STD_` (107; `INJ*` subendocardial injury, 34, now added to the
+gold), ecg-arrhythmia "ST drop down" (85).
+
+| Depression rule (any lead but aVR) | PTB-XL train | PTB-XL test | 664 train | 664 test |
+|---|:-:|:-:|:-:|:-:|
+| **current: ≥ 1 mm at J+60 and J+80, not upsloping, ≥ 2 leads** | 0.23 / 0.82 | 0.24 / 0.82 | 0.51 / 0.85 | 0.45 / 0.81 |
+| 0.8 mm | 0.38 / 0.76 | 0.41 / 0.77 | 0.61 / 0.78 | 0.57 / 0.80 |
+| 0.5 mm | 0.73 / 0.64 | 0.75 / 0.64 | 0.80 / 0.68 | 0.80 / 0.72 |
+| 1 mm, ≥ 1 lead | 0.41 / 0.75 | 0.39 / 0.75 | 0.61 / 0.74 | 0.59 / 0.74 |
+| 1 mm at J+60 only | 0.20 / 0.84 | 0.24 / 0.84 | 0.46 / 0.87 | 0.41 / 0.86 |
+| 1 mm, concordant leads only (no BBB/LVH strain) | 0.07 / 0.95 | 0.14 / 0.96 | 0.15 / 0.98 | 0.14 / 0.95 |
+| 0.8 mm, concordant, ≥ 1 lead | 0.25 / 0.88 | 0.35 / 0.89 | 0.20 / 0.90 | 0.34 / 0.88 |
+
+Every variant sits on the same poor curve, so the rule stays. The reason is the
+label, not the measurement: of 288 PTB-XL records the rule calls depressed without
+an `STD_` label, 63 are LBBB, 37 RBBB and 47 LVH (secondary / strain depression that
+PTB-XL does not code as `STD_`), 64 carry `ISC*` and 25 `NST_` (ischaemic or
+non-specific ST changes under another code), 10 `INJ*`. Yet 40 of the 107 `STD_`
+records themselves carry an LVH label — the cardiologists did label strain
+depression as `STD_` sometimes — so "concordant only" (spec 0.95) loses two thirds
+of the true positives. The system keeps reporting discordant depression as
+`st_depression` flagged secondary (confidence 0.55) with the LVH/BBB causal chain;
+what would move this number is an ischaemia label set with lead localisation.
+
+### STEMI alert sensitivity — PTB Diagnostic DB (open item 1, D38)
+
+PhysioNet **ptbdb** (549 records, 290 subjects, 15 leads at 1 kHz) is the only
+reachable set with ECGs recorded *days* after an acute myocardial infarction; the
+header gives the admission diagnosis, the acute localisation and both dates.
+`fetch_ptbdb` downloads the first 10 s of every record (HTTP Range); the adapter
+takes MI ≤ 3 days after the infarction as the STEMI proxy (not an ST-elevation
+label: some are NSTEMI or post-thrombolysis) and scores the alert by day bin, by
+territory agreement (inferior II/III/aVF, anterior V1–V4, lateral I/aVL/V5/V6) and
+by false positives per admission reason.
+
+| Days from infarction to ECG | n | `st_elevation` alert | `st_elevation_any` | territory agreement |
+|---|--:|:-:|:-:|:-:|
+| 0–1 | 61 | **0.23** (14) | 0.39 | 13 / 14 |
+| 2–3 | 35 | 0.23 (8) | 0.37 | 8 / 8 |
+| 4–7 | 68 | 0.04 | 0.38 | 3 / 3 |
+| 8–14 | 87 | 0.05 | 0.30 | 3 / 4 |
+| ≥ 15 | 91 | 0.01 | 0.24 | 1 / 1 |
+| healthy controls | 80 | 3 false alerts (spec 0.96) | — | — |
+| bundle branch block | 17 | 0 false alerts | — | — |
+| other non-MI (cardiomyopathy, dysrhythmia, valvular, …) | 84 | 4 false alerts | — | — |
+
+The day gradient is the expected one (elevation fades), the territory is right
+whenever the alert fires, and the false-alert rate on controls matches PTB-XL's
+(spec 0.97–0.98). The sensitivity at day 0–1 is low, and the misses were looked at
+one by one (montage + per-lead J / J+60):
+
+- **A third of the misses have real but sub-threshold J-point elevation** (0.5–1.9
+  mm) with the ST segment well above it at J+60 (convex "tombstone" ST): the
+  guideline measures at J, and V2–V3 need 2–2.5 mm in men. Re-measuring under the
+  refined per-lead J point (the multi-lead envelope offset can sit on the S-wave
+  upstroke in V1–V3) did not change the sensitivity but raised PTB-XL specificity
+  0.971 → 0.981, so it was kept.
+- **A J+60-based rule** ("J+60 ≥ threshold with J ≥ half of it") lifts day 0–1 to
+  0.31–0.39 but produces 17–22 false alerts in 80 healthy controls and drops PTB-XL
+  specificity to 0.85–0.91 — rejected for a critical alert.
+- **Discordant elevation under RBBB was vetoed** (3.8 mm in V1–V3 with RBBB did
+  not alert). RBBB's secondary change is depression / T inversion in V1–V3, so
+  elevation with RBBB is primary; RBBB was removed from the elevation-mimic
+  context (LBBB, pre-excitation and LVH remain): +2 points of sensitivity.
+- **Inferior MIs with J ≤ 0.5 mm** are NSTEMI or already resolved — nothing to
+  detect on the ECG at guideline thresholds.
+
+What is now measured, and honestly stated: the alert catches about a quarter of
+PTBDB's "MI within 3 days" ECGs at the guideline thresholds with 4 % false alerts on
+healthy controls and the right territory. A true STEMI-labelled set (elevation
+annotated by a cardiologist) would separate the NSTEMI/resolved share from the
+detector's own misses; without it the number above is the ceiling that can be
+claimed.
+
+### LVH — three criteria, pediatric voltage bands (open item 2, D39)
+
+Sokolow-Lyon alone: PTB-XL 0.35 / 0.97. New measurements (`layer3_measure/voltages.py`):
+R aVL, S V3, R V5/V6, S V1/V2, R V1, S V6, tallest limb deflection, intrinsicoid
+deflection V5/V6, terminal P force in V1. Criteria sweep on train/test halves
+(record hash), BBB/WPW records excluded from the voltage criteria:
+
+| Criterion | PTB-XL train | PTB-XL test | 664 train | 664 test |
+|---|:-:|:-:|:-:|:-:|
+| Sokolow-Lyon > 3.5 mV | 0.31 / 0.99 | 0.26 / 0.99 | 0.85 / 0.94 | 0.72 / 0.93 |
+| Cornell > 2.8 / 2.0 mV (m / f) | 0.32 / 0.94 | 0.24 / 0.94 | 0.23 / 0.92 | 0.32 / 0.93 |
+| Romhilt-Estes ≥ 5 (strict strain, PTF ≥ 6000 µV·ms) | 0.13 / 0.94 | 0.15 / 0.94 | 0.62 / 0.95 | 0.48 / 0.95 |
+| **Sokolow-Lyon ∪ Cornell (chosen for `lvh`)** | 0.53 / 0.93 | **0.45 / 0.93** | 0.88 / 0.86 | **0.80 / 0.88** |
+| any of the three | 0.54 / 0.89 | 0.47 / 0.88 | 0.88 / 0.85 | 0.80 / 0.84 |
+
+Two Romhilt-Estes inputs had to be tightened on the data: strain requires T
+inversion *and* ≥ 1 mm depression in V5/V6 (either alone fired on a quarter of
+PTB-XL's non-LVH records), and the terminal P force threshold is 6000 µV·ms (the
+textbook 1 mm × 40 ms = 4000 flagged 22 % of non-LVH). The point score alone
+reports `lvh_probable`. Cornell fired on most LBBB records, so all voltage
+criteria are silent under BBB / WPW / wide QRS.
+
+Children: adult voltage criteria are not applied (a tall R is normal). LVH / RVH
+use age-band 98th-percentile voltages (Davignon 1979/80 as reproduced in pediatric
+ECG references, transcribed approximately and marked so in
+`configs/norms/pediatric.yaml`) with a supporting sign (strain or axis) or both
+voltages above the band.
+
+Full-pipeline results: PTB-XL LVH 0.35 / 0.97 → **0.48 / 0.93**; 664 LVH 0.90 / 0.91
+→ 0.84 / 0.87 (Cornell adds little there and the BBB gate removes a few true
+positives); PTB-XL children 0 / 5 → 1 / 5 at specificity 1.00.
+
+### LBBB / RBBB typing — terminal forces inside the lead's own QRS (open item 4, D41)
+
+26 of the 37 LBBB records PTB-XL that were missed were called RBBB: the terminal-force
+window ended at the multi-lead envelope QRS offset, which in V1 lies after this
+lead's own QRS end, so the window swallowed the discordant ST elevation of the LBBB
+and read it as a positive R'. The lead's QRS end is now the last sample whose slope
+is ≥ 15 % of that lead's QRS slope, with a PR-segment baseline
+(`delineation.terminal_qrs_sign`).
+
+| | PTB-XL LBBB (85) | PTB-XL RBBB (86) | 664 LBBB (83) | 664 RBBB (71) | PTB-XL STEMI-alert spec |
+|---|:-:|:-:|:-:|:-:|:-:|
+| before | 0.57 / 0.88 | 0.85 / 0.93 | 0.71 / 0.94 | 0.72 / 0.98 | 0.968 |
+| after | **0.85 / 0.86** | **0.87 / 0.96** | 0.77 / 0.94 | 0.72 / 0.99 | **0.974** |
+
+Remaining LBBB misses: QRS measured ≤ 110 ms (8 on PTB-XL, 9 on the 664) and a
+short measured PR that routes the wide QRS to WPW (3 / 6). The fuller morphology
+criteria of the plan (notched R in I/aVL/V5/V6, absent q) were not needed for
+this step and stay open.
+
 ### Pediatric stratum — PTB-XL, 64 records aged ≤ 15 (item 5b)
 
 `validate --ptbxl data/ptbxl --age-max 15`. All 64 children of PTB-XL are in the

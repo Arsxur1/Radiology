@@ -194,6 +194,9 @@ PTBXL_SCP_MAP = {
     "CRBBB": "rbbb", "CLBBB": "lbbb", "WPW": "wpw_preexcitation",
     "LVH": "lvh", "VCLVH": "lvh", "LNGQT": "long_qt", "LVOLT": "low_qrs_voltage",
     "STE_": "st_elevation", "STD_": "st_depression",
+    # Subendocardial injury = ST depression of an ischaemic territory (D42).
+    "INJAS": "st_depression", "INJAL": "st_depression", "INJIN": "st_depression",
+    "INJLA": "st_depression", "INJIL": "st_depression",
     "LAO/LAE": "left_atrial_enlargement", "RAO/RAE": "right_atrial_enlargement",
     "AXIS_LAD": "left_axis_deviation", "AXIS_RAD": "right_axis_deviation",
 }
