@@ -273,3 +273,25 @@ def test_pathological_q_suppressed_by_lbbb_and_absent_in_children():
     assert "pathological_q_waves" in _q_codes(q).codes()
     assert "pathological_q_waves" not in _q_codes(q, qrs_ms=150, v1_term=False).codes()
     assert "pathological_q_waves" not in _q_codes(q, norms="pediatric", age_years=8).codes()
+
+
+def test_wide_tachycardia_is_not_labelled_sinus_or_preexcitation():
+    from cardiolens.safety import scan_critical
+
+    # INCART: a 175/min VT run read as "sinus tachycardia" + WPW (short "PR").
+    m = Measurements(heart_rate_bpm=175, rhythm_regular=True, qrs_v1_terminal_positive=False,
+                     intervals=Intervals(pr_ms=100, qrs_ms=140, qt_ms=300, qtc_bazett_ms=510))
+    fs = _find(m)
+    assert "wide_complex_tachycardia" in fs.codes()
+    assert not {"sinus_tachycardia", "wpw_preexcitation", "first_degree_av_block"} & fs.codes()
+    alerts = [a.code for a in scan_critical(fs, m).alerts]
+    assert alerts.count("wide_complex_tachycardia") == 1
+    # Below the 140/min band a wide QRS tachycardia stays sinus tachycardia + BBB.
+    slow = Measurements(heart_rate_bpm=120, rhythm_regular=True, qrs_v1_terminal_positive=True,
+                        intervals=Intervals(pr_ms=150, qrs_ms=140, qt_ms=320, qtc_bazett_ms=450))
+    codes = _find(slow).codes()
+    assert "sinus_tachycardia" in codes and "wide_complex_tachycardia" not in codes
+    # A narrow regular tachycardia at the same rate is still SVT.
+    narrow = Measurements(heart_rate_bpm=175, rhythm_regular=True,
+                          intervals=Intervals(pr_ms=120, qrs_ms=90, qt_ms=280, qtc_bazett_ms=470))
+    assert "supraventricular_tachycardia" in _find(narrow).codes()

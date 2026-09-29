@@ -131,6 +131,7 @@ def _standalone_codes() -> set[str]:
         "complete_av_block", "atrial_flutter", "left_axis_deviation",
         "right_axis_deviation", "extreme_axis", "low_qrs_voltage",
         "left_atrial_enlargement", "right_atrial_enlargement", "pathological_q_waves",
+        "wide_complex_tachycardia",
     }
 
 

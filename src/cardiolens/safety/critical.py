@@ -24,6 +24,8 @@ CRITICAL_CODES = {
     "complete_av_block": ("Полная АВ-блокада", "To'liq AV blokada"),
     "ventricular_tachycardia": ("Желудочковая тахикардия (пробежка ЖЭ)",
                                 "Ventrikulyar taxikardiya (VES yugurishi)"),
+    "wide_complex_tachycardia": ("Тахикардия с широкими комплексами (исключить ЖТ)",
+                                 "Keng kompleksli taxikardiya (JT ni istisno qilish)"),
 }
 
 
@@ -73,7 +75,10 @@ def scan_critical(findings: FindingSet, m: Measurements) -> SafetyResult:
     # same rate is VT-until-proven-otherwise (§10). Use the same 140 threshold so
     # the narrow->SVT / wide->VT-suspect split is consistent and nothing in the
     # 140-150 band falls through to a benign sinus_tachycardia label.
-    if hr is not None and hr >= 140 and (m.intervals.qrs_ms or 0) > 120:
+    # Backstop when Layer 4 did not emit the finding (e.g. pediatric norms,
+    # which have no svt_rate_min): the alert does not depend on the norm table.
+    if (hr is not None and hr >= 140 and (m.intervals.qrs_ms or 0) > 120
+            and "wide_complex_tachycardia" not in findings.codes()):
         add("wide_complex_tachycardia",
             "Тахикардия с широкими комплексами (исключить ЖТ)",
             "Keng kompleksli taxikardiya (JT ni istisno qilish)",

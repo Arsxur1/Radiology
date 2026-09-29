@@ -113,7 +113,21 @@ def detect_findings(
             block = norms.get("intervals_ms", {}).get("qrs_complete_block") or 120
             qrs = m.intervals.qrs_ms
             narrow = qrs is not None and qrs < block
-            if (not is_pediatric and svt_min and hr >= svt_min
+            wide = qrs is not None and qrs >= block
+            if not is_pediatric and svt_min and hr >= svt_min and wide:
+                # A WIDE tachycardia at the same rate is VT until proven otherwise
+                # (§10; the safety layer raises the critical alert). Not labelled
+                # sinus: on INCART a 175/min VT run was reported as sinus tachycardia.
+                fs.findings.append(Finding(
+                    code="wide_complex_tachycardia", group="rhythm",
+                    label_ru=f"Тахикардия с широкими QRS (ЧСС {hr}/мин, QRS {qrs} мс) — "
+                             f"исключить желудочковую тахикардию",
+                    label_uz=f"Keng QRS li taxikardiya (YUT {hr}/daq, QRS {qrs} ms) — "
+                             f"ventrikulyar taxikardiyani istisno qilish",
+                    evidence=_ev(heart_rate_bpm=hr, qrs_ms=qrs, rate_min=svt_min,
+                                 qrs_min=block), confidence=0.7,
+                ))
+            elif (not is_pediatric and svt_min and hr >= svt_min
                     and m.rhythm_regular is not False and narrow):
                 fs.findings.append(Finding(
                     code="supraventricular_tachycardia", group="rhythm",
@@ -304,7 +318,16 @@ def detect_findings(
             evidence=_ev(lead_I="inverted", aVR="upright"), confidence=0.65,
         ))
 
+    # In a wide-complex tachycardia the "P" before each QRS and the initial QRS
+    # forces are not interpretable: a short "PR" is not pre-excitation, PR is not
+    # AV conduction, and Q waves of a ventricular rhythm are not infarct Q waves.
+    if fs.by_code("wide_complex_tachycardia") is not None:
+        fs.findings = [f for f in fs.findings if f.code not in _WCT_EXCLUDES]
+
     return fs
+
+
+_WCT_EXCLUDES = ("wpw_preexcitation", "first_degree_av_block", "pathological_q_waves")
 
 
 def _q_wave_findings(m: Measurements, norms, fs: FindingSet) -> None:
