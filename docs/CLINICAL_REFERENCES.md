@@ -550,7 +550,7 @@ WPW 2, LNGQT 1, 1AVB 1, one inferior MI pattern.
 | first_degree_av_block | 1.00 | 0.91 | 1 |
 | wpw_preexcitation | 0.50 | 1.00 | 2 |
 | right_axis_deviation | 0.00 | 1.00 | 2 |
-| lvh | 0.00 | 1.00 | 5 |
+| lvh | 0.00 → 0.20 (D39) | 1.00 | 5 |
 | long_qt | 0.00 | 1.00 | 1 |
 | complete AV block, flutter, BBB, ST codes | — | 0.86–1.00 | 0 |
 
@@ -585,7 +585,72 @@ labelled pediatric training set exists in the reachable data (64 children in PTB
 a handful in ecg-arrhythmia). What it needs: a pediatric dataset with ages
 (e.g. a children's-hospital 12-lead set), age-band norm tables for voltage/axis/QT,
 and a stratified hold-out per band. Until then the system relies on the
-rule-based pediatric norm table plus this evaluation.
+rule-based pediatric norm table plus this evaluation. Re-run after D39/D44: LVH
+1 / 5 (the pediatric voltage bands now exist), macro sensitivity 0.51, nothing else
+moved. The larger pediatric cohort is the next section.
+
+### Pediatric cohort — ecg-arrhythmia, 1838 records aged ≤ 15 (open item 7, D44)
+
+`fetch_physionet --folders 0 --age-max 15` read all 45 152 headers of the
+ecg-arrhythmia database and downloaded every record with `#Age ≤ 15`:
+1838 records into `data/ecg-arrhythmia-pediatric/` (git-ignored, manifest with
+age/sex/labels). Age distribution: **0** → 247, **1–3 y** → 0, **4–8 y** → 971,
+**9–15 y** → 620. The 247 "age 0" records measure like adults (HR median 78, QRS
+median 90 ms, PR 156 ms, R V6 1.1 mV) — the database uses 0 for *unknown*, so the
+adapter now maps 0 to "no age" and the pediatric evaluation is the 1591 records
+aged 1–15. Labels are adult-style SNOMED (sinus tachycardia 762, sinus rhythm 168,
+sinus bradycardia 68, RAD 35, RBBB 10, LAD 10, 1° AV block 7, WPW 6, ST depression
+4, ST elevation 3, long QT 2, LBBB 1, no LVH/AF/flutter/CAVB).
+
+**What the cohort measured, per band (p2 / p50 / p98), before any change:**
+
+| Band | n | HR | PR ms | QRS ms | QTc(F) ms | axis ° | R V6 / S V1 p98 mV |
+|---|--:|:-:|:-:|:-:|:-:|:-:|:-:|
+| 4–8 y | 971 | 65 / 115 / 169 | 88 / 122 / 183 | 66 / 76 / 101 | 323 / 364 / 417 | −126 / 66 / 145 | 1.9 / 1.9 |
+| 9–15 y | 620 | 53 / 88 / 184 | 87 / 128 / 245 | 68 / 80 / 102 | 321 / 375 / 428 | −62 / 68 / 142 | 2.2 / 2.3 |
+
+The measured voltages sit under the Davignon 98th percentiles written into
+`pediatric_98th_by_age` (R V6 2.4–2.6 mV, S V1 2.3–2.5 mV at these ages), so the
+LVH/RVH bands from D39 are consistent with a general pediatric population.
+The intervals showed four things the norm table got wrong for children, each
+fixed as a **norm-table entry**, not a model:
+
+| Symptom (before) | Cause | Change | After |
+|---|---|---|---|
+| `lbbb` on 38 / 971 (4–8 y, spec 0.961) and 78 / 620 (9–15 y) | QRS upper normal 90 ms was also the BBB threshold; the 98th percentile of the cohort is 101–102 ms | `intervals_ms_by_age` upper limits per band + `intervals_ms.qrs_bbb: 110` | 6 / 971 (spec 0.994), 7 / 620 (0.989); all 1–15 y: 13 / 1591 (0.992) |
+| `lead_reversal_la_ra` on 96 / 971 and 49 / 620 | I inverted + aVR upright is the signature of a physiological rightward axis in a child | the reversal hypothesis is raised only when the axis lies outside the pediatric normal range | see counts below |
+| `flat_t_waves` on 684 / 971 (70 %) | absolute 100 µV threshold vs small pediatric limb-lead T waves | flat T also requires T < 15 % of the QRS amplitude | see counts below |
+| `short_qt` on 120 / 971 (12 %) and 47 / 620 | 2nd percentile of QTc(F) in the cohort is 321–329 ms | `qtc_ms.short_lower` 340 → 320 | see counts below |
+
+Per-class results after the change, `validate --ecg-arrhythmia
+data/ecg-arrhythmia-pediatric --age-min 1 --age-max 15` (1591 records; the bands
+in brackets are 4–8 y / 9–15 y):
+
+| Finding | Sens | Spec | n | note |
+|---|:-:|:-:|--:|---|
+| sinus_tachycardia | 0.87 (0.88 / 0.85) | 0.98 | 762 | adult label (HR > 100); pediatric HR bands call 100–110 normal at 4–8 y |
+| sinus_rhythm | 0.90 (0.84 / 0.96) | 0.59 | 168 | the "false" sinus rhythms are the adult-labelled tachycardias inside the pediatric band |
+| sinus_bradycardia | 0.90 (0.80 / 0.93) | 0.98 | 68 | |
+| first_degree_av_block | 0.71 (1 / 3 · 4 / 4) | 0.97 | 7 | |
+| rbbb | 0.50 (3 / 5 · 2 / 5) | 0.999 | 10 | |
+| lbbb | 0 / 1 | 0.992 | 1 | before: 0.961 / 0.87 by band |
+| left_axis_deviation | 0.40 | 0.98 | 10 | |
+| right_axis_deviation | 0.00 | 1.00 | 35 | adult label (> +90°); the pediatric normal axis reaches +180°, deliberately |
+| wpw_preexcitation | 0 / 6 | 1.00 | 6 | real gap: the delta-wave/short-PR rule misses the pediatric WPW (also 1 / 2 in PTB-XL) |
+| st_elevation (alert) / st_elevation_any | 1 / 3 · 3 / 3 | 0.98 / 0.89 | 3 | |
+| st_depression | 1 / 4 | 0.94 | 4 | |
+| long_qt | 0 / 2 | 0.996 | 2 | |
+| atrial_fibrillation ∪ flutter | — | 0.95 | 0 | after the conducted-P gate of D36 |
+| lvh / rvh | — | 1.00 | 0 | no LVH label in the cohort; PTB-XL children: 1 / 5 |
+
+Macro sensitivity 0.37 over the labels present (unchanged by the fixes: the
+fixes removed false positives of codes that are not scored labels). What is *not*
+claimed: no pediatric fine-tuning, no calibration on annotated pediatric intervals
+(the cohort has rhythm/conduction labels only), and the 1–3-year and infant bands
+remain unmeasured — the database has no records there once "age 0" is read
+correctly. The norm-table entries were changed only where the cohort's own
+percentiles contradicted the table, and each entry is a documented number in
+`configs/norms/pediatric.yaml`.
 
 ### Calibration of the AF gates — train/test halves (item 2)
 
