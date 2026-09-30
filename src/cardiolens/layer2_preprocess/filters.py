@@ -22,10 +22,8 @@ def resample_signal(sig: SignalRepresentation, target_fs: float) -> SignalRepres
     frac = Fraction(target_fs / sig.sampling_rate_hz).limit_denominator(1000)
     up, down = frac.numerator, frac.denominator
     new = resample_poly(sig.signal, up, down, axis=1).astype(np.float32)
-    sig.signal = new
-    sig.sampling_rate_hz = float(target_fs)
-    sig.duration_s = float(new.shape[1] / target_fs)
-    return sig
+    return sig.model_copy(update={"signal": new, "sampling_rate_hz": float(target_fs),
+                                  "duration_s": float(new.shape[1] / target_fs)})
 
 
 def _notch(row: np.ndarray, fs: float, freq: float, q: float = 30.0) -> np.ndarray:
@@ -48,7 +46,12 @@ def preprocess(
     bandpass_high_hz: float,
     target_sampling_rate_hz: float | None = None,
 ) -> SignalRepresentation:
-    """Full preprocessing chain (TZ §5): resample -> notch -> band-pass."""
+    """Full preprocessing chain (TZ §5): resample -> notch -> band-pass.
+
+    Returns a new representation; the caller's signal is left untouched (it used
+    to be overwritten, so re-running the pipeline on the same object filtered twice).
+    """
+    sig = sig.model_copy()
     if target_sampling_rate_hz is not None:
         sig = resample_signal(sig, target_sampling_rate_hz)
     fs = sig.sampling_rate_hz

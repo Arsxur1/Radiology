@@ -232,3 +232,21 @@ def test_robust_rr_dispersion_low_for_regular_high_for_irregular():
     m_reg, m_irr = measure(reg), measure(irr)
     assert m_reg.rr_mad_cv is not None and m_reg.rr_mad_cv < 0.03
     assert m_irr.rr_mad_cv > 0.08
+
+
+def test_preprocess_and_pipeline_leave_the_input_untouched():
+    import numpy as np
+
+    from cardiolens.layer1_ingestion import generate_synthetic_ecg
+    from cardiolens.layer2_preprocess import preprocess
+    from cardiolens.pipeline import run_pipeline
+
+    sig = generate_synthetic_ecg(heart_rate_bpm=70, duration_s=10)
+    before, fs = sig.signal.copy(), sig.sampling_rate_hz
+    out = preprocess(sig, mains_frequency_hz=50, bandpass_low_hz=0.5, bandpass_high_hz=40,
+                     target_sampling_rate_hz=250)
+    assert out.sampling_rate_hz == 250 and sig.sampling_rate_hz == fs
+    assert np.array_equal(sig.signal, before)
+    first = run_pipeline(sig, mode="A")
+    assert np.array_equal(sig.signal, before)
+    assert run_pipeline(sig, mode="A").findings.codes() == first.findings.codes()
