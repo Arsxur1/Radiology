@@ -8,12 +8,14 @@ result (TZ §0). All outputs are in microvolts.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import numpy as np
 
 from cardiolens.contracts.signal import (
     STANDARD_12_LEADS,
+    Patient,
     Provenance,
     SignalRepresentation,
 )
@@ -33,6 +35,26 @@ def canonicalize_lead_names(names: list[str]) -> list[str]:
 
 def _mv_to_uv(x: np.ndarray) -> np.ndarray:
     return (np.asarray(x, dtype=np.float32) * 1000.0).astype(np.float32)
+
+
+_AGE_RE = re.compile(r"age>?\s*:\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
+_SEX_RE = re.compile(r"sex>?\s*:\s*(male|female|m|f)\b", re.IGNORECASE)
+
+
+def patient_from_comments(comments) -> Patient:
+    """Age and sex from WFDB header comments (``# Age: 74``, ``# Sex: Female`` as in
+    PhysioNet Challenge 2021; ``#<age>: 65 <sex>: F`` as in INCART). Missing or
+    unparsable values (``NaN``, ``Unknown``) stay None."""
+    text = " ".join(comments or [])
+    age = _AGE_RE.search(text)
+    sex = _SEX_RE.search(text)
+    age_years = float(age.group(1)) if age else None
+    if age_years is not None and not 0 <= age_years <= 120:
+        age_years = None
+    sex_norm = None
+    if sex:
+        sex_norm = "female" if sex.group(1).lower().startswith("f") else "male"
+    return Patient(age_years=age_years, sex=sex_norm)
 
 
 def load_wfdb(record_path: str | Path) -> SignalRepresentation:
@@ -62,6 +84,8 @@ def load_wfdb(record_path: str | Path) -> SignalRepresentation:
         lead_names=lead_names,
         duration_s=float(sig.shape[1] / rec.fs),
         source="wfdb",
+        # Demographics drive the age/sex norms (QTc limit, pediatric tables).
+        patient=patient_from_comments(getattr(rec, "comments", None)),
         provenance=Provenance(digitized=False, confidence=1.0),
     )
 

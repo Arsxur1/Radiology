@@ -250,3 +250,21 @@ def test_preprocess_and_pipeline_leave_the_input_untouched():
     first = run_pipeline(sig, mode="A")
     assert np.array_equal(sig.signal, before)
     assert run_pipeline(sig, mode="A").findings.codes() == first.findings.codes()
+
+
+def test_wfdb_header_demographics_are_read(tmp_path):
+    import numpy as np
+    import wfdb
+
+    from cardiolens.layer1_ingestion import load_wfdb
+    from cardiolens.layer1_ingestion.parsers import patient_from_comments
+
+    assert patient_from_comments(["Age: 74", "Sex: Female", "Dx: 426783006"]).sex == "female"
+    assert patient_from_comments(["<age>: 65 <sex>: M <diagnoses> CAD"]).age_years == 65.0
+    p = patient_from_comments(["Age: NaN", "Sex: Unknown"])
+    assert p.age_years is None and p.sex is None
+    x = (np.sin(np.linspace(0, 20, 5000))[:, None] * np.ones((1, 2))).astype(np.float64)
+    wfdb.wrsamp("rec", fs=500, units=["mV", "mV"], sig_name=["I", "II"], p_signal=x,
+                comments=["Age: 8", "Sex: Male"], write_dir=str(tmp_path))
+    sig = load_wfdb(tmp_path / "rec")
+    assert sig.patient.age_years == 8.0 and sig.patient.sex == "male"
