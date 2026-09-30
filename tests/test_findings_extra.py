@@ -101,3 +101,20 @@ def test_low_qrs_voltage_end_to_end():
 def test_normal_amplitude_no_low_voltage():
     result = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=72), mode="A")
     assert "low_qrs_voltage" not in result.findings.codes()
+
+
+def test_long_qt_is_a_finding_above_the_limit_but_critical_only_from_500():
+    # D44: QTc above the sex limit marks ~20% of resting ECGs (GE 12SL agrees),
+    # so the critical alert is reserved for the high-risk tier.
+    for qtc, critical in ((470, False), (505, True)):
+        m = Measurements(heart_rate_bpm=70, intervals=Intervals(qrs_ms=90, qt_ms=qtc - 20,
+                                                                  qtc_bazett_ms=qtc))
+        fnd = detect_findings(_sig(), m, norms=load_norms("adult"), la_ra_reversed=False)
+        assert "long_qt" in fnd.codes()
+        alerts = [a.code for a in scan_critical(fnd, m).alerts]
+        assert ("long_qt" in alerts) is critical
+    # The threshold is configurable.
+    m = Measurements(heart_rate_bpm=70, intervals=Intervals(qrs_ms=90, qt_ms=470, qtc_bazett_ms=490))
+    fnd = detect_findings(_sig(), m, norms=load_norms("adult"), la_ra_reversed=False)
+    assert "long_qt" not in [a.code for a in scan_critical(fnd, m).alerts]
+    assert "long_qt" in [a.code for a in scan_critical(fnd, m, long_qt_critical_ms=480).alerts]

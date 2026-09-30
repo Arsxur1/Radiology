@@ -213,7 +213,8 @@ def run_pipeline(
                      f"qtcΔ={serial.qtc_delta_ms}")
 
     # Safety scan (TZ §10) — before interpretation, independent of LLM.
-    safety = scan_critical(findings, m)
+    safety = scan_critical(findings, m,
+                           long_qt_critical_ms=cfg.safety.long_qt_critical_qtc_ms)
     # New critical dynamics on serial comparison force escalation (TZ §8.4, §10).
     if serial is not None:
         for d in serial.deltas:

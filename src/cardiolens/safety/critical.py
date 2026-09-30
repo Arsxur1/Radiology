@@ -18,7 +18,6 @@ from cardiolens.contracts.findings import FindingSet
 # TZ §10 must-not-miss list; recall is prioritised over specificity.
 CRITICAL_CODES = {
     "st_elevation": ("STEMI (подозрение)", "STEMI (shubha)"),
-    "long_qt": ("Длинный QT — риск TdP", "Uzun QT — TdP xavfi"),
     "peaked_t_waves": ("Паттерн гиперкалиемии (остроконечные T)",
                        "Giperkaliyemiya patterni (uchli T)"),
     "complete_av_block": ("Полная АВ-блокада", "To'liq AV blokada"),
@@ -48,8 +47,16 @@ class SafetyResult:
         return bool(self.alerts)
 
 
-def scan_critical(findings: FindingSet, m: Measurements) -> SafetyResult:
-    """Detect critical findings from findings + raw measurements (TZ §10)."""
+def scan_critical(findings: FindingSet, m: Measurements, *,
+                  long_qt_critical_ms: float = 500.0) -> SafetyResult:
+    """Detect critical findings from findings + raw measurements (TZ §10).
+
+    Long QT is tiered (D44): the finding is reported above the sex-specific limit
+    (450/460 ms), but it is a critical alert only from QTc >= long_qt_critical_ms,
+    the guideline threshold for high torsades risk. Above-limit QTc marks ~20% of
+    resting ECGs — GE 12SL flags the same share — so an alert at the limit carried
+    no signal.
+    """
     result = SafetyResult()
 
     def add(code: str, ru: str, uz: str, reason: str) -> None:
@@ -65,6 +72,11 @@ def scan_critical(findings: FindingSet, m: Measurements) -> SafetyResult:
     for code, (ru, uz) in CRITICAL_CODES.items():
         if code in findings.codes():
             add(code, ru, uz, reason=f"finding '{code}' present")
+
+    qtc = m.intervals.qtc_bazett_ms
+    if "long_qt" in findings.codes() and qtc is not None and qtc >= long_qt_critical_ms:
+        add("long_qt", "Выраженное удлинение QT — риск TdP", "Keskin QT uzayishi — TdP xavfi",
+            reason=f"QTc {qtc} ms >= {long_qt_critical_ms:.0f} ms")
 
     # Measurement-derived critical patterns (may exist without a Layer-4 finding).
     hr = m.heart_rate_bpm

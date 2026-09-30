@@ -85,6 +85,13 @@ quality:
   # below this quality_ok is forced low so mode B escalates (DECISIONS D15y).
   digitized_confidence_min: 0.80
 
+# Critical-alert tiers (TZ §10). QTc above the sex-specific limit (450/460 ms)
+# is reported as long QT on ~20% of resting ECGs — GE 12SL flags the same share
+# of PTB-XL — so the critical alert (forced escalation) starts at the guideline
+# high-risk threshold for torsades instead (D44; product-owner decision).
+safety:
+  long_qt_critical_qtc_ms: 500
+
 # Confidence gating for autonomous mode B (TZ §2, §16).
 confidence:
   # Autonomous report is emitted only if overall confidence >= this.

@@ -76,6 +76,12 @@ class PacingConfig(BaseModel):
     coupling_min: float = 0.2
 
 
+class SafetyConfig(BaseModel):
+    """Critical-alert tiers (TZ §10). Long QT is a finding above the sex-specific
+    QTc limit and a critical alert only from this QTc (D44)."""
+    long_qt_critical_qtc_ms: float = 500.0
+
+
 class QualityConfig(BaseModel):
     """Signal-organization quality gate (TZ §5). Below beat_consistency_min the
     QRS complexes are not self-consistent (artifact/noise), so the R-peak-derived
@@ -106,6 +112,7 @@ class AppConfig(BaseModel):
     pause: PauseConfig = PauseConfig()
     pacing: PacingConfig = PacingConfig()
     quality: QualityConfig = QualityConfig()
+    safety: SafetyConfig = SafetyConfig()
 
 
 @functools.lru_cache(maxsize=1)
