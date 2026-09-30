@@ -152,3 +152,43 @@ def test_ventricular_run_detector():
     # Same-shaped premature beats (atrial run) and plain sinus: no ventricular run.
     sig, rp = _pulse_train(rr)
     assert detect_ventricular_runs(sig, rp, 500.0) == []
+
+
+def _atrial_strip(rr_ms, p_waves, fs=500.0, seed=0):
+    """II/V1 strip: narrow QRS at the given RR; ``p_waves`` puts a P 160 ms before each
+    QRS, otherwise low uncoordinated atrial activity fills the baseline."""
+    from cardiolens.contracts.signal import SignalRepresentation
+
+    rng = np.random.default_rng(seed)
+    t_r = np.cumsum([600.0] + list(rr_ms)) / 1000.0
+    n = int((t_r[-1] + 0.5) * fs)
+    tt = np.arange(n) / fs
+    x = np.zeros(n)
+    for t in t_r:
+        x += 1000 * np.exp(-((tt - t) / 0.012) ** 2)
+        if p_waves:
+            x += 150 * np.exp(-((tt - t + 0.16) / 0.025) ** 2)
+    if not p_waves:
+        phase = np.cumsum(2 * np.pi * rng.uniform(4.5, 7.5, n) / fs)
+        x += 15 * np.sin(phase) * rng.uniform(0.5, 1.0, n)
+    sig = SignalRepresentation(signal=np.stack([x, 0.8 * x]).astype(np.float32), sampling_rate_hz=fs,
+                               lead_names=["II", "V1"], duration_s=n / fs, source="synthetic")
+    return sig, (t_r * fs).astype(int)
+
+
+def test_sinus_label_requires_organised_p_waves():
+    from cardiolens.contracts.features import Intervals, Measurements
+    from cardiolens.contracts.findings import Finding, FindingSet
+    from cardiolens.pipeline import _check_sinus_p_waves
+
+    def run(p_waves):
+        sig, rp = _atrial_strip([900] * 10, p_waves)
+        fs = FindingSet(findings=[Finding(code="sinus_rhythm", group="rhythm", label_ru="s",
+                                          label_uz="s", confidence=0.9)])
+        m = Measurements(heart_rate_bpm=67, r_peaks_samples=[int(r) for r in rp],
+                         intervals=Intervals(qt_ms=380))
+        _check_sinus_p_waves(fs, sig, m, [])
+        return fs.codes()
+
+    assert run(True) == {"sinus_rhythm"}
+    assert run(False) == {"rhythm_without_p_waves"}

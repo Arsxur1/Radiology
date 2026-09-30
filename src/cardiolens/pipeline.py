@@ -18,6 +18,12 @@ from cardiolens.arrhythmia import (
     pvc_findings,
     vt_run_finding,
 )
+from cardiolens.arrhythmia.atrial import (
+    P_AMPLITUDE_MAX,
+    P_CONSISTENCY_MAX,
+    p_window_amplitude,
+    pre_qrs_consistency,
+)
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
     AppConfig,
@@ -179,6 +185,7 @@ def run_pipeline(
         audit.append(f"[L4] slope outlier ×{pacing_ratio} not QRS-locked "
                      f"(coupling {coupling}) — not called paced")
     _apply_rhythm_hierarchy(findings, m, audit)
+    _check_sinus_p_waves(findings, sig, m, audit)
     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
     # are unreliable, so withhold every R-peak-derived finding and report the poor
@@ -300,6 +307,44 @@ def _apply_rhythm_hierarchy(findings, m, audit: list[str]) -> None:
         af.evidence.append(Evidence(feature="ventricular_rate_bpm", value=f"{hr:.0f}"))
     if dropped:
         audit.append(f"[L4] rhythm hierarchy: AF present, withheld {dropped}")
+
+
+_SINUS_CODES = ("sinus_rhythm", "sinus_tachycardia", "sinus_bradycardia")
+
+
+def _check_sinus_p_waves(findings, sig, m, audit: list[str]) -> None:
+    """A rate-based sinus label needs an organised P wave before the QRS (D45).
+
+    Flutter with fixed conduction, junctional and spikeless paced rhythms were
+    labelled "sinus" from the rate alone. Without a repeating, visible pre-QRS
+    wave in lead II the sinus label is replaced by a hedged rhythm finding.
+    """
+    if findings.by_code("atrial_fibrillation") is not None:
+        return
+    if not any(findings.by_code(c) is not None for c in _SINUS_CODES):
+        return
+    rpeaks = m.r_peaks_samples or []
+    _, per_lead = pre_qrs_consistency(sig, rpeaks, m.intervals.qt_ms)
+    consistency = per_lead.get("II")
+    amplitude = p_window_amplitude(sig, rpeaks, "II")
+    no_p = ((consistency is not None and consistency <= P_CONSISTENCY_MAX)
+            or (amplitude is not None and amplitude <= P_AMPLITUDE_MAX))
+    if not no_p:
+        return
+    if findings.by_code("sinus_rhythm") is not None:
+        findings.findings.remove(findings.by_code("sinus_rhythm"))
+    hr = m.heart_rate_bpm
+    findings.findings.append(Finding(
+        code="rhythm_without_p_waves", group="rhythm",
+        label_ru=f"Ритм без чётких зубцов P (ЧСС {hr}/мин) — синусовый не подтверждён; "
+                 f"исключить трепетание предсердий, узловой ритм, ЭКС",
+        label_uz=f"Aniq P to'lqinlarsiz ritm (YUT {hr}/daq) — sinus tasdiqlanmagan; "
+                 f"bo'lmachalar titrashi, tugun ritmi, EKS ni istisno qilish",
+        evidence=[Evidence(feature="p_consistency_II", value=str(consistency)),
+                  Evidence(feature="p_amplitude_ratio_II", value=str(amplitude))],
+        confidence=0.5))
+    audit.append(f"[L4] no organised P wave (II consistency {consistency}, amplitude "
+                 f"{amplitude}) — sinus label withheld")
 
 
 def _pvc_explains_irregularity(r_peaks, pvc_idx) -> tuple[bool, str]:
