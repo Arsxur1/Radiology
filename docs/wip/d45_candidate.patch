@@ -1,0 +1,220 @@
+diff --git a/src/cardiolens/arrhythmia/atrial.py b/src/cardiolens/arrhythmia/atrial.py
+new file mode 100644
+index 0000000..c7046c9
+--- /dev/null
++++ b/src/cardiolens/arrhythmia/atrial.py
+@@ -0,0 +1,83 @@
++"""Atrial activity before the QRS (D42-D45).
++
++In sinus rhythm every conducted beat is preceded by the same P wave, so the stretch
++of signal before each non-premature QRS repeats from beat to beat and carries a
++visible deflection. Flutter, junctional and paced rhythms (and AF) do not show that
++organised P wave. The automated P-wave delineator cannot tell these apart — it
++labels a "P" before almost every beat (D15a) — but the beat-to-beat repeatability
++and the size of the pre-QRS window can.
++"""
++
++from __future__ import annotations
++
++import numpy as np
++
++_LEADS = ("II", "V1")
++_WIN_START_S = 0.30          # window [R - 300 ms, R - 60 ms]
++_WIN_END_S = 0.06
++_DEFAULT_QT_S = 0.40         # the window starts after the previous beat's QT
++_NORMAL_PRE_MIN = 0.90       # non-premature beat: pre-RR >= 0.90 x median RR
++_MIN_BEATS = 4
++
++# A rate-based "sinus" label is replaced when lead II shows no organised P wave:
++# consistency at most P_CONSISTENCY_MAX or P-window amplitude at most
++# P_AMPLITUDE_MAX x QRS (D45; development data: Chapman, PTB-XL — 33% of non-sinus
++# rhythms called sinus, 0.9% of true sinus).
++P_CONSISTENCY_MAX = 0.30
++P_AMPLITUDE_MAX = 0.03
++_P_WIN = (0.25, 0.06)          # amplitude window [R - 250 ms, R - 60 ms]
++
++
++def pre_qrs_consistency(sig, rpeaks, qt_ms: float | None = None) -> tuple[float | None, dict[str, float]]:
++    """Lowest over II/V1 of the median leave-one-out correlation of pre-QRS windows.
++
++    Only non-premature beats whose window starts after the previous beat's QT
++    count: at fast rates the previous T wave falls in the window and repeats
++    like a P wave would. Returns ``(value, per_lead)``; ``value`` is None when
++    too few beats qualify.
++    """
++    fs = sig.sampling_rate_hz
++    rp = np.asarray(rpeaks, dtype=int)
++    per_lead: dict[str, float] = {}
++    if rp.size < 5:
++        return None, per_lead
++    rr = np.diff(rp)
++    med = float(np.median(rr))
++    qt_s = qt_ms / 1000.0 if qt_ms else _DEFAULT_QT_S
++    a, b, gap = int(_WIN_START_S * fs), int(_WIN_END_S * fs), int(qt_s * fs)
++    idx = [i for i in range(1, len(rp))
++           if rp[i] - a >= 0 and rr[i - 1] >= _NORMAL_PRE_MIN * med and rp[i] - a > rp[i - 1] + gap]
++    if len(idx) < _MIN_BEATS:
++        return None, per_lead
++    for lead in _LEADS:
++        if lead not in sig.lead_names:
++            continue
++        x = sig.lead(lead).astype(float)
++        windows = np.stack([x[rp[i] - a:rp[i] - b] for i in idx])
++        windows = windows - windows.mean(axis=1, keepdims=True)
++        total = windows.sum(axis=0)
++        corrs = []
++        for w in windows:
++            rest = (total - w) / (len(windows) - 1)
++            denom = float(np.std(w) * np.std(rest))
++            corrs.append(float(np.mean((w - w.mean()) * (rest - rest.mean()))) / denom if denom > 0 else 0.0)
++        per_lead[lead] = round(float(np.median(corrs)), 3)
++    if not per_lead:
++        return None, per_lead
++    return round(float(min(per_lead.values())), 3), per_lead
++
++
++def p_window_amplitude(sig, rpeaks, lead: str = "II") -> float | None:
++    """Peak-to-peak of the beat-averaged pre-QRS window relative to the QRS."""
++    fs = sig.sampling_rate_hz
++    if lead not in sig.lead_names:
++        return None
++    rp = np.asarray(rpeaks, dtype=int)
++    a, b, q = int(_P_WIN[0] * fs), int(_P_WIN[1] * fs), int(0.05 * fs)
++    ok = [r for r in rp[1:] if r - a >= 0 and r + q < sig.signal.shape[1]]
++    if len(ok) < 3:
++        return None
++    x = sig.lead(lead).astype(float)
++    avg = np.mean([x[r - a:r - b] - x[r - a:r - b].mean() for r in ok], axis=0)
++    qrs = float(np.median([np.ptp(x[r - q:r + q]) for r in ok]))
++    return round(float(np.ptp(avg) / max(qrs, 1.0)), 3)
+diff --git a/src/cardiolens/layer5_causal/engine.py b/src/cardiolens/layer5_causal/engine.py
+index cc32cfd..7803e05 100644
+--- a/src/cardiolens/layer5_causal/engine.py
++++ b/src/cardiolens/layer5_causal/engine.py
+@@ -131,7 +131,7 @@ def _standalone_codes() -> set[str]:
+         "complete_av_block", "atrial_flutter", "left_axis_deviation",
+         "right_axis_deviation", "extreme_axis", "low_qrs_voltage",
+         "left_atrial_enlargement", "right_atrial_enlargement", "pathological_q_waves",
+-        "wide_complex_tachycardia",
++        "wide_complex_tachycardia", "rhythm_without_p_waves",
+     }
+ 
+ 
+diff --git a/src/cardiolens/pipeline.py b/src/cardiolens/pipeline.py
+index b632dfd..1f8bcd1 100644
+--- a/src/cardiolens/pipeline.py
++++ b/src/cardiolens/pipeline.py
+@@ -18,6 +18,12 @@ from cardiolens.arrhythmia import (
+     pvc_findings,
+     vt_run_finding,
+ )
++from cardiolens.arrhythmia.atrial import (
++    P_AMPLITUDE_MAX,
++    P_CONSISTENCY_MAX,
++    p_window_amplitude,
++    pre_qrs_consistency,
++)
+ from cardiolens.calibration import TemperatureScaler
+ from cardiolens.config import (
+     AppConfig,
+@@ -179,6 +185,7 @@ def run_pipeline(
+         audit.append(f"[L4] slope outlier ×{pacing_ratio} not QRS-locked "
+                      f"(coupling {coupling}) — not called paced")
+     _apply_rhythm_hierarchy(findings, m, audit)
++    _check_sinus_p_waves(findings, sig, m, audit)
+     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
+     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
+     # are unreliable, so withhold every R-peak-derived finding and report the poor
+@@ -302,6 +309,44 @@ def _apply_rhythm_hierarchy(findings, m, audit: list[str]) -> None:
+         audit.append(f"[L4] rhythm hierarchy: AF present, withheld {dropped}")
+ 
+ 
++_SINUS_CODES = ("sinus_rhythm", "sinus_tachycardia", "sinus_bradycardia")
++
++
++def _check_sinus_p_waves(findings, sig, m, audit: list[str]) -> None:
++    """A rate-based sinus label needs an organised P wave before the QRS (D45).
++
++    Flutter with fixed conduction, junctional and spikeless paced rhythms were
++    labelled "sinus" from the rate alone. Without a repeating, visible pre-QRS
++    wave in lead II the sinus label is replaced by a hedged rhythm finding.
++    """
++    if findings.by_code("atrial_fibrillation") is not None:
++        return
++    if not any(findings.by_code(c) is not None for c in _SINUS_CODES):
++        return
++    rpeaks = m.r_peaks_samples or []
++    _, per_lead = pre_qrs_consistency(sig, rpeaks, m.intervals.qt_ms)
++    consistency = per_lead.get("II")
++    amplitude = p_window_amplitude(sig, rpeaks, "II")
++    no_p = ((consistency is not None and consistency <= P_CONSISTENCY_MAX)
++            or (amplitude is not None and amplitude <= P_AMPLITUDE_MAX))
++    if not no_p:
++        return
++    if findings.by_code("sinus_rhythm") is not None:
++        findings.findings.remove(findings.by_code("sinus_rhythm"))
++    hr = m.heart_rate_bpm
++    findings.findings.append(Finding(
++        code="rhythm_without_p_waves", group="rhythm",
++        label_ru=f"Ритм без чётких зубцов P (ЧСС {hr}/мин) — синусовый не подтверждён; "
++                 f"исключить трепетание предсердий, узловой ритм, ЭКС",
++        label_uz=f"Aniq P to'lqinlarsiz ritm (YUT {hr}/daq) — sinus tasdiqlanmagan; "
++                 f"bo'lmachalar titrashi, tugun ritmi, EKS ni istisno qilish",
++        evidence=[Evidence(feature="p_consistency_II", value=str(consistency)),
++                  Evidence(feature="p_amplitude_ratio_II", value=str(amplitude))],
++        confidence=0.5))
++    audit.append(f"[L4] no organised P wave (II consistency {consistency}, amplitude "
++                 f"{amplitude}) — sinus label withheld")
++
++
+ def _pvc_explains_irregularity(r_peaks, pvc_idx) -> tuple[bool, str]:
+     """True if, with the RR intervals around each PVC removed, the rhythm no
+     longer meets the AF RR criteria (D25). Needs >= 4 remaining intervals."""
+diff --git a/tests/test_arrhythmia.py b/tests/test_arrhythmia.py
+index 55cd2a5..29b6d7e 100644
+--- a/tests/test_arrhythmia.py
++++ b/tests/test_arrhythmia.py
+@@ -152,3 +152,43 @@ def test_ventricular_run_detector():
+     # Same-shaped premature beats (atrial run) and plain sinus: no ventricular run.
+     sig, rp = _pulse_train(rr)
+     assert detect_ventricular_runs(sig, rp, 500.0) == []
++
++
++def _atrial_strip(rr_ms, p_waves, fs=500.0, seed=0):
++    """II/V1 strip: narrow QRS at the given RR; ``p_waves`` puts a P 160 ms before each
++    QRS, otherwise low uncoordinated atrial activity fills the baseline."""
++    from cardiolens.contracts.signal import SignalRepresentation
++
++    rng = np.random.default_rng(seed)
++    t_r = np.cumsum([600.0] + list(rr_ms)) / 1000.0
++    n = int((t_r[-1] + 0.5) * fs)
++    tt = np.arange(n) / fs
++    x = np.zeros(n)
++    for t in t_r:
++        x += 1000 * np.exp(-((tt - t) / 0.012) ** 2)
++        if p_waves:
++            x += 150 * np.exp(-((tt - t + 0.16) / 0.025) ** 2)
++    if not p_waves:
++        phase = np.cumsum(2 * np.pi * rng.uniform(4.5, 7.5, n) / fs)
++        x += 15 * np.sin(phase) * rng.uniform(0.5, 1.0, n)
++    sig = SignalRepresentation(signal=np.stack([x, 0.8 * x]).astype(np.float32), sampling_rate_hz=fs,
++                               lead_names=["II", "V1"], duration_s=n / fs, source="synthetic")
++    return sig, (t_r * fs).astype(int)
++
++
++def test_sinus_label_requires_organised_p_waves():
++    from cardiolens.contracts.features import Intervals, Measurements
++    from cardiolens.contracts.findings import Finding, FindingSet
++    from cardiolens.pipeline import _check_sinus_p_waves
++
++    def run(p_waves):
++        sig, rp = _atrial_strip([900] * 10, p_waves)
++        fs = FindingSet(findings=[Finding(code="sinus_rhythm", group="rhythm", label_ru="s",
++                                          label_uz="s", confidence=0.9)])
++        m = Measurements(heart_rate_bpm=67, r_peaks_samples=[int(r) for r in rp],
++                         intervals=Intervals(qt_ms=380))
++        _check_sinus_p_waves(fs, sig, m, [])
++        return fs.codes()
++
++    assert run(True) == {"sinus_rhythm"}
++    assert run(False) == {"rhythm_without_p_waves"}
