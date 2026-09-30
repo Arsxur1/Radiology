@@ -10,14 +10,17 @@ Two levels:
   (rotation, blur, JPEG, shadow gradient, salt noise); ``digitize_page`` recovers
   every lead: de-skew from the grid lines (Hough), adaptive thresholding (robust
   to shading), row/column segmentation from trace projections with a
-  layout-geometry fallback, per-panel column-wise extraction, then
-  ``page_to_signal`` builds a 10-s ``SignalRepresentation`` whose
-  ``provenance.lead_windows`` says where each lead really has data.
+  layout-geometry fallback, per-panel trace **tracking** (skeleton + Viterbi over
+  the ink runs, D47: a steep QRS edge stays in its own column and a neighbouring
+  row's trace crossing the panel is rejected), then ``page_to_signal`` builds a
+  10-s ``SignalRepresentation`` whose ``provenance.lead_windows`` says where each
+  lead really has data.
 
-Calibration (px/mm, mm/s, mm/mV) is still passed in; calibration-pulse detection
-remains a TODO. ``provenance.confidence`` is the mean column coverage over the
-panels, so a bad photo yields a low-confidence result rather than an invented one
-(TZ §0).
+Calibration is read from the page when not given (px/mm from the grid pitch and
+the row pitch, mm/mV from the 1 mV pulse, D43); photo perspective is rectified
+from the grid's vanishing points. ``provenance.confidence`` is the mean column
+coverage over the panels, so a bad photo yields a low-confidence result rather
+than an invented one (TZ §0).
 """
 
 from __future__ import annotations
@@ -107,6 +110,234 @@ def _trace_rows(mask: np.ndarray, x0: int, x1: int, y0: int, y1: int) -> np.ndar
         rows = np.flatnonzero(sub[:, i])
         if rows.size:
             out[i] = y0 + float(np.median(rows))
+    return out
+
+
+def _column_runs(col: np.ndarray, merge_gap: int = 3) -> list[tuple[int, int]]:
+    """Vertical ink runs (top, bottom) of one column; runs separated by a gap of
+    ``merge_gap`` px or less are one run (a thresholded stroke breaks at speckle)."""
+    d = np.diff(np.concatenate(([0], col.astype(np.int8), [0])))
+    runs = list(zip(np.flatnonzero(d == 1).tolist(), (np.flatnonzero(d == -1) - 1).tolist()))
+    merged: list[tuple[int, int]] = []
+    for a, b in runs:
+        if merged and a - merged[-1][1] <= merge_gap:
+            merged[-1] = (merged[-1][0], b)
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def thin_mask(mask: np.ndarray, max_iter: int = 8) -> np.ndarray:
+    """Zhang-Suen thinning of an ink mask to a 1-px skeleton (vectorised).
+
+    A rendered or printed trace is 3-4 px thick after thresholding, so a steep
+    QRS edge occupies 3-4 columns instead of one and the per-column median widens
+    the QRS by a column or two per edge (+24 ms at 150 px/s, D47). The skeleton
+    puts the edge back into its own column. Its line ends are eroded by a few
+    pixels and its apex sits off-centre on a thick spike — both handled by
+    ``_trace_rows_tracked`` (raw-ink fallback at ends, apex from the raw ink).
+    """
+    img = mask.astype(np.uint8).copy()
+    for _ in range(max_iter):
+        changed = False
+        for step in (0, 1):
+            p = np.pad(img, 1)
+            p2, p3, p4, p5 = p[:-2, 1:-1], p[:-2, 2:], p[1:-1, 2:], p[2:, 2:]
+            p6, p7, p8, p9 = p[2:, 1:-1], p[2:, :-2], p[1:-1, :-2], p[:-2, :-2]
+            b = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9
+            seq = [p2, p3, p4, p5, p6, p7, p8, p9, p2]
+            a = sum(((seq[i] == 0) & (seq[i + 1] == 1)).astype(np.uint8) for i in range(8))
+            if step == 0:
+                c1, c2 = (p2 * p4 * p6) == 0, (p4 * p6 * p8) == 0
+            else:
+                c1, c2 = (p2 * p4 * p8) == 0, (p2 * p6 * p8) == 0
+            rm = (img == 1) & (b >= 2) & (b <= 6) & (a == 1) & c1 & c2
+            if rm.any():
+                img[rm] = 0
+                changed = True
+        if not changed:
+            break
+    return img.astype(bool)
+
+
+TRACK_BASELINE_WEIGHT = 0.25   # pull towards the panel's own baseline, per column, in row heights
+TRACK_EXTEND = 0.5             # panel box extended by this fraction of its height up and down
+TRACK_TRIM_COLUMNS = 3         # panel-edge columns ignored (the neighbour panel's trace touches them)
+TRACK_MAX_JUMP = 0.25          # a run farther than this (in box heights) from the trace on both sides is not the trace
+TRACK_EDGE_SCAN = 12           # columns from each panel end checked against the median row (80 ms at 150 px/s)
+TRACK_TALL = 3.0               # a run taller than this many stroke widths is a steep stroke, not flat trace
+TRACK_TURN_PX = 3              # the raw ink must reach this far beyond both sides to mark a turning column
+TRACK_FLANK = 2                # columns on each side of an apex read from the raw run midpoint
+
+
+def _trace_rows_tracked(mask: np.ndarray, thin: np.ndarray, x0: int, x1: int, y0: int, y1: int) -> np.ndarray:
+    """Per-column trace row by tracking, not by the median of all ink (D47).
+
+    * The box is extended by ``TRACK_EXTEND`` of its height above and below, so
+      a deep S wave that leaves its row is followed instead of clipped.
+    * Candidates per column are the runs of the skeleton (``thin_mask``): the
+      skeleton keeps a steep edge in its own column, where the raw stroke smears
+      it over 3-4 columns. Where the skeleton is empty and no skeleton ink sits
+      in a neighbour column (line ends, eroded by thinning) the raw runs serve;
+      next to a skeleton column an empty column is the lateral spread of a
+      steep stroke and stays empty.
+    * A Viterbi pass picks one run per column minimising continuity cost
+      (distance from the previous column's value to the run) plus a weak pull
+      towards the panel's own baseline, so a neighbouring lead's trace crossing
+      the box loses even where it is the closest ink; forced choices (a run
+      far from the trace on both sides, or at a panel end) are dropped.
+    * The skeleton's apex is off-centre on a thick spike and stops short of the
+      tip; the raw ink is symmetric, so a turning column is where the raw run
+      top (bottom) is a local extreme along the path — the middle of a tied
+      plateau — and reads the raw extreme minus the stroke radius.
+    Columns without usable ink stay NaN (interpolated by the caller).
+    """
+    h = y1 - y0
+    ext = int(TRACK_EXTEND * h)
+    ya, yb = max(0, y0 - ext), min(mask.shape[0], y1 + ext)
+    sub, sub_thin = mask[ya:yb, x0:x1], thin[ya:yb, x0:x1]
+    centre = (y0 + y1) / 2.0 - ya
+    n = x1 - x0
+    raw_cols = [_column_runs(sub[:, i]) for i in range(n)]
+    thin_cols = [_column_runs(sub_thin[:, i]) for i in range(n)]
+    heights = [b - a + 1 for runs in raw_cols for a, b in runs]
+    stroke = float(np.clip(np.median(heights), 1.0, max(2.0, h / 24.0))) if heights else 2.0
+    cols: list[list[tuple[int, int]]] = []
+    for i in range(n):
+        if thin_cols[i]:
+            cols.append(thin_cols[i])
+        elif thin_cols[max(0, i - 1)] or thin_cols[min(n - 1, i + 1)]:
+            cols.append([])
+        else:
+            cols.append(raw_cols[i])
+    # --- Viterbi over the runs -------------------------------------------------
+    prev_cost: list[float] | None = None
+    prev_val: list[float] = []
+    last = -1
+    back: list[tuple[list[int], list[float]] | None] = []
+    for i in range(n):
+        runs = cols[i]
+        if not runs:
+            back.append(None)
+            continue
+        mids = [(a + b) / 2.0 for a, b in runs]
+        cost = [TRACK_BASELINE_WEIGHT * abs(m - centre) / h for m in mids]
+        bp = [-1] * len(runs)
+        if prev_cost is not None:
+            gap = float(i - last)
+            for j, (a, b) in enumerate(runs):
+                best, bj = np.inf, -1
+                for k, pv in enumerate(prev_val):
+                    d = 0.0 if a <= pv <= b else min(abs(pv - a), abs(pv - b))
+                    c = prev_cost[k] + d / h / gap
+                    if c < best:
+                        best, bj = c, k
+                cost[j] += best
+                bp[j] = bj
+        prev_cost, prev_val, last = cost, mids, i
+        back.append((bp, mids))
+    out = np.full(n, np.nan)
+    if prev_cost is None:
+        return out
+    chosen: dict[int, tuple[int, int]] = {}
+    j, i = int(np.argmin(prev_cost)), last
+    while i >= 0 and j >= 0:
+        bp, mids = back[i]  # type: ignore[misc]
+        chosen[i] = cols[i][j]
+        out[i] = ya + mids[j]
+        j = bp[j]
+        i -= 1
+        while i >= 0 and back[i] is None:
+            i -= 1
+    found = np.isfinite(out)   # columns that held usable ink: the coverage the caller reports
+    # --- Forced choices: a run the trace cannot have reached ------------------
+    # Where the own trace offers no candidate but a foreign run exists, the path
+    # had to take it. A run farther than TRACK_MAX_JUMP of the box height from
+    # the values on both sides is such a choice; a genuine R spike is not, its
+    # tall run contains the neighbouring values.
+    for _ in range(3):
+        keys = sorted(chosen)
+        dropped = False
+        for idx, k in enumerate(keys):
+            a, b = chosen[k]
+            nbs = [keys[q] for q in (idx - 1, idx + 1) if 0 <= q < len(keys) and abs(keys[q] - k) <= 3]
+            if not nbs:
+                continue
+            far = 0
+            for nb in nbs:
+                v = out[nb] - ya
+                d = 0.0 if a <= v <= b else min(abs(v - a), abs(v - b))
+                far += d > TRACK_MAX_JUMP * h
+            if far == len(nbs):
+                out[k] = np.nan
+                del chosen[k]
+                dropped = True
+        if not dropped:
+            break
+    # --- Panel ends: the own trace stops a few columns short of the edge --------
+    finite = np.flatnonzero(np.isfinite(out))
+    if finite.size:
+        med = float(np.median(out[finite]))
+        for idx in (finite, finite[::-1]):
+            for i in idx[:TRACK_EDGE_SCAN]:
+                if abs(out[i] - med) <= TRACK_MAX_JUMP * h:
+                    break
+                out[i] = np.nan
+                chosen.pop(int(i), None)
+    # --- Turning columns from the raw ink profile ------------------------------
+    tall = TRACK_TALL * stroke
+    keys = sorted(chosen)
+    raw_ext: dict[int, tuple[int, int]] = {}
+    for k in keys:
+        a, b = chosen[k]
+        mid = (a + b) / 2.0
+        hit = [r for r in raw_cols[k] if r[0] - 1 <= mid <= r[1] + 1]
+        raw_ext[k] = hit[0] if hit else (a, b)
+    tops = {k: raw_ext[k][0] for k in keys}
+    bots = {k: raw_ext[k][1] for k in keys}
+    flanks: set[int] = set()
+    for idx, k in enumerate(keys):
+        ra, rb = raw_ext[k]
+        if rb - ra + 1 < tall:
+            continue
+        left = [keys[q] for q in range(max(0, idx - 3), idx)]
+        right = [keys[q] for q in range(idx + 1, min(len(keys), idx + 4))]
+        if not left or not right:
+            continue
+        # upward apex: the top is at least as high as the immediate neighbours and
+        # clearly higher than the outer ones; ties are one plateau — take its middle
+        if (ra <= tops[left[-1]] and ra <= tops[right[0]]
+                and ra < min(tops[left[0]], tops[right[-1]]) - TRACK_TURN_PX):
+            plateau = [q for q in left[-1:] + [k] + right[:1] if abs(tops[q] - ra) <= 1]
+            if plateau[len(plateau) // 2] == k:
+                out[k] = ya + ra + stroke / 2.0
+                flanks.update(q for q in left[-TRACK_FLANK:] + right[:TRACK_FLANK] if q != k)
+        elif (rb >= bots[left[-1]] and rb >= bots[right[0]]
+                and rb > max(bots[left[0]], bots[right[-1]]) + TRACK_TURN_PX):
+            plateau = [q for q in left[-1:] + [k] + right[:1] if abs(bots[q] - rb) <= 1]
+            if plateau[len(plateau) // 2] == k:
+                out[k] = ya + rb - stroke / 2.0
+                flanks.update(q for q in left[-TRACK_FLANK:] + right[:TRACK_FLANK] if q != k)
+    # On the flanks of a thick spike the skeleton runs sit near the blob's base
+    # (the medial axis of a filled spike is one line up its middle), reading the
+    # flank far too low under blur. There the raw run's midpoint is the fair
+    # estimate: its lateral-spread bias matters at the QRS onset/offset columns,
+    # which lie farther out, not next to the apex.
+    for q in flanks:
+        ra, rb = raw_ext[q]
+        if rb - ra + 1 >= tall:
+            out[q] = ya + (ra + rb) / 2.0
+    t = TRACK_TRIM_COLUMNS
+    if t and n > 2 * t:
+        out[:t] = np.nan
+        out[-t:] = np.nan
+    # Columns dropped by design (trimmed, rejected) are not missing ink: interpolate
+    # them here so the caller's coverage counts only the columns that had no trace.
+    ok = np.isfinite(out)
+    fill = found & ~ok
+    if fill.any() and ok.sum() >= 2:
+        idx = np.arange(n)
+        out[fill] = np.interp(idx[fill], idx[ok], out[ok])
     return out
 
 
@@ -642,7 +873,7 @@ def dewarp_page(gray: np.ndarray) -> np.ndarray:
 
 def digitize_page(
     path: str | Path, *, px_per_mm: float | None = None, mm_per_s: float = 25.0,
-    mm_per_mv: float | None = None, dewarp: bool = True,
+    mm_per_mv: float | None = None, dewarp: bool = True, tracked: bool = True,
 ) -> dict[str, np.ndarray]:
     """Recover each lead's µV trace (at px_per_s Hz) from a 3x4 + rhythm-strip page.
 
@@ -650,6 +881,9 @@ def digitize_page(
     None -> read from the calibration pulse when present (fallback 10). Returns
     ``{lead: trace_uv}`` (12 panel leads at 2.5 s, plus ``"II_rhythm"`` at 10 s);
     ``digitize_page.last_coverage`` / ``last_calibration`` hold the provenance.
+    ``tracked`` (D47): skeletonise the ink and follow each panel's own trace by
+    continuity instead of taking the median of all ink per column; ``False`` is
+    the pre-D47 behaviour, kept for comparison.
     """
     import cv2
 
@@ -732,15 +966,22 @@ def digitize_page(
     cols = [(int(edges[c]), int(edges[c + 1])) for c in range(4)]
     out: dict[str, np.ndarray] = {}
     coverages = []
+    thin = thin_mask(mask) if tracked else None
+
+    def rows_of(x0: int, x1: int, y0: int, y1: int) -> np.ndarray:
+        if thin is None:
+            return _trace_rows(mask, x0, x1, y0, y1)
+        return _trace_rows_tracked(mask, thin, x0, x1, y0, y1)
+
     for r, (y0, y1) in enumerate(rows[:3]):
         for c, (x0, x1) in enumerate(cols):
             lead = LAYOUT_3X4[r][c]
-            trace, cov = _fill_gaps(_trace_rows(mask, x0, x1, y0, y1))
+            trace, cov = _fill_gaps(rows_of(x0, x1, y0, y1))
             base = float(np.median(trace))                  # panel baseline = median row
             out[lead] = ((base - trace) * uv_per_px).astype(np.float32)
             coverages.append(cov)
     y0, y1 = rows[3]
-    trace, cov = _fill_gaps(_trace_rows(mask, xa, xb, y0, y1))
+    trace, cov = _fill_gaps(rows_of(xa, xb, y0, y1))
     out["II_rhythm"] = ((float(np.median(trace)) - trace) * uv_per_px).astype(np.float32)
     coverages.append(cov)
     digitize_page.last_coverage = float(np.mean(coverages))  # type: ignore[attr-defined]
@@ -790,5 +1031,6 @@ def digitize_page_to_signal(path: str | Path, **kw) -> SignalRepresentation:
     """Convenience: ``digitize_page`` + ``page_to_signal`` with shared calibration."""
     traces = digitize_page(path, **kw)
     kw.pop("dewarp", None)
+    kw.pop("tracked", None)
     return page_to_signal(traces, coverage=getattr(digitize_page, "last_coverage", None),
                           calibration=getattr(digitize_page, "last_calibration", None), **kw)
