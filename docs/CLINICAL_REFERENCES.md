@@ -929,29 +929,53 @@ and the digitised signal goes through the same pipeline. Agreement digital ↔ p
 per-lead r, HR / axis / QRS-width deltas, and the Jaccard overlap of the scored
 finding codes — the clinically meaningful number.
 
-| Page | fail | mean r | r p10 | HR MAE (≤ 3 bpm) | axis MAE (≤ 15°) | QRS MAE | codes Jaccard | identical |
-|---|--:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| clean | 0 | 0.90 | 0.82 | 4.1 (80 %) | 11° (87 %) | 25 ms | 0.57 | 18 % |
-| scan (1°, blur 1 px, JPEG 60) | 0 | 0.89 | 0.82 | 3.2 (81 %) | 12° (84 %) | 24 ms | 0.48 | 9 % |
-| photo (2 % perspective, vignette, texture, JPEG 45, 1.5°) | 0 | 0.61 | 0.18 | 9.8 (39 %) | 31° (46 %) | 40 ms | 0.33 | 0 % |
-| photo strong (3.5 %, −2.5°, salt) | 11 | 0.24 | 0.02 | 11 (37 %) | 64° (16 %) | 45 ms | 0.31 | 0 % |
+| Page | extraction | fail | mean r | r p10 | HR MAE (≤ 3 bpm) | axis MAE (≤ 15°) | QRS MAE | codes Jaccard | identical |
+|---|---|--:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| clean | column median (v3) | 0 | 0.90 | 0.82 | 4.1 (80 %) | 11° (87 %) | 25 ms | 0.57 | 18 % |
+| clean | **tracking (D47)** | 0 | **0.94** | 0.89 | 2.6 (80 %) | 9° (90 %) | **12 ms** | **0.69** | **31 %** |
+| scan (1°, blur 1 px, JPEG 60) | column median | 0 | 0.89 | 0.82 | 3.2 (81 %) | 12° (84 %) | 24 ms | 0.48 | 9 % |
+| scan | tracking | 0 | 0.92 | 0.88 | 4.0 (77 %) | 13° (84 %) | 14 ms | 0.60 | 21 % |
+| photo (2 % perspective, vignette, texture, JPEG 45, 1.5°) | column median | 0 | 0.61 | 0.18 | 9.8 (39 %) | 31° (46 %) | 40 ms | 0.33 | 0 % |
+| photo | tracking | 0 | 0.62 | 0.18 | 9.0 (39 %) | 29° (46 %) | 30 ms | 0.38 | 3 % |
+| photo strong (3.5 %, −2.5°, salt) | column median | 11 | 0.24 | 0.02 | 11 (37 %) | 64° (16 %) | 45 ms | 0.31 | 0 % |
+| photo strong | tracking | 6 | 0.24 | 0.01 | 13 (30 %) | 62° (18 %) | 39 ms | 0.30 | 4 % |
 
-Reading: on a clean page from a real record the waveform and the rhythm survive
-(r 0.90, HR within 3 bpm in 80 %, axis within 15° in 87 %) but the **finding set
-does not**: only 18 % of pages reproduce the digital record's codes exactly and the
-average overlap is 0.57. The dominant cause is a systematic **QRS widening of
-+24 ms (median; +31 mean)** on the digitised trace — 15 clean pages checked one by
-one: a 2-px stroke rendered at 150 px/s (6 px/mm × 25 mm/s) and the per-column
-median of the stroke turn an 80–90-ms QRS into 100–130 ms, which pushes normal
-records over the 120-ms BBB threshold (`lbbb` appeared on 6 of the 15) and shifts
-QT by +15–25 ms (`long_qt` on 2). Everything downstream of QRS width (BBB typing,
-wide-QRS context for ST, QT) inherits it. The 2 % photo halves the agreement again
-(r 0.61, axis within 15° in 46 %); the strong photo is beyond the de-warp's limit
-(11 pages fail, r 0.24), as on the synthetic set. So the honest statement for a
-digitised page today: rhythm and rate are reliable, morphology-dependent findings
-are not, and the QRS-width bias is the next thing to fix (render-independent
-stroke-thinning / skeletonisation before the column median, and a QRS-width
-correction from the measured stroke width). Real photographs remain unmeasured.
+Reading, first run (column median): on a clean page from a real record the
+waveform and the rhythm survive (r 0.90, HR within 3 bpm in 80 %, axis within 15°
+in 87 %) but the **finding set does not**: only 18 % of pages reproduce the digital
+record's codes exactly and the average overlap is 0.57. The dominant cause was a
+systematic **QRS widening of +24 ms (median; +31 mean)** — 15 clean pages checked
+column by column: a 3–4-px stroke drawn along a steep edge spreads that edge's rows
+into the neighbouring columns (each column's ink run is the true sub-column
+segment plus slope × half the stroke width above and below), so the column before
+the QRS onset already reads 10–25 px up and the QRS comes out 1–2 columns wider on
+each side; normal records crossed the 120-ms BBB threshold (`lbbb` on 6 of 15) and
+QT shifted +15–25 ms. A second cause showed up in the same pages: deep S waves
+(V2/V3 at −2.5 mV) run into the row below, and the neighbour's column median
+swallowed them (spikes in V3 and in the rhythm strip, missed R peaks, false AF).
+
+**D47 — tracking instead of the median.** Candidates per column come from the ink
+skeleton (a steep edge stays in its own column; the lateral spread next to a
+skeleton column stays empty; the raw runs serve only at line ends), a Viterbi pass
+follows each panel's own trace (continuity plus a weak pull to the panel's
+baseline, forced far-off choices dropped, the box extended half a row up and down
+so a deep S is followed rather than clipped), and the R/S apex is read from the raw
+ink's symmetric extreme profile (the skeleton's apex is off-centre on a thick
+spike). Two alternatives were measured and rejected: horizontal erosion by the
+stroke width erases steep strokes outright (they are 3 px wide horizontally, 4 px
+tall), and a distance-transform ridge with a "skip" state is symmetric but skips
+genuine spikes (R under blur 1200 → 200 µV). Result on the same 100 records:
+QRS MAE 25 → 12 ms on clean pages (15-record check: median bias +24 → +8 ms,
+mean +31 → +15), r 0.90 → 0.94, finding-set overlap 0.57 → 0.69, identical sets
+18 → 31 %; scan 0.48 → 0.60. The photo rows barely move: at 2 % perspective the
+limit is the de-warp, not the extraction. The residual +8 ms bias is the flank
+columns next to an apex, which are read from the raw run midpoints (the skeleton
+sits at the base of a thick spike there); reading them from the skeleton removes
+the bias (median +1 ms) but costs the blur and combo pages (min r 0.75) — the
+current setting keeps every synthetic page at or above the median's numbers. What
+still separates a page from its record on the remaining 69 % of clean pages is
+rhythm semantics at the margins (a P/R ratio at the AF gate, one dropped R peak)
+and QRS width on wide-complex records; real photographs remain unmeasured.
 
 ### Paper-page digitisation benchmark (item 5d)
 
