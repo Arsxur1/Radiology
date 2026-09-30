@@ -1,0 +1,13 @@
+D48 pre-registration (before PTB-XL fold 9 is processed), 2026-10-01
+Measurement: ST per lead on the 12-lead median beat at the global QRS offset (J) from D30 fiducials,
+baseline = mean of the flattest 20 ms in [R-300, R-30 ms] of that lead's median beat.
+Dev (PTB-XL dev, 1363 records, 16,356 leads) vs GE 12SL J-point ST: per-beat (current) MAE 138 uV,
+28% of leads off by > 100 uV; median beat MAE 37 uV, 5.8%.
+Criterion under evaluation for the CRITICAL STEMI tier: 4th UDMI J-point — >= 100 uV in two contiguous
+leads (I-aVL, II-III, III-aVF, II-aVF, V1-V2 ... V5-V6), V2-V3 >= 200 uV men >= 40 y, >= 250 uV men < 40,
+>= 150 uV women. Dev: vs the same criterion on 12SL ST, sens 0.89 / false 2.9%.
+Held-out (fold 9, 2183 records, never used for ST) pass criteria:
+  1. Measurement: median-beat J-point MAE vs 12SL <= 50 uV.
+  2. Criterion agreement with 12SL-UDMI: sens >= 0.80 and false positive rate <= 5%.
+  3. Informational: critical STE alert rate (current vs tiered), label sensitivity (STE_ / Stadium I).
+The tiering itself is a product decision taken after these numbers.
