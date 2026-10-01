@@ -43,9 +43,6 @@ _TERRITORIES = [
     ("боковая", "yon", {"I", "aVL", "V5", "V6"}, {"III", "aVF"}),
 ]
 
-# Ventricular-rate band of atrial flutter with 2:1 conduction (D56).
-_FLUTTER_2TO1_BAND = (140.0, 160.0)
-
 
 def _territory_of(elevated: set[str]) -> tuple[str, str, set[str]] | None:
     """Return (label_ru, label_uz, reciprocal_leads) for the best-matching territory."""
@@ -132,19 +129,11 @@ def detect_findings(
                 ))
             elif (not is_pediatric and svt_min and hr >= svt_min
                     and m.rhythm_regular is not False and narrow):
-                # ~150/min is the classic rate of atrial flutter with 2:1 conduction;
-                # among SVT calls in this band about 1 in 5 is flutter (D56).
-                flutter_note_ru = flutter_note_uz = ""
-                if _FLUTTER_2TO1_BAND[0] <= hr <= _FLUTTER_2TO1_BAND[1]:
-                    flutter_note_ru = ("; при ~150/мин возможно трепетание предсердий с проведением "
-                                       "2:1 — искать волны F (II, III, aVF, V1)")
-                    flutter_note_uz = ("; ~150/daq da 2:1 o'tkazuvchanlikli bo'lmachalar titrashi "
-                                       "bo'lishi mumkin — F to'lqinlarini izlash (II, III, aVF, V1)")
                 fs.findings.append(Finding(
                     code="supraventricular_tachycardia", group="rhythm",
                     label_ru=f"Суправентрикулярная тахикардия (ЧСС {hr}/мин, "
-                             f"регулярная узкокомплексная){flutter_note_ru}",
-                    label_uz=f"Supraventrikulyar taxikardiya (YUT {hr}/daq){flutter_note_uz}",
+                             f"регулярная узкокомплексная)",
+                    label_uz=f"Supraventrikulyar taxikardiya (YUT {hr}/daq)",
                     evidence=_ev(heart_rate_bpm=hr, svt_rate_min=svt_min,
                                  qrs_ms=qrs, regular="yes"), confidence=0.7,
                 ))

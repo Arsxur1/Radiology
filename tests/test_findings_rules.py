@@ -295,14 +295,3 @@ def test_wide_tachycardia_is_not_labelled_sinus_or_preexcitation():
     narrow = Measurements(heart_rate_bpm=175, rhythm_regular=True,
                           intervals=Intervals(pr_ms=120, qrs_ms=90, qt_ms=280, qtc_bazett_ms=470))
     assert "supraventricular_tachycardia" in _find(narrow).codes()
-
-
-def test_svt_near_150_notes_possible_2to1_flutter():
-    """D56: an SVT call at 140-160/min names 2:1 atrial flutter as the differential."""
-    def label(hr):
-        m = Measurements(heart_rate_bpm=hr, rhythm_regular=True,
-                         intervals=Intervals(pr_ms=120, qrs_ms=90, qt_ms=280, qtc_bazett_ms=450))
-        return _find(m).by_code("supraventricular_tachycardia").label_ru
-
-    assert "2:1" in label(150)
-    assert "2:1" not in label(175)
