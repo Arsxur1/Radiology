@@ -30,7 +30,7 @@ _P_WIN = (0.25, 0.06)          # amplitude window [R - 250 ms, R - 60 ms]
 # An AF call keeps its label but is hedged when both II and V1 repeat the pre-QRS
 # window at least this well (D51): the irregularity may be sinus rhythm with
 # ectopy. Development data (D42/D43 sets): 95% of hedged AF calls had no AF label,
-# 2.1% of true AF calls were hedged. Withholding AF instead cost 3-5% AF
+# 2.1% of true AF calls were hedged; held-out Georgia AF: 1.7%. Withholding AF instead cost 3-5% AF
 # sensitivity on held-out data (D42), so the call itself is left unchanged.
 AF_HEDGE_MIN = 0.75
 
