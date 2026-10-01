@@ -295,3 +295,15 @@ def test_wide_tachycardia_is_not_labelled_sinus_or_preexcitation():
     narrow = Measurements(heart_rate_bpm=175, rhythm_regular=True,
                           intervals=Intervals(pr_ms=120, qrs_ms=90, qt_ms=280, qtc_bazett_ms=470))
     assert "supraventricular_tachycardia" in _find(narrow).codes()
+
+
+def test_short_pr_with_rbbb_morphology_stays_rbbb():
+    """D58: a short global PR on a wide QRS with a terminal R in V1 is RBBB, not WPW."""
+    rbbb = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_v1_terminal_positive=True,
+                        intervals=Intervals(pr_ms=100, qrs_ms=140, qt_ms=420, qtc_bazett_ms=450))
+    codes = _find(rbbb).codes()
+    assert "rbbb" in codes and "wpw_preexcitation" not in codes
+    # Without RBBB morphology the same short PR + wide QRS is still pre-excitation.
+    wpw = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_v1_terminal_positive=False,
+                       intervals=Intervals(pr_ms=100, qrs_ms=140, qt_ms=420, qtc_bazett_ms=450))
+    assert "wpw_preexcitation" in _find(wpw).codes()

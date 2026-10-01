@@ -43,6 +43,9 @@ _TERRITORIES = [
     ("боковая", "yon", {"I", "aVL", "V5", "V6"}, {"III", "aVF"}),
 ]
 
+# Wide QRS with a terminal R in V1 at or above this width is read as RBBB, not WPW (D58).
+_WPW_RBBB_QRS_MS = 130.0
+
 
 def _territory_of(elevated: set[str]) -> tuple[str, str, set[str]] | None:
     """Return (label_ru, label_uz, reciprocal_leads) for the best-matching territory."""
@@ -529,8 +532,11 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, is_pediatric: b
     if iv.qrs_ms <= qrs_hi:
         return
     # Short PR + wide QRS -> pre-excitation (WPW): the wide QRS is explained by a
-    # delta wave, not by a bundle branch block (TZ §8.1).
-    if pr_lo and iv.pr_ms is not None and iv.pr_ms < pr_lo:
+    # delta wave, not by a bundle branch block (TZ §8.1). A terminal R in V1 with a
+    # QRS >= 130 ms is RBBB morphology: the global PR (D30) is short on some RBBB
+    # records and WPW would hide the block, so the bundle-branch rule decides (D58).
+    rbbb_morphology = m.qrs_v1_terminal_positive is True and iv.qrs_ms >= _WPW_RBBB_QRS_MS
+    if pr_lo and iv.pr_ms is not None and iv.pr_ms < pr_lo and not rbbb_morphology:
         fs.findings.append(Finding(
             code="wpw_preexcitation", group="interval",
             label_ru=f"Преэкзитация (WPW): короткий PR {iv.pr_ms} мс + широкий QRS {iv.qrs_ms} мс",
