@@ -213,6 +213,44 @@ def test_af_call_is_hedged_not_withdrawn_when_p_waves_recur():
 
     hedged, plain = run(True), run(False)
     assert hedged is not None and "синусовый ритм с экстрасистолией" in hedged.label_ru
-    assert plain is not None and plain.label_ru == "ФП"
-    assert {e.feature for e in plain.evidence} == {"p_consistency_II", "p_consistency_V1"}
+    assert plain is not None and "экстрасистолией" not in plain.label_ru
+    assert {"p_consistency_II", "p_consistency_V1"} <= {e.feature for e in plain.evidence}
     assert hedged.confidence == plain.confidence == 0.9
+
+
+def test_organised_atrial_activity_hedges_af_toward_flutter():
+    """D53: a regular F-wave train hedges the AF label; the AF call itself stays."""
+    from cardiolens.contracts.features import Intervals, Measurements
+    from cardiolens.contracts.findings import Finding, FindingSet
+    from cardiolens.contracts.signal import SignalRepresentation
+    from cardiolens.pipeline import _flutter_hedge
+
+    fs = 500.0
+    rng = np.random.default_rng(3)
+    rr = [700, 1000, 650, 950, 800, 1100, 720, 900, 1050, 680, 980, 760]
+    t_r = np.cumsum([600.0] + rr) / 1000.0
+    n = int((t_r[-1] + 0.5) * fs)
+    tt = np.arange(n) / fs
+
+    def run(organised):
+        x = np.zeros(n)
+        for t in t_r:
+            x += 1000 * np.exp(-((tt - t) / 0.012) ** 2)
+        if organised:   # 5 Hz sawtooth F waves (300/min)
+            x += 120 * (2 * ((tt * 5.0) % 1.0) - 1)
+        else:           # broadband f waves
+            x += 40 * np.convolve(rng.standard_normal(n), np.ones(15) / 15, mode="same")
+        sig = SignalRepresentation(signal=np.stack([x, x, x, 0.8 * x]).astype(np.float32),
+                                   sampling_rate_hz=fs, lead_names=["II", "III", "aVF", "V1"],
+                                   duration_s=n / fs, source="synthetic")
+        af = Finding(code="atrial_fibrillation", group="rhythm", label_ru="ФП", label_uz="FP",
+                     confidence=0.9)
+        FindingSet(findings=[af])
+        m = Measurements(r_peaks_samples=[int(t * fs) for t in t_r], intervals=Intervals(qt_ms=380))
+        _flutter_hedge(af, sig, m, [])
+        return af
+
+    hedged, plain = run(True), run(False)
+    assert "трепетание предсердий" in hedged.label_ru and hedged.confidence == 0.9
+    assert plain.label_ru == "ФП"
+    assert any(e.feature == "atrial_organisation" for e in plain.evidence)

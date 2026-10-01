@@ -88,3 +88,67 @@ def p_window_amplitude(sig, rpeaks, lead: str = "II") -> float | None:
     avg = np.mean([x[r - a:r - b] - x[r - a:r - b].mean() for r in ok], axis=0)
     qrs = float(np.median([np.ptp(x[r - q:r + q]) for r in ok]))
     return round(float(np.ptp(avg) / max(qrs, 1.0)), 3)
+
+
+# Atrial flutter among AF calls (D46, D53): after cancelling the QRST, flutter leaves a
+# regular F-wave train (a sharp spectral peak), AF a broad f-wave spectrum. Renaming AF
+# to flutter on this index failed held-out checks (D46: 7.5% of true AF renamed), so an
+# AF call is only hedged. Development data (D53, 2 140 AF calls; Ningbo flutter labels
+# excluded, D52): >= 0.65 hedges 27% of flutter and 1.4% of true AF (2.6% at most per
+# source).
+_ORG_LEADS = ("II", "III", "aVF", "V1")
+FLUTTER_HEDGE_MIN = 0.65
+
+
+def _qrst_cancelled(x: np.ndarray, rpeaks: np.ndarray, fs: float) -> np.ndarray | None:
+    """Median-beat QRST cancellation with per-beat least-squares scaling; QRS blanked."""
+    a, b = int(0.25 * fs), int(0.45 * fs)
+    ok = [r for r in rpeaks if r - a >= 0 and r + b < len(x)]
+    if len(ok) < 4:
+        return None
+    beats = np.stack([x[r - a:r + b] for r in ok])
+    tmpl = np.median(beats, axis=0)
+    energy = float(tmpl @ tmpl)
+    res = x.astype(float).copy()
+    for r, beat in zip(ok, beats, strict=True):
+        k = float(beat @ tmpl) / energy if energy > 0 else 1.0
+        res[r - a:r + b] = beat - k * tmpl
+    h = int(0.06 * fs)
+    for r in rpeaks:
+        res[max(0, r - h):min(len(res), r + h)] = 0.0
+    return res
+
+
+def atrial_organisation(sig, rpeaks) -> tuple[float | None, float | None]:
+    """(organisation index, dominant atrial frequency Hz) of the QRST-cancelled residual.
+
+    Organisation = power within 0.5 Hz of the dominant 3-12 Hz peak and its second
+    harmonic over all 3-12 Hz power, averaged over II, III, aVF and V1.
+    """
+    from scipy.signal import butter, filtfilt, welch
+
+    fs = sig.sampling_rate_hz
+    rp = np.asarray(rpeaks, dtype=int)
+    if rp.size < 5:
+        return None, None
+    bb, aa = butter(3, [3 / (fs / 2), 12 / (fs / 2)], btype="band")
+    ois, dfs = [], []
+    for lead in _ORG_LEADS:
+        if lead not in sig.lead_names:
+            continue
+        res = _qrst_cancelled(sig.lead(lead).astype(float), rp, fs)
+        if res is None:
+            continue
+        y = filtfilt(bb, aa, res)
+        f, p = welch(y, fs, nperseg=min(len(y), int(4 * fs)), noverlap=int(2 * fs))
+        band = (f >= 3) & (f <= 12)
+        if p[band].sum() <= 0:
+            continue
+        fb, pb = f[band], p[band]
+        df = float(fb[np.argmax(pb)])
+        near = (np.abs(fb - df) <= 0.5) | (np.abs(fb - 2 * df) <= 0.5)
+        ois.append(float(pb[near].sum() / pb.sum()))
+        dfs.append(df)
+    if not ois:
+        return None, None
+    return round(float(np.mean(ois)), 3), round(float(np.median(dfs)), 2)

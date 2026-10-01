@@ -20,8 +20,10 @@ from cardiolens.arrhythmia import (
 )
 from cardiolens.arrhythmia.atrial import (
     AF_HEDGE_MIN,
+    FLUTTER_HEDGE_MIN,
     P_AMPLITUDE_MAX,
     P_CONSISTENCY_MAX,
+    atrial_organisation,
     p_window_amplitude,
     pre_qrs_consistency,
 )
@@ -363,6 +365,7 @@ def _af_atrial_evidence(findings, sig, m, audit: list[str]) -> None:
     af = findings.by_code("atrial_fibrillation")
     if af is None:
         return
+    _flutter_hedge(af, sig, m, audit)
     value, per_lead = pre_qrs_consistency(sig, m.r_peaks_samples or [], m.intervals.qt_ms)
     for lead, v in per_lead.items():
         af.evidence.append(Evidence(feature=f"p_consistency_{lead}", value=str(v)))
@@ -373,6 +376,28 @@ def _af_atrial_evidence(findings, sig, m, audit: list[str]) -> None:
     af.label_uz = (f"{af.label_uz}; QRS oldidan P to'lqini takrorlanadi (II/V1 ≥ {value}) — "
                    f"ekstrasistoliyali sinus ritmini istisno qilish")
     audit.append(f"[L4] AF call hedged: recurring pre-QRS wave {per_lead}")
+
+
+def _flutter_hedge(af, sig, m, audit: list[str]) -> None:
+    """An organised atrial residual hedges the AF label toward flutter (D53).
+
+    The call stays AF: renaming it on this index renamed 7.5% of true AF on held-out
+    data (D46).
+    """
+    organisation, dom_hz = atrial_organisation(sig, m.r_peaks_samples or [])
+    if organisation is None:
+        return
+    rate = round(dom_hz * 60) if dom_hz else None
+    af.evidence.append(Evidence(feature="atrial_organisation", value=str(organisation)))
+    if organisation < FLUTTER_HEDGE_MIN:
+        return
+    af.evidence.append(Evidence(feature="atrial_rate_per_min", value=str(rate)))
+    af.label_ru = (f"{af.label_ru}; организованная предсердная активность (~{rate}/мин) — "
+                   f"исключить трепетание предсердий")
+    af.label_uz = (f"{af.label_uz}; tartibli bo'lmacha faolligi (~{rate}/daq) — "
+                   f"bo'lmachalar titrashini istisno qilish")
+    audit.append(f"[L4] AF call hedged toward flutter: atrial organisation {organisation} "
+                 f">= {FLUTTER_HEDGE_MIN} (~{rate}/min)")
 
 
 def _pvc_explains_irregularity(r_peaks, pvc_idx) -> tuple[bool, str]:
