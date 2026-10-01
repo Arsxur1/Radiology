@@ -95,7 +95,7 @@ def p_window_amplitude(sig, rpeaks, lead: str = "II") -> float | None:
 # to flutter on this index failed held-out checks (D46: 7.5% of true AF renamed), so an
 # AF call is only hedged. Development data (D53, 2 140 AF calls; Ningbo flutter labels
 # excluded, D52): >= 0.65 hedges 27% of flutter and 1.4% of true AF (2.6% at most per
-# source).
+# source); held-out: 22% of flutter, 1.3-2.1% of true AF.
 _ORG_LEADS = ("II", "III", "aVF", "V1")
 FLUTTER_HEDGE_MIN = 0.65
 
