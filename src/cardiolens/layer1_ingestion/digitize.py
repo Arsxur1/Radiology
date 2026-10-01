@@ -206,14 +206,78 @@ class DigitizedPage:
     notes: list[str] = field(default_factory=list)
 
 
+def _five_mm_periods(profiles, w: int) -> list[tuple[float, float]]:
+    """(px/mm, strength) per projection profile from the 5-mm grid-line period.
+
+    The period is searched where a page can put it — px/mm in [W/420, W/170], i.e.
+    5 mm in [W/84, W/34] — after removing slow shading; the strongest
+    autocorrelation peak wins, halved when its half-lag is nearly as strong (a
+    10-mm lag), then refined on a zero-padded spectrum (D57).
+    """
+    from scipy.ndimage import uniform_filter1d
+
+    lo5, hi5 = w / 84.0, w / 34.0
+    out = []
+    for prof in profiles:
+        n = len(prof)
+        if n < 4 * hi5:
+            continue
+        p = prof - uniform_filter1d(prof, int(2 * hi5))
+        ac = np.correlate(p, p, mode="full")[n - 1:]
+        if ac[0] <= 0:
+            continue
+        ac = ac / ac[0]
+        ks = [k for k in range(max(2, int(lo5)), int(hi5) + 1) if ac[k] >= ac[k - 1] and ac[k] >= ac[k + 1]]
+        if not ks:
+            continue
+        k5 = max(ks, key=lambda k: ac[k])
+        # A visible 1-mm grid makes every multiple of 1 mm a peak (4 mm can beat
+        # 5 mm): when the 1-mm fundamental and its 5x peak are both present, the
+        # scale is refined on the 1-mm line itself.
+        p1 = next((k for k in range(3, int(w / 170.0) + 2)
+                   if ac[k] > 0.2 and ac[k] >= ac[k - 1] and ac[k] >= ac[k + 1]), None)
+        f = np.abs(np.fft.rfft(p * np.hanning(n), n=8 * n))
+        freqs = np.fft.rfftfreq(8 * n)
+        if p1 is not None and lo5 <= 5 * p1 <= hi5 and any(
+                abs(k - 5 * p1) <= max(2, 0.04 * 5 * p1) for k in ks):
+            band = (freqs >= 0.9 / p1) & (freqs <= 1.1 / p1)   # refine on the 1-mm line
+            out.append((1.0 / freqs[band][int(np.argmax(f[band]))], float(ac[p1])))
+            continue
+        half = [k for k in ks if abs(k - k5 / 2) <= 2]
+        if half and ac[half[0]] >= 0.6 * ac[k5]:
+            k5 = half[0]
+        if ac[k5] < 0.05:
+            continue
+        band = (freqs >= 0.93 / k5) & (freqs <= 1.07 / k5)
+        out.append((1.0 / freqs[band][int(np.argmax(f[band]))] / 5.0, float(ac[k5])))
+    return out
+
+
 def _grid_px_per_mm(img: np.ndarray) -> float:
     """Grid period from the projection spectrum of coloured (or light-grey) grid pixels."""
+    if max(img.shape[:2]) >= 2000:               # scans and photos (D57)
+        mx = img.max(axis=2).astype(float)
+        mn = img.min(axis=2).astype(float)
+        grid = ((mx - mn) > 25) & (mx > 110)
+        if grid.mean() < 0.005:
+            grid = (mx > 110) & (mx < 235)
+        w = max(img.shape[:2])
+        ests = _five_mm_periods((grid.mean(axis=0), grid.mean(axis=1)), w)
+        if len(ests) < 2:                        # faint or colour-shifted grid
+            ink = 255.0 - mx
+            ests += _five_mm_periods((ink.mean(axis=0), ink.mean(axis=1)), w)
+        if not ests:
+            raise ValueError("page layout not recognised: no grid found")
+        return float(max(ests, key=lambda e: e[1])[0])
     mx = img.max(axis=2).astype(float)
     mn = img.min(axis=2).astype(float)
     grid = ((mx - mn) > 25) & (mx > 110)
     if grid.mean() < 0.005:                      # monochrome print: light-grey lines
         grid = (mx > 110) & (mx < 235)
     periods = []
+    # Search lags up to ~W/30 px: on a 300-dpi scan or a 12-16 MP photo the 5-mm
+    # lines sit 53-75 px apart, beyond a fixed 60-px window (D57).
+    lag_max = max(61, int(max(img.shape[:2]) / 30))
     for prof in (grid.mean(axis=0), grid.mean(axis=1)):
         p = prof - prof.mean()
         n = len(p)
@@ -223,7 +287,8 @@ def _grid_px_per_mm(img: np.ndarray) -> float:
         ac = ac / ac[0]
         # Coarse period: first autocorrelation peak (thin 1-px lines have equally
         # strong FFT harmonics, so a raw FFT argmax can land on a harmonic).
-        lags = [k for k in range(3, 61) if ac[k] > 0.25 and ac[k] >= ac[k - 1] and ac[k] >= ac[k + 1]]
+        lags = [k for k in range(3, min(lag_max, n - 1))
+                if ac[k] > 0.25 and ac[k] >= ac[k - 1] and ac[k] >= ac[k + 1]]
         if not lags:
             continue
         p0 = float(lags[0])
@@ -254,14 +319,27 @@ def _row_baselines(dark: np.ndarray, px_per_mm: float, n_rows: int) -> list[int]
     return sorted(int(y) for y in top)
 
 
-def _calibration_pulse(dark: np.ndarray, px_per_mm: float) -> tuple[int, float] | None:
-    """(x of the pulse's falling edge, pulse height in mm) from the left margin."""
+def _calibration_pulse(dark: np.ndarray, px_per_mm: float,
+                       baselines: list[int] | None = None,
+                       side: str = "left") -> tuple[int, float] | None:
+    """(x of the pulse's inner edge, pulse height in mm).
+
+    ``side="left"``: pulse in the left margin, the edge is its falling edge (the
+    trace starts there). ``side="right"``: pulse after the end of each row, the edge
+    is its rising edge (the row ends there) — some printers place it there (D57).
+    With row ``baselines`` only runs whose bottom sits on a baseline (±2 mm) count:
+    a QR code or label in the margin has runs of similar height (D57).
+    """
     xs, heights = [], []
-    for x in range(int(0.08 * dark.shape[1])):
+    w = dark.shape[1]
+    cols = range(int(0.08 * w)) if side == "left" else range(int(0.55 * w), w)
+    for x in cols:
         ys = np.flatnonzero(dark[:, x])
         if ys.size == 0:
             continue
         for run in np.split(ys, np.flatnonzero(np.diff(ys) > 2) + 1):
+            if baselines and min(abs(int(run[-1]) - b) for b in baselines) > 2 * px_per_mm:
+                continue
             if 7 * px_per_mm <= len(run) <= 13 * px_per_mm:
                 xs.append(x)
                 heights.append(len(run) / px_per_mm)
@@ -271,8 +349,28 @@ def _calibration_pulse(dark: np.ndarray, px_per_mm: float) -> tuple[int, float] 
     # must not move the edge (it would shift every lead box).
     med = float(np.median(heights))
     near = [x for x, hh in zip(xs, heights, strict=True) if abs(hh - med) <= 0.7]
-    edge = max(near) if near else xs[int(np.argmin([abs(hh - med) for hh in heights]))]
+    if not near:
+        near = [xs[int(np.argmin([abs(hh - med) for hh in heights]))]]
+    edge = max(near) if side == "left" else min(near)
     return edge, med
+
+
+def _trace_span(dark: np.ndarray, baseline: int, px_per_mm: float, edge: int,
+                side: str) -> tuple[int, int] | None:
+    """(first, last) column of the trace along one row: columns with ink within
+    ±3 mm of the baseline, joined across gaps up to 3 mm; the longest such stretch
+    beyond the calibration pulse."""
+    h, w = dark.shape
+    b = int(3 * px_per_mm)
+    band = dark[max(0, baseline - b):min(h, baseline + b)]
+    cols = band.any(axis=0)
+    lo, hi = (edge + 1, w) if side == "left" else (0, edge)
+    xs = np.flatnonzero(cols[lo:hi]) + lo
+    if xs.size == 0:
+        return None
+    runs = np.split(xs, np.flatnonzero(np.diff(xs) > 3 * px_per_mm) + 1)
+    best = max(runs, key=lambda r: r[-1] - r[0])
+    return int(best[0]), int(best[-1])
 
 
 def _skew_angle(img: np.ndarray) -> float:
@@ -343,15 +441,26 @@ def digitize_page(
     h, w = img.shape[:2]
     dark = img.max(axis=2) < dark_threshold
     px = _grid_px_per_mm(img)
-    pulse = _calibration_pulse(dark, px)
+    base = _row_baselines(dark, px, len(layout))
+    rows_ok = base if len(base) == len(layout) else None
+    expected_mm = 10.0 * mm_per_mv / 10.0
+    row_mm = 10.0 * mm_per_s                      # a row spans 10 s
+    pulse = _calibration_pulse(dark, px, rows_ok)
+    side = "left"
+    if (pulse is None or abs(pulse[1] - expected_mm) > _PULSE_MM_TOL) and rows_ok:
+        right = _calibration_pulse(dark, px, rows_ok, side="right")
+        if right is not None and abs(right[1] - expected_mm) <= _PULSE_MM_TOL:
+            pulse, side = right, "right"
     if pulse is None:
         raise ValueError("page layout not recognised: no calibration pulse found")
     x0, pulse_mm = pulse
-    expected_mm = 10.0 * mm_per_mv / 10.0
+    if side == "right":                           # the row ends where the pulse starts
+        x0 = int(round(x0 - row_mm * px))
+        if x0 < 0:
+            raise ValueError("page layout not recognised: rows run past the page edge")
     if abs(pulse_mm - expected_mm) > _PULSE_MM_TOL:
         raise ValueError(f"page layout not recognised: calibration pulse {pulse_mm:.1f} mm "
                          f"at the detected scale (expected {expected_mm:.0f} mm)")
-    base = _row_baselines(dark, px, len(layout))
     if len(base) != len(layout):
         raise ValueError(f"page layout not recognised: {len(base)} rows found, "
                          f"{len(layout)} expected")
@@ -359,11 +468,35 @@ def digitize_page(
     if gaps.std() / gaps.mean() > _ROW_SPACING_CV_MAX:
         raise ValueError("page layout not recognised: rows are not evenly spaced")
     half = int(gaps.min() / 2)
-    row_mm = 10.0 * mm_per_s                      # a row spans 10 s
     n_cols = max(len(r) for r in layout)
-    seg = row_mm / n_cols * px
-    if x0 + row_mm * px > w + 5 * px:
+    # Time axis from the rhythm strip itself: its trace spans exactly one row
+    # (10 s). Some printers leave a gap between the pulse and the trace, and a
+    # photo's horizontal scale can differ from the grid estimate by ~1%; both
+    # shifted every lead box (D57).
+    px_t = px
+    rhythm_row = next((r for r, names in enumerate(layout) if len(names) == 1), None)
+    if rhythm_row is not None:
+        span = _trace_span(dark, base[rhythm_row], px, x0, side)
+        if span is not None and abs((span[1] - span[0]) / px - row_mm) <= 0.06 * row_mm:
+            x0, px_t = span[0], (span[1] - span[0]) / row_mm
+            notes_span = f"time axis from rhythm-strip span ({px_t:.2f} px/mm horizontally)"
+        else:
+            notes_span = ""
+    else:
+        notes_span = ""
+    seg = row_mm / n_cols * px_t
+    if x0 + row_mm * px_t > w + 5 * px:
         raise ValueError("page layout not recognised: rows run past the page edge")
+
+    def _crop(band: np.ndarray, a: float, b: float) -> np.ndarray:
+        """Columns [a, b) resampled to the grid scale, so fs = px × mm/s holds."""
+        import cv2
+
+        c = band[:, int(round(a)):min(w, int(round(b)))]
+        target = max(2, int(round((b - a) / px_t * px)))
+        if c.shape[1] < 2 or target == c.shape[1]:
+            return c
+        return cv2.resize(c, (target, c.shape[0]), interpolation=cv2.INTER_NEAREST)
 
     leads: dict[str, SignalRepresentation] = {}
     rhythm = None
@@ -373,17 +506,19 @@ def digitize_page(
         hb = min(half, base[r], h - base[r])
         band = img[base[r] - hb:base[r] + hb]
         if len(names) == 1:                       # full-width rhythm strip
-            crop = band[:, x0:min(w, int(round(x0 + row_mm * px)))]
+            crop = _crop(band, x0, x0 + row_mm * px_t)
             rhythm = digitize_image(crop, mm_per_s=mm_per_s, mm_per_mv=mm_per_mv,
                                     px_per_mm=px, lead_name=names[0])
             continue
         for k, name in enumerate(names):
-            crop = band[:, int(round(x0 + k * seg)):int(round(x0 + (k + 1) * seg))]
+            crop = _crop(band, x0 + k * seg, x0 + (k + 1) * seg)
             leads[name] = digitize_image(crop, mm_per_s=mm_per_s, mm_per_mv=mm_per_mv,
                                          px_per_mm=px, lead_name=name)
     if rhythm is None:
         raise ValueError("page layout has no rhythm strip")
-    notes = [f"grid {px:.2f} px/mm, calibration pulse {pulse_mm:.1f} mm, rows at {base}"]
+    notes = [f"grid {px:.2f} px/mm, calibration pulse {pulse_mm:.1f} mm ({side}), rows at {base}"]
+    if notes_span:
+        notes.append(notes_span)
     if corrections:
         notes.append("photo corrections: " + ", ".join(corrections))
         for sr in [rhythm, *leads.values()]:
