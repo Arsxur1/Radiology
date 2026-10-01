@@ -194,6 +194,11 @@ PAGE_LAYOUT_3X4_II = (("I", "aVR", "V1", "V4"), ("II", "aVL", "V2", "V5"),
 # and 7.3-8.2 mm on degraded pages whose grid scale was wrong (D26).
 _PULSE_MM_TOL = 1.0
 _ROW_SPACING_CV_MAX = 0.20   # the four baselines are roughly evenly spaced
+# Rhythm-strip span as the time axis (D57): accepted only when it is 10 s within
+# _SPAN_TOL at the grid scale and starts at most _SPAN_START_MAX_MM after a left
+# pulse — on noisy renders a looser gate let noise stretch the span.
+_SPAN_TOL = 0.03
+_SPAN_START_MAX_MM = 12.0
 
 
 @dataclass
@@ -477,7 +482,8 @@ def digitize_page(
     rhythm_row = next((r for r, names in enumerate(layout) if len(names) == 1), None)
     if rhythm_row is not None:
         span = _trace_span(dark, base[rhythm_row], px, x0, side)
-        if span is not None and abs((span[1] - span[0]) / px - row_mm) <= 0.06 * row_mm:
+        if (span is not None and abs((span[1] - span[0]) / px - row_mm) <= _SPAN_TOL * row_mm
+                and (side == "right" or 0 <= (span[0] - x0) / px <= _SPAN_START_MAX_MM)):
             x0, px_t = span[0], (span[1] - span[0]) / row_mm
             notes_span = f"time axis from rhythm-strip span ({px_t:.2f} px/mm horizontally)"
         else:
