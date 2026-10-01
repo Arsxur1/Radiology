@@ -80,6 +80,11 @@ class SafetyConfig(BaseModel):
     """Critical-alert tiers (TZ §10). Long QT is a finding above the sex-specific
     QTc limit and a critical alert only from this QTc (D44)."""
     long_qt_critical_qtc_ms: float = 500.0
+    # Peaked T is a critical hyperkalaemia alert only with a tall T on the median
+    # beat (>= precordial / limb µV in >= 2 leads) or known serum K+ >= this (D49).
+    tall_t_precordial_uv: float = 1000.0
+    tall_t_limb_uv: float = 600.0
+    hyperkalaemia_potassium_mmol: float = 5.5
 
 
 class QualityConfig(BaseModel):

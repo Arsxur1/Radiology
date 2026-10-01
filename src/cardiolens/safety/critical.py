@@ -17,8 +17,6 @@ from cardiolens.contracts.findings import FindingSet
 # Codes considered critical when present (mapped from Layer-4 findings).
 # TZ §10 must-not-miss list; recall is prioritised over specificity.
 CRITICAL_CODES = {
-    "peaked_t_waves": ("Паттерн гиперкалиемии (остроконечные T)",
-                       "Giperkaliyemiya patterni (uchli T)"),
     "complete_av_block": ("Полная АВ-блокада", "To'liq AV blokada"),
     "ventricular_tachycardia": ("Желудочковая тахикардия (пробежка ЖЭ)",
                                 "Ventrikulyar taxikardiya (VES yugurishi)"),
@@ -73,8 +71,23 @@ def stemi_j_point_criterion(st_median_beat: dict, sex: str | None,
     return any(a in elevated and b in elevated for a, b in _STEMI_PAIRS)
 
 
+_PRECORDIAL = {"V1", "V2", "V3", "V4", "V5", "V6"}
+
+
+def tall_t_criterion(t_median_beat: dict, precordial_uv: float = 1000.0,
+                     limb_uv: float = 600.0) -> bool | None:
+    """True if >= 2 leads carry a tall upright T on the median beat; None if unknown."""
+    if not t_median_beat:
+        return None
+    tall = [ld for ld, t in t_median_beat.items()
+            if t is not None and t >= (precordial_uv if ld in _PRECORDIAL else limb_uv)]
+    return len(tall) >= 2
+
+
 def scan_critical(findings: FindingSet, m: Measurements, *,
-                  long_qt_critical_ms: float = 500.0, patient=None) -> SafetyResult:
+                  long_qt_critical_ms: float = 500.0, patient=None, context=None,
+                  tall_t_precordial_uv: float = 1000.0, tall_t_limb_uv: float = 600.0,
+                  hyperkalaemia_potassium_mmol: float = 5.5) -> SafetyResult:
     """Detect critical findings from findings + raw measurements (TZ §10).
 
     ST elevation (D48) and long QT (D44) are tiered. Long QT: the finding is reported above the sex-specific limit
@@ -111,6 +124,19 @@ def scan_critical(findings: FindingSet, m: Measurements, *,
             add("st_elevation", "STEMI (подозрение)", "STEMI (shubha)",
                 reason="J-point ST elevation in contiguous leads (UDMI)" if stemi
                 else "ST elevation; median-beat ST unavailable")
+
+    # Peaked T is tiered (D49): critical with a tall T on the median beat, with a
+    # known serum K+ at or above the hyperkalaemia limit, or (conservatively) when
+    # no median beat could be formed.
+    if "peaked_t_waves" in findings.codes():
+        tall = tall_t_criterion(m.morphology.t_median_beat, tall_t_precordial_uv, tall_t_limb_uv)
+        k = getattr(context, "potassium", None)
+        high_k = k is not None and k >= hyperkalaemia_potassium_mmol
+        if tall is None or tall or high_k:
+            reason = (f"serum K+ {k} mmol/L" if high_k else
+                      "tall T on the median beat" if tall else "peaked T; median beat unavailable")
+            add("peaked_t_waves", "Паттерн гиперкалиемии (остроконечные T)",
+                "Giperkaliyemiya patterni (uchli T)", reason=reason)
 
     qtc = m.intervals.qtc_bazett_ms
     if "long_qt" in findings.codes() and qtc is not None and qtc >= long_qt_critical_ms:

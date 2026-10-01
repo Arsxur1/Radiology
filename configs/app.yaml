@@ -91,6 +91,14 @@ quality:
 # high-risk threshold for torsades instead (D44; product-owner decision).
 safety:
   long_qt_critical_qtc_ms: 500
+  # Peaked T waves fired on ~14% of ECGs (even GE 12SL's own T/R meet that rule on
+  # ~10%). The finding stays; the critical hyperkalaemia alert needs a tall T on
+  # the median beat (>= 1.0 mV precordial or >= 0.6 mV limb, >= 2 leads; ~3% of
+  # ECGs, agrees with 12SL sens 0.85 / false 0.2%) or serum K+ >= 5.5 mmol/L in
+  # the clinical context (D49; product-owner decision).
+  tall_t_precordial_uv: 1000
+  tall_t_limb_uv: 600
+  hyperkalaemia_potassium_mmol: 5.5
 
 # Confidence gating for autonomous mode B (TZ §2, §16).
 confidence:

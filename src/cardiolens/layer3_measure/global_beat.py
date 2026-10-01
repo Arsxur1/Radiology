@@ -139,6 +139,19 @@ def global_q_waves(signal: np.ndarray, rpeaks, fs: float,
     return out
 
 
+def _pr_baseline(x: np.ndarray, a: int, fs: float) -> float:
+    """Mean of the flattest 20 ms in [R-300, R-30] ms of one lead's median beat."""
+    lo, hi = max(0, a - int(0.30 * fs)), a - int(0.03 * fs)
+    w20 = max(2, int(0.02 * fs))
+    best, base = np.inf, 0.0
+    for s0 in range(lo, max(lo + 1, hi - w20)):
+        seg = x[s0:s0 + w20]
+        e = float(np.ptp(seg))
+        if e < best:
+            best, base = e, float(np.mean(seg))
+    return base
+
+
 def global_st(signal: np.ndarray, rpeaks, fs: float,
               lead_names: list[str]) -> dict[str, tuple[float, float]]:
     """ST level per lead on the median beat at the global J point and J+60 ms (D48).
@@ -153,19 +166,32 @@ def global_st(signal: np.ndarray, rpeaks, fs: float,
     rp = np.asarray(rpeaks, dtype=float)
     rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
     off = int(global_fiducials(X, a, fs, rr_s)["qrs_off"])
-    lo, hi = max(0, a - int(0.30 * fs)), a - int(0.03 * fs)
-    w20 = max(2, int(0.02 * fs))
     j60 = min(X.shape[1] - 1, off + int(0.06 * fs))
     out: dict[str, tuple[float, float]] = {}
     for i, name in enumerate(lead_names):
-        x = X[i]
-        best, base = np.inf, 0.0
-        for s0 in range(lo, max(lo + 1, hi - w20)):
-            seg = x[s0:s0 + w20]
-            e = float(np.ptp(seg))
-            if e < best:
-                best, base = e, float(np.mean(seg))
-        out[name] = (round(float(x[off] - base), 1), round(float(x[j60] - base), 1))
+        base = _pr_baseline(X[i], a, fs)
+        out[name] = (round(float(X[i][off] - base), 1), round(float(X[i][j60] - base), 1))
+    return out
+
+
+def global_t_amplitude(signal: np.ndarray, rpeaks, fs: float,
+                       lead_names: list[str]) -> dict[str, float]:
+    """Signed T-wave peak per lead on the median beat, from J+60 ms to the global
+    T end, against the PR baseline (D49). Against GE 12SL T amplitude on PTB-XL:
+    MAE 36-51 uV (the per-beat estimate: 59-123 uV)."""
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return {}
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    fid = global_fiducials(X, a, fs, rr_s)
+    off, te = int(fid["qrs_off"]), fid["t_end"]
+    end = int(te) if te else off + int(0.35 * fs)
+    out: dict[str, float] = {}
+    for i, name in enumerate(lead_names):
+        tw = X[i][off + int(0.06 * fs):end] - _pr_baseline(X[i], a, fs)
+        if tw.size:
+            out[name] = round(float(tw[np.argmax(np.abs(tw))]), 1)
     return out
 
 

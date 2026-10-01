@@ -54,6 +54,8 @@ class Morphology(BaseModel):
     q_waves: dict[str, tuple[float, float, float, bool]] = Field(default_factory=dict)
     # ST per lead on the 12-lead median beat (D48): lead -> (J µV, J+60 µV).
     st_median_beat: dict[str, tuple[float, float]] = Field(default_factory=dict)
+    # Signed T-wave peak per lead on the median beat, µV (D49).
+    t_median_beat: dict[str, float] = Field(default_factory=dict)
 
 
 class Measurements(BaseModel):

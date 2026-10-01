@@ -147,3 +147,32 @@ def test_stemi_alert_tier_uses_median_beat_j_point_criterion():
     assert "st_elevation" in alerts(inferior)
     assert "st_elevation" not in alerts(flat)
     assert "st_elevation" in alerts({})          # no median beat -> conservative
+
+
+def test_hyperkalaemia_alert_tier_tall_t_or_known_potassium():
+    # D49: peaked_t_waves stays a finding; the critical alert needs a tall T on the
+    # median beat (>= 1.0 mV precordial / 0.6 mV limb in >= 2 leads), a serum K+
+    # >= 5.5 mmol/L, or no median beat at all (conservative).
+    from cardiolens.contracts.features import Morphology
+    from cardiolens.contracts.findings import Finding
+    from cardiolens.contracts.signal import PatientContext
+    from cardiolens.safety.critical import tall_t_criterion
+
+    normal = {ld: 300.0 for ld in STANDARD_12_LEADS}
+    tall = dict(normal, V2=1200.0, V3=1100.0)
+    assert tall_t_criterion(tall) is True and tall_t_criterion(normal) is False
+    assert tall_t_criterion(dict(normal, II=650.0, aVF=620.0)) is True    # limb >= 0.6 mV
+    assert tall_t_criterion({}) is None
+
+    def alerts(t, potassium=None):
+        fnd = FindingSet(findings=[Finding(code="peaked_t_waves", group="other", label_ru="t",
+                                           label_uz="t", confidence=0.7)])
+        m = Measurements(heart_rate_bpm=70, intervals=Intervals(qrs_ms=90),
+                         morphology=Morphology(t_median_beat=t))
+        ctx = PatientContext(potassium=potassium)
+        return [a.code for a in scan_critical(fnd, m, context=ctx).alerts]
+
+    assert "peaked_t_waves" in alerts(tall)
+    assert "peaked_t_waves" not in alerts(normal)
+    assert "peaked_t_waves" in alerts(normal, potassium=6.1)
+    assert "peaked_t_waves" in alerts({})

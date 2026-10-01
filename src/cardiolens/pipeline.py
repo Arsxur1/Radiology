@@ -222,7 +222,10 @@ def run_pipeline(
     # Safety scan (TZ §10) — before interpretation, independent of LLM.
     safety = scan_critical(findings, m,
                            long_qt_critical_ms=cfg.safety.long_qt_critical_qtc_ms,
-                           patient=sig.patient)
+                           patient=sig.patient, context=sig.context,
+                           tall_t_precordial_uv=cfg.safety.tall_t_precordial_uv,
+                           tall_t_limb_uv=cfg.safety.tall_t_limb_uv,
+                           hyperkalaemia_potassium_mmol=cfg.safety.hyperkalaemia_potassium_mmol)
     # New critical dynamics on serial comparison force escalation (TZ §8.4, §10).
     if serial is not None:
         for d in serial.deltas:

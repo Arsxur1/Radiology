@@ -22,7 +22,12 @@ from cardiolens.contracts.features import (
     STMeasurement,
 )
 from cardiolens.contracts.signal import SignalRepresentation
-from cardiolens.layer3_measure.global_beat import global_intervals, global_q_waves, global_st
+from cardiolens.layer3_measure.global_beat import (
+    global_intervals,
+    global_q_waves,
+    global_st,
+    global_t_amplitude,
+)
 from cardiolens.layer3_measure.intervals import (
     qtc_bazett,
     qtc_framingham,
@@ -317,6 +322,9 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             m.morphology.q_waves = global_q_waves(sig.signal, rpeaks, fs, list(sig.lead_names))
             # ST on the median beat (D48) — decides the critical STEMI tier.
             m.morphology.st_median_beat = global_st(sig.signal, rpeaks, fs, list(sig.lead_names))
+            # T peak on the median beat (D49) — decides the critical hyperkalaemia tier.
+            m.morphology.t_median_beat = global_t_amplitude(sig.signal, rpeaks, fs,
+                                                            list(sig.lead_names))
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
