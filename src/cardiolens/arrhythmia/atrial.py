@@ -27,6 +27,13 @@ P_CONSISTENCY_MAX = 0.30
 P_AMPLITUDE_MAX = 0.03
 _P_WIN = (0.25, 0.06)          # amplitude window [R - 250 ms, R - 60 ms]
 
+# An AF call keeps its label but is hedged when both II and V1 repeat the pre-QRS
+# window at least this well (D51): the irregularity may be sinus rhythm with
+# ectopy. Development data (D42/D43 sets): 95% of hedged AF calls had no AF label,
+# 2.1% of true AF calls were hedged. Withholding AF instead cost 3-5% AF
+# sensitivity on held-out data (D42), so the call itself is left unchanged.
+AF_HEDGE_MIN = 0.75
+
 
 def pre_qrs_consistency(sig, rpeaks, qt_ms: float | None = None) -> tuple[float | None, dict[str, float]]:
     """Lowest over II/V1 of the median leave-one-out correlation of pre-QRS windows.

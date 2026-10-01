@@ -192,3 +192,27 @@ def test_sinus_label_requires_organised_p_waves():
 
     assert run(True) == {"sinus_rhythm"}
     assert run(False) == {"rhythm_without_p_waves"}
+
+
+def test_af_call_is_hedged_not_withdrawn_when_p_waves_recur():
+    """D51: recurring pre-QRS waves hedge the AF label; the AF call itself stays."""
+    from cardiolens.contracts.features import Intervals, Measurements
+    from cardiolens.contracts.findings import Finding, FindingSet
+    from cardiolens.pipeline import _af_atrial_evidence
+
+    irregular = [700, 1000, 650, 950, 800, 1100, 720, 900, 1050, 680, 980, 760]
+
+    def run(p_waves):
+        sig, rp = _atrial_strip(irregular, p_waves)
+        fs = FindingSet(findings=[Finding(code="atrial_fibrillation", group="rhythm",
+                                          label_ru="ФП", label_uz="FP", confidence=0.9)])
+        m = Measurements(heart_rate_bpm=70, r_peaks_samples=[int(r) for r in rp],
+                         intervals=Intervals(qt_ms=380))
+        _af_atrial_evidence(fs, sig, m, [])
+        return fs.by_code("atrial_fibrillation")
+
+    hedged, plain = run(True), run(False)
+    assert hedged is not None and "синусовый ритм с экстрасистолией" in hedged.label_ru
+    assert plain is not None and plain.label_ru == "ФП"
+    assert {e.feature for e in plain.evidence} == {"p_consistency_II", "p_consistency_V1"}
+    assert hedged.confidence == plain.confidence == 0.9

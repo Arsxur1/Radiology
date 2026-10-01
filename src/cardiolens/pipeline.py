@@ -19,6 +19,7 @@ from cardiolens.arrhythmia import (
     vt_run_finding,
 )
 from cardiolens.arrhythmia.atrial import (
+    AF_HEDGE_MIN,
     P_AMPLITUDE_MAX,
     P_CONSISTENCY_MAX,
     p_window_amplitude,
@@ -186,6 +187,7 @@ def run_pipeline(
                      f"(coupling {coupling}) — not called paced")
     _apply_rhythm_hierarchy(findings, m, audit)
     _check_sinus_p_waves(findings, sig, m, audit)
+    _af_atrial_evidence(findings, sig, m, audit)
     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
     # are unreliable, so withhold every R-peak-derived finding and report the poor
@@ -349,6 +351,28 @@ def _check_sinus_p_waves(findings, sig, m, audit: list[str]) -> None:
         confidence=0.5))
     audit.append(f"[L4] no organised P wave (II consistency {consistency}, amplitude "
                  f"{amplitude}) — sinus label withheld")
+
+
+def _af_atrial_evidence(findings, sig, m, audit: list[str]) -> None:
+    """Pre-QRS consistency as evidence on an AF call, hedged when P waves recur (D51).
+
+    The AF call itself is never withdrawn here: withholding it on this feature cost
+    3-5% AF sensitivity on held-out data (D42). A recurring pre-QRS wave in both II
+    and V1 points to sinus rhythm with ectopy, so the label says so.
+    """
+    af = findings.by_code("atrial_fibrillation")
+    if af is None:
+        return
+    value, per_lead = pre_qrs_consistency(sig, m.r_peaks_samples or [], m.intervals.qt_ms)
+    for lead, v in per_lead.items():
+        af.evidence.append(Evidence(feature=f"p_consistency_{lead}", value=str(v)))
+    if value is None or len(per_lead) < 2 or value < AF_HEDGE_MIN:
+        return
+    af.label_ru = (f"{af.label_ru}; перед QRS повторяется зубец P (II/V1 ≥ {value}) — "
+                   f"исключить синусовый ритм с экстрасистолией")
+    af.label_uz = (f"{af.label_uz}; QRS oldidan P to'lqini takrorlanadi (II/V1 ≥ {value}) — "
+                   f"ekstrasistoliyali sinus ritmini istisno qilish")
+    audit.append(f"[L4] AF call hedged: recurring pre-QRS wave {per_lead}")
 
 
 def _pvc_explains_irregularity(r_peaks, pvc_idx) -> tuple[bool, str]:
