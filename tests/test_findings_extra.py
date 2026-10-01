@@ -118,3 +118,32 @@ def test_long_qt_is_a_finding_above_the_limit_but_critical_only_from_500():
     fnd = detect_findings(_sig(), m, norms=load_norms("adult"), la_ra_reversed=False)
     assert "long_qt" not in [a.code for a in scan_critical(fnd, m).alerts]
     assert "long_qt" in [a.code for a in scan_critical(fnd, m, long_qt_critical_ms=480).alerts]
+
+
+def test_stemi_alert_tier_uses_median_beat_j_point_criterion():
+    # D48: the st_elevation finding is unchanged; the critical alert needs the UDMI
+    # J-point criterion on the median beat (or no median beat at all).
+    from cardiolens.contracts.features import Morphology
+    from cardiolens.contracts.findings import Finding
+    from cardiolens.safety.critical import stemi_j_point_criterion
+
+    flat = {ld: (20.0, 40.0) for ld in STANDARD_12_LEADS}
+    inferior = dict(flat, II=(150.0, 180.0), III=(160.0, 190.0), aVF=(140.0, 170.0))
+    v2v3 = dict(flat, V2=(180.0, 220.0), V3=(170.0, 210.0))
+    assert stemi_j_point_criterion(inferior, "male", 60) is True
+    assert stemi_j_point_criterion(flat, "male", 60) is False
+    # V2-V3: 180 uV is below the 200 uV limit for men >= 40 but above 150 uV for women.
+    assert stemi_j_point_criterion(v2v3, "male", 60) is False
+    assert stemi_j_point_criterion(v2v3, "female", 60) is True
+    assert stemi_j_point_criterion({}, "male", 60) is None
+
+    def alerts(st):
+        fnd = FindingSet(findings=[Finding(code="st_elevation", group="ischemia", label_ru="s",
+                                           label_uz="s", confidence=0.8)])
+        m = Measurements(heart_rate_bpm=70, intervals=Intervals(qrs_ms=90),
+                         morphology=Morphology(st_median_beat=st))
+        return [a.code for a in scan_critical(fnd, m, patient=Patient(sex="male", age_years=60)).alerts]
+
+    assert "st_elevation" in alerts(inferior)
+    assert "st_elevation" not in alerts(flat)
+    assert "st_elevation" in alerts({})          # no median beat -> conservative

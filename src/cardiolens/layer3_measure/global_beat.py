@@ -139,6 +139,36 @@ def global_q_waves(signal: np.ndarray, rpeaks, fs: float,
     return out
 
 
+def global_st(signal: np.ndarray, rpeaks, fs: float,
+              lead_names: list[str]) -> dict[str, tuple[float, float]]:
+    """ST level per lead on the median beat at the global J point and J+60 ms (D48).
+
+    Baseline = mean of the flattest 20 ms of that lead's PR segment ([R-300, R-30]
+    ms). Against GE 12SL J-point ST on PTB-XL this reads MAE 28-37 uV; the per-beat
+    delineator J point read 84-138 uV. Returns ``{lead: (j_uv, j60_uv)}``.
+    """
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return {}
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    off = int(global_fiducials(X, a, fs, rr_s)["qrs_off"])
+    lo, hi = max(0, a - int(0.30 * fs)), a - int(0.03 * fs)
+    w20 = max(2, int(0.02 * fs))
+    j60 = min(X.shape[1] - 1, off + int(0.06 * fs))
+    out: dict[str, tuple[float, float]] = {}
+    for i, name in enumerate(lead_names):
+        x = X[i]
+        best, base = np.inf, 0.0
+        for s0 in range(lo, max(lo + 1, hi - w20)):
+            seg = x[s0:s0 + w20]
+            e = float(np.ptp(seg))
+            if e < best:
+                best, base = e, float(np.mean(seg))
+        out[name] = (round(float(x[off] - base), 1), round(float(x[j60] - base), 1))
+    return out
+
+
 def global_intervals(signal: np.ndarray, rpeaks, fs: float) -> tuple[float | None, float | None]:
     """(PR ms, QT ms) from the global fiducials, uncorrected; None where not found."""
     X, a = median_beats(signal, rpeaks, fs)
