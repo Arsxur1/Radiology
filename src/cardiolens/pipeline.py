@@ -20,15 +20,12 @@ from cardiolens.arrhythmia import (
 )
 from cardiolens.arrhythmia.atrial import (
     AF_HEDGE_MIN,
-    FLUTTER_2TO1_THRESHOLD,
     FLUTTER_HEDGE_MIN,
     P_AMPLITUDE_MAX,
     P_CONSISTENCY_MAX,
     atrial_organisation,
-    flutter_2to1_score,
     p_window_amplitude,
     pre_qrs_consistency,
-    two_to_one_features,
 )
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
@@ -192,7 +189,6 @@ def run_pipeline(
                      f"(coupling {coupling}) — not called paced")
     _apply_rhythm_hierarchy(findings, m, audit)
     _check_sinus_p_waves(findings, sig, m, audit)
-    _flutter_2to1_hedge(findings, sig, m, audit)
     _af_atrial_evidence(findings, sig, m, audit)
     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
@@ -357,33 +353,6 @@ def _check_sinus_p_waves(findings, sig, m, audit: list[str]) -> None:
         confidence=0.5))
     audit.append(f"[L4] no organised P wave (II consistency {consistency}, amplitude "
                  f"{amplitude}) — sinus label withheld")
-
-
-def _flutter_2to1_hedge(findings, sig, m, audit: list[str]) -> None:
-    """A sinus label is hedged when lead II looks like 2:1 atrial flutter (D54).
-
-    The label stays: the model flags ~2% of true sinus rhythm/tachycardia.
-    """
-    if findings.by_code("atrial_fibrillation") is not None or findings.by_code("paced_rhythm") is not None:
-        return
-    sinus = next((findings.by_code(c) for c in _SINUS_CODES if findings.by_code(c) is not None), None)
-    if sinus is None:
-        return
-    rpeaks = m.r_peaks_samples or []
-    _, per_lead = pre_qrs_consistency(sig, rpeaks, m.intervals.qt_ms)
-    feats = two_to_one_features(sig, rpeaks)
-    values = {"pc_II": per_lead.get("II"), "rr_cv": m.rr_cv, "flat_II": feats["flat"],
-              "psign_II": feats["psign"], "h2_II": feats["h2"], "hr": m.heart_rate_bpm}
-    score = flutter_2to1_score(values)
-    if score <= FLUTTER_2TO1_THRESHOLD:
-        return
-    sinus.label_ru = (f"{sinus.label_ru}; возможно трепетание предсердий с проведением 2:1 — "
-                      f"оценить волны F (II, III, aVF, V1)")
-    sinus.label_uz = (f"{sinus.label_uz}; 2:1 o'tkazuvchanlikli bo'lmachalar titrashi bo'lishi mumkin — "
-                      f"F to'lqinlarini baholash (II, III, aVF, V1)")
-    sinus.evidence.append(Evidence(feature="flutter_2to1_score", value=str(score)))
-    audit.append(f"[L4] sinus label hedged: 2:1 flutter score {score} > {FLUTTER_2TO1_THRESHOLD} "
-                 f"({values})")
 
 
 def _af_atrial_evidence(findings, sig, m, audit: list[str]) -> None:
