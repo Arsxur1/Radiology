@@ -514,6 +514,44 @@ Full-pipeline results: PTB-XL LVH 0.35 / 0.97 → **0.48 / 0.93**; 664 LVH 0.90 
 → 0.84 / 0.87 (Cornell adds little there and the BBB gate removes a few true
 positives); PTB-XL children 0 / 5 → 1 / 5 at specificity 1.00.
 
+### QRS axis against GE 12SL and Glasgow; what PTB-XL's axis label means (open item 7, D49)
+
+PTB-XL+ (Strodthoff et al., PhysioNet) publishes the measurements of two
+commercial algorithms for every PTB-XL record — GE 12SL (`R_AxisFrontal_Global`)
+and the University of Glasgow program (`QRS_AxisFront_Global`). On the 1691 local
+records with a measurable axis:
+
+| Estimator | vs 12SL: MAE / median / within 15° | vs Glasgow |
+|---|:-:|:-:|
+| largest peak in I and aVF (before) | 13.3° / 8.4° / 72 % | 14.4° / 9.0° / 69 % |
+| net deflection (max + min in the QRS) in I and aVF | 6.9° / 4.7° / 91 % | 7.6° / 4.8° / 90 % |
+| **net deflection, all six limb leads, hexaxial least squares (now)** | **4.7° / 2.6° / 94 %** | **5.6° / 2.7° / 93 %** |
+| QRS area, I and aVF / six leads | 12.1° / 6.5° / 78 % · 12.2° / 6.4° / 77 % | 11.5° / 5.4° / 81 % |
+| 12SL vs Glasgow themselves | 4.7° | — |
+
+The six-lead net deflection agrees with either reference as well as the two
+references agree with each other; it is the conventional definition and is now
+`_qrs_axis` (the peak estimate remains the fallback when no QRS bounds exist).
+
+The label: PTB-XL's `heart_axis` has the categories MID, LAD, ALAD, RAD, ARAD,
+AXL, AXR. The 12SL axis per category (p25 / median / p75): **LAD −30 / −16 / −3**,
+**ALAD −58 / −48 / −39**, MID 20 / 41 / 61, **RAD 92 / 96 / 103**, **ARAD 112 / 130 /
+207**. So "LAD" is the mild leftward axis inside the normal −30 … 90 range —
+even the 12SL and Glasgow axes call it left axis deviation on only 76 of 305 —
+and "ALAD" is the deviation. The adapter had used LAD as the
+`left_axis_deviation` gold (hence 0.36); it now takes ALAD, and RAD ∪ ARAD for
+`right_axis_deviation`. PTB-XL, 1692 records, before → after (axis estimator and
+gold together):
+
+| Finding | before | after | n |
+|---|:-:|:-:|--:|
+| left_axis_deviation | 0.36 / 0.84 (gold LAD, 305) | **0.86 / 0.92** (gold ALAD) | 130 |
+| right_axis_deviation | 0.89 / 0.96 (gold RAD, 93) | 0.75 / 0.98 (gold RAD ∪ ARAD) | 130 |
+
+The right-axis misses are ARAD records (axis beyond 120°, many north-west) that
+the rules call `extreme_axis` instead — a different code, not a miss in substance.
+Macro sensitivity on PTB-XL 0.596 → 0.617.
+
 ### LBBB / RBBB typing — terminal forces inside the lead's own QRS (open item 4, D41)
 
 26 of the 37 LBBB records PTB-XL that were missed were called RBBB: the terminal-force
