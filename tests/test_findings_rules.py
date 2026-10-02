@@ -342,3 +342,27 @@ def test_low_voltage_needs_every_limb_or_every_precordial_lead_small():
     assert "low_qrs_voltage" in codes(450, 1500)
     assert "low_qrs_voltage" in codes(900, 700)
     assert "low_qrs_voltage" not in codes(900, 1500)
+
+
+def _t_measure(t):
+    from cardiolens.contracts.features import Morphology
+    return Measurements(heart_rate_bpm=70, rhythm_regular=True,
+                        intervals=Intervals(pr_ms=150, qrs_ms=90, qt_ms=400, qtc_bazett_ms=420),
+                        morphology=Morphology(t_median_beat=t))
+
+
+def test_t_inversion_needs_a_territory_on_the_median_beat():
+    """D63: inverted T in aVR, V1 or III alone is not T inversion; two inferior leads are."""
+    base = {"I": 200, "II": 250, "III": 50, "aVR": -220, "aVL": 80, "aVF": 150,
+            "V1": -150, "V2": 300, "V3": 350, "V4": 320, "V5": 280, "V6": 220}
+    assert "t_inversion" not in _find(_t_measure(base)).codes()
+    assert "t_inversion" not in _find(_t_measure({**base, "III": -200})).codes()
+    assert "t_inversion" in _find(_t_measure({**base, "III": -200, "aVF": -150})).codes()
+
+
+def test_flat_t_counts_only_leads_where_t_is_upright():
+    """D63: flat T in III/aVL/aVR/V1 is normal; three flat upright leads are flat T."""
+    base = {"I": 200, "II": 250, "III": 20, "aVR": -220, "aVL": 30, "aVF": 150,
+            "V1": 10, "V2": 300, "V3": 350, "V4": 320, "V5": 280, "V6": 220}
+    assert "flat_t_waves" not in _find(_t_measure(base)).codes()
+    assert "flat_t_waves" in _find(_t_measure({**base, "I": 40, "V5": 60, "V6": 50})).codes()

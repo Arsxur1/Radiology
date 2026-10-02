@@ -49,6 +49,12 @@ _WPW_RBBB_QRS_MS = 130.0
 _WPW_PR_MAX_MS = 130.0
 _DELTA_RATIO_MAX = 0.22
 
+# Median-beat T-wave criteria (D63).
+_FLAT_T_UV = 100.0
+_INVERTED_T_UV = 100.0
+_UPRIGHT_T_LEADS = ("I", "II", "V3", "V4", "V5", "V6")
+_T_TERRITORIES = (("II", "III", "aVF"), ("I", "aVL", "V5", "V6"), ("V2", "V3", "V4"))
+
 
 def _territory_of(elevated: set[str]) -> tuple[str, str, set[str]] | None:
     """Return (label_ru, label_uz, reciprocal_leads) for the best-matching territory."""
@@ -261,12 +267,13 @@ def detect_findings(
             label_uz="Baland uchli T to'lqinlar",
             evidence=_ev(leads=",".join(m.morphology.peaked_t_leads)), confidence=0.7,
         ))
-    if len(m.morphology.flat_t_leads) >= 3:
+    flat = _flat_t_leads(m)
+    if len(flat) >= 3:
         fs.findings.append(Finding(
             code="flat_t_waves", group="other",
-            label_ru="Уплощение зубцов T",
-            label_uz="T to'lqinlarining yassilanishi",
-            evidence=_ev(leads=",".join(m.morphology.flat_t_leads)), confidence=0.6,
+            label_ru=f"Уплощение зубцов T ({', '.join(flat)})",
+            label_uz=f"T to'lqinlarining yassilanishi ({', '.join(flat)})",
+            evidence=_ev(leads=",".join(flat)), confidence=0.6,
         ))
     if m.morphology.u_wave_leads:
         fs.findings.append(Finding(
@@ -673,8 +680,38 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
         ))
 
 
+def _flat_t_leads(m: Measurements) -> list[str]:
+    """Leads with a flat T where T is normally upright (I, II, V3-V6), on the median beat
+    (D63); the per-beat list (whole-lead median baseline, any lead) flagged half of all
+    ECGs and is used only when the median beat is unavailable."""
+    t = m.morphology.t_median_beat
+    if not t:
+        return list(m.morphology.flat_t_leads)
+    return [l for l in _UPRIGHT_T_LEADS if l in t and abs(t[l]) < _FLAT_T_UV]
+
+
+def _inverted_t_leads(m: Measurements) -> list[str]:
+    """Leads with T inversion forming a territory (D63): >= 2 inverted leads within the
+    inferior, lateral or anterior group; aVR and V1 never count, III only with II or aVF."""
+    t = m.morphology.t_median_beat
+    if not t:
+        return [l for l in m.morphology.inverted_t_leads if l != "aVR"]
+    inv = {l for l, v in t.items() if v < -_INVERTED_T_UV}
+    out: list[str] = []
+    for group in _T_TERRITORIES:
+        hit = [l for l in group if l in inv]
+        if "III" in hit and not ({"II", "aVF"} & set(hit)):
+            hit.remove("III")
+        if len(hit) >= 2:
+            out += hit
+    return out
+
+
 def _t_inversion_findings(m: Measurements, is_pediatric: bool, fs: FindingSet) -> None:
-    inv = [l for l in m.morphology.inverted_t_leads if l != "aVR"]
+    inv = _inverted_t_leads(m)
+    if is_pediatric and m.morphology.t_median_beat:
+        # Juvenile pattern: inverted T in V1-V4 is normal in children (V1 included here).
+        inv += [l for l in ("V1",) if m.morphology.t_median_beat.get(l, 0.0) < -_INVERTED_T_UV]
     if not inv:
         return
     # Pediatric caveat (TZ §7.2): juvenile T-inversion in V1-V4 is NORMAL.
