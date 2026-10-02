@@ -36,7 +36,7 @@ RARE_FULL = {"3AVB", "2AVB", "AFLT", "WPW", "LNGQT", "STE_", "LVOLT"}
 BALANCE_CLASSES = {
     "SR", "AFIB", "STACH", "SBRAD", "SARRH", "1AVB", "LPR", "CRBBB", "CLBBB", "IRBBB",
     "ILBBB", "LAFB", "LPFB", "LVH", "VCLVH", "STD_", "IMI", "ASMI", "AMI", "ALMI", "ILMI",
-    "LAO/LAE", "RAO/RAE", "PVC", "PAC", "NDT", "NST_", "ISC_", "AXIS_LAD", "AXIS_RAD",
+    "LAO/LAE", "RAO/RAE", "PVC", "PAC", "NDT", "NST_", "ISC_", "AXIS_ALAD", "AXIS_RAD", "AXIS_ARAD",
 }
 
 
@@ -44,11 +44,12 @@ def record_labels(row: dict) -> set[str]:
     """SCP codes with likelihood >= LIKELIHOOD_MIN (or ungraded) + axis pseudo-labels."""
     codes = ast.literal_eval(row["scp_codes"])
     labels = {k for k, v in codes.items() if float(v) >= LIKELIHOOD_MIN or float(v) == 0}
-    axis = (row.get("heart_axis") or "").strip()
-    if axis == "LAD":
-        labels.add("AXIS_LAD")
-    elif axis == "RAD":
-        labels.add("AXIS_RAD")
+    axis = row.get("heart_axis")
+    axis = axis.strip() if isinstance(axis, str) else ""
+    # ALAD / RAD / ARAD are axis deviations by the +-30/90 criteria; PTB-XL's
+    # "LAD" is the mild leftward axis (-30..0) and is not labelled (D49).
+    if axis in ("ALAD", "RAD", "ARAD"):
+        labels.add(f"AXIS_{axis}")
     return labels
 
 

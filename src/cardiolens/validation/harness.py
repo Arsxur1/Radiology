@@ -17,6 +17,7 @@ this harness is the scaffolding for it.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -198,8 +199,21 @@ PTBXL_SCP_MAP = {
     "INJAS": "st_depression", "INJAL": "st_depression", "INJIN": "st_depression",
     "INJLA": "st_depression", "INJIL": "st_depression",
     "LAO/LAE": "left_atrial_enlargement", "RAO/RAE": "right_atrial_enlargement",
-    "AXIS_LAD": "left_axis_deviation", "AXIS_RAD": "right_axis_deviation",
+    # PTB-XL heart_axis categories (D49): LAD is the *mild* leftward axis (12SL
+    # axis median -16, -30..0), ALAD the abnormal one (median -48) — only ALAD is
+    # left axis deviation by the -30 criterion; RAD (median 96) and ARAD (> 120,
+    # north-west) are both right axis deviation.
+    "AXIS_ALAD": "left_axis_deviation", "AXIS_RAD": "right_axis_deviation",
+    "AXIS_ARAD": "right_axis_deviation",
 }
+
+_AXIS_CODES = {"ALAD": "AXIS_ALAD", "RAD": "AXIS_RAD", "ARAD": "AXIS_ARAD"}
+
+
+def ptbxl_axis_labels(heart_axis: str | None) -> set[str]:
+    """Pseudo-label(s) for a PTB-XL ``heart_axis`` category (see PTBXL_SCP_MAP)."""
+    code = _AXIS_CODES.get((heart_axis or "").strip())
+    return {code} if code else set()
 
 
 def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:  # pragma: no cover
@@ -222,7 +236,9 @@ def build_ptbxl_dataset(root: str | Path, limit: int = 50) -> list[LabeledCase]:
             path = root / rec["filename_hr"]
             if not path.with_suffix(".hea").exists() or not path.with_suffix(".dat").exists():
                 continue
-            gold = {PTBXL_SCP_MAP[k] for k in rec.get("labels", []) if k in PTBXL_SCP_MAP}
+            labels = {k for k in rec.get("labels", []) if not k.startswith("AXIS_")}
+            labels |= ptbxl_axis_labels(rec.get("heart_axis"))
+            gold = {PTBXL_SCP_MAP[k] for k in labels if k in PTBXL_SCP_MAP}
             try:
                 sig = load_wfdb(path)
             except Exception:  # noqa: S112 - skip unreadable records
@@ -388,7 +404,7 @@ def parse_patient_from_header(header_text: str) -> tuple[float | None, str | Non
     age: float | None = None
     sex: str | None = None
     for line in header_text.splitlines():
-        s = line.strip().lower()
+        s = re.sub(r"^#\s+", "#", line.strip().lower())   # "# Age:" in Challenge-2020 headers
         if s.startswith("#age:"):
             try:
                 age = float(s.split(":", 1)[1].strip())
@@ -410,7 +426,7 @@ def parse_dx_from_header(header_text: str) -> list[str]:
     ecg-arrhythmia stores labels as a header comment, e.g. ``#Dx: 426783006,39732003``.
     """
     for line in header_text.splitlines():
-        s = line.strip()
+        s = re.sub(r"^#\s+", "#", line.strip())   # Challenge-2020 headers write "# Dx:"
         if s.lower().startswith("#dx:"):
             payload = s.split(":", 1)[1]
             return [c.strip() for c in payload.replace(";", ",").split(",") if c.strip()]

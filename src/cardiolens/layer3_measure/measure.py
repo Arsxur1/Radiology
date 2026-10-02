@@ -312,7 +312,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
         )
 
     # --- Frontal QRS axis ---
-    m.axes = Axes(qrs_deg=_qrs_axis(sig, rpeaks, fs))
+    m.axes = Axes(qrs_deg=_qrs_axis(sig, rpeaks, fs, qrs_on, qrs_off))
 
     # --- Sokolow-Lyon voltage (LVH) + the other hypertrophy voltages ---
     m.sokolow_lyon_uv = _sokolow_lyon(sig, rpeaks, fs)
@@ -350,10 +350,58 @@ def _qrs_amplitude(row: np.ndarray, rpeaks: np.ndarray, fs: float) -> float:
     return float(np.median(vals))
 
 
-def _qrs_axis(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
-    if not {"I", "aVF"}.issubset(set(sig.lead_names)) or len(rpeaks) == 0:
+_LIMB_ANGLES_DEG = {"I": 0.0, "II": 60.0, "III": 120.0, "aVR": -150.0, "aVL": -30.0, "aVF": 90.0}
+
+
+def _qrs_net_deflection(sig: SignalRepresentation, lead: str, rpeaks: np.ndarray,
+                        qrs_on: np.ndarray, qrs_off: np.ndarray, fs: float) -> float | None:
+    """Median over beats of (max + min) of the QRS relative to the PR baseline (µV)."""
+    row = sig.lead(lead)
+    mk = _lead_mask(sig, lead, rpeaks, fs)
+    b_lo, b_hi = int(0.05 * fs), int(0.01 * fs)
+    vals = []
+    for i in np.flatnonzero(mk):
+        a, b = qrs_on[i], qrs_off[i]
+        if not (np.isfinite(a) and np.isfinite(b)) or b <= a:
+            continue
+        a, b = int(a), int(b)
+        base = float(np.median(row[max(0, a - b_lo):max(1, a - b_hi)]))
+        seg = row[a:b] - base
+        if seg.size:
+            vals.append(float(seg.max() + seg.min()))
+    return float(np.median(vals)) if vals else None
+
+
+def _qrs_axis(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float,
+              qrs_on: np.ndarray | None = None, qrs_off: np.ndarray | None = None) -> float | None:
+    """Frontal QRS axis (degrees).
+
+    Net QRS deflection (R + S, i.e. max + min inside the QRS relative to the PR
+    baseline) of all six limb leads, combined as a least-squares vector on the
+    hexaxial frame — the conventional definition. Against the GE 12SL and
+    Glasgow axes on PTB-XL (1691 records) this reads within 15° on 94 % of
+    records (MAE 4.7°, the two commercial algorithms differ by 4.7° between
+    themselves); the earlier largest-peak-in-I/aVF estimate managed 72 %
+    (MAE 13°) (D49). Falls back to I/aVF peaks when no QRS bounds exist.
+    """
+    names = set(sig.lead_names)
+    if len(rpeaks) == 0:
         return None
-    if _lead_off(sig, "I") or _lead_off(sig, "aVF"):
+    if qrs_on is not None and qrs_off is not None and np.isfinite(qrs_on).any():
+        x = y = 0.0
+        n = 0
+        for lead, deg in _LIMB_ANGLES_DEG.items():
+            if lead not in names or _lead_off(sig, lead):
+                continue
+            net = _qrs_net_deflection(sig, lead, rpeaks, qrs_on, qrs_off, fs)
+            if net is None:
+                continue
+            x += net * np.cos(np.radians(deg))
+            y += net * np.sin(np.radians(deg))
+            n += 1
+        if n >= 2 and (abs(x) > 1e-6 or abs(y) > 1e-6):
+            return round(float(np.degrees(np.arctan2(y, x))), 1)
+    if not {"I", "aVF"}.issubset(names) or _lead_off(sig, "I") or _lead_off(sig, "aVF"):
         return None
     rp_i, rp_f = rpeaks[_lead_mask(sig, "I", rpeaks, fs)], rpeaks[_lead_mask(sig, "aVF", rpeaks, fs)]
     if len(rp_i) == 0 or len(rp_f) == 0:
