@@ -45,6 +45,9 @@ _TERRITORIES = [
 
 # Wide QRS with a terminal R in V1 at or above this width is read as RBBB, not WPW (D58).
 _WPW_RBBB_QRS_MS = 130.0
+# Delta-wave rule (D59): global PR below this and initial/peak QRS energy below that.
+_WPW_PR_MAX_MS = 130.0
+_DELTA_RATIO_MAX = 0.22
 
 
 def _territory_of(elevated: set[str]) -> tuple[str, str, set[str]] | None:
@@ -512,6 +515,22 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, is_pediatric: b
     pr_lo = norms.get("intervals_ms", {}).get("pr", [None, None])[0]
     if iv.qrs_ms is None or not qrs_hi:
         return
+    # Pre-excitation (WPW) from its two signs on the median beat (D59): a short global
+    # PR and a slow, slurred QRS upstroke (delta wave). No QRS-width requirement — the
+    # delta wave often leaves the QRS under 110 ms. Development data (PTB-XL folds 1-9):
+    # 31/71 WPW at 4 false calls; the PR-only rule below found 16 at 12.
+    ratio = m.qrs_initial_energy_ratio
+    if (ratio is not None and iv.pr_ms is not None and iv.pr_ms < _WPW_PR_MAX_MS
+            and ratio < _DELTA_RATIO_MAX):
+        fs.findings.append(Finding(
+            code="wpw_preexcitation", group="interval",
+            label_ru=f"Преэкзитация (WPW): короткий PR {iv.pr_ms} мс + дельта-волна "
+                     f"(медленное начало QRS), QRS {iv.qrs_ms} мс",
+            label_uz=f"Preeksitatsiya (WPW): qisqa PR {iv.pr_ms} ms + delta to'lqin, QRS {iv.qrs_ms} ms",
+            evidence=_ev(pr_ms=iv.pr_ms, qrs_ms=iv.qrs_ms, qrs_initial_energy_ratio=ratio),
+            confidence=0.7,
+        ))
+        return
     block_min = norms.get("intervals_ms", {}).get("qrs_complete_block") or qrs_hi
     # Incomplete RBBB (D27): RBBB morphology (terminal R' in V1) with a partly
     # widened QRS. Adults only — an rSR' in V1 is a common normal variant in
@@ -536,7 +555,8 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, is_pediatric: b
     # QRS >= 130 ms is RBBB morphology: the global PR (D30) is short on some RBBB
     # records and WPW would hide the block, so the bundle-branch rule decides (D58).
     rbbb_morphology = m.qrs_v1_terminal_positive is True and iv.qrs_ms >= _WPW_RBBB_QRS_MS
-    if pr_lo and iv.pr_ms is not None and iv.pr_ms < pr_lo and not rbbb_morphology:
+    if (ratio is None and pr_lo and iv.pr_ms is not None and iv.pr_ms < pr_lo
+            and not rbbb_morphology):
         fs.findings.append(Finding(
             code="wpw_preexcitation", group="interval",
             label_ru=f"Преэкзитация (WPW): короткий PR {iv.pr_ms} мс + широкий QRS {iv.qrs_ms} мс",
