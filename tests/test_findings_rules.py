@@ -366,3 +366,17 @@ def test_flat_t_counts_only_leads_where_t_is_upright():
             "V1": 10, "V2": 300, "V3": 350, "V4": 320, "V5": 280, "V6": 220}
     assert "flat_t_waves" not in _find(_t_measure(base)).codes()
     assert "flat_t_waves" in _find(_t_measure({**base, "I": 40, "V5": 60, "V6": 50})).codes()
+
+
+def test_st_findings_read_the_median_beat_when_available():
+    """D64: per-lead J+60 from the median beat overrides the per-beat ST values."""
+    from cardiolens.contracts.features import Morphology, STMeasurement
+    per_beat = [STMeasurement(lead=l, j_point_uv=0, j60_uv=150) for l in ("II", "III", "aVF")]
+    m = Measurements(heart_rate_bpm=70, rhythm_regular=True,
+                     intervals=Intervals(pr_ms=150, qrs_ms=90, qt_ms=400, qtc_bazett_ms=420),
+                     morphology=Morphology(st=per_beat))
+    assert "st_elevation" in _find(m).codes()
+    flat = {l: (0.0, 20.0) for l in ("I", "II", "III", "aVR", "aVL", "aVF",
+                                     "V1", "V2", "V3", "V4", "V5", "V6")}
+    m.morphology.st_median_beat = flat
+    assert "st_elevation" not in _find(m).codes()

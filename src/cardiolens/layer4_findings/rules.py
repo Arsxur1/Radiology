@@ -642,15 +642,22 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
     # elevation threshold — early-repolarisation routinely lifts them 0.1-0.2 mV
     # in healthy hearts, so ACC/ESC require 0.2 mV there.
     elev_v2v3 = thr.get("elevation_significant_v2v3", elev)
+    # J+60 per lead from the 12-lead median beat when available (D64): it agrees with
+    # GE 12SL far better than the per-beat delineator value (elevation sens 0.77 -> 0.91,
+    # depression 0.76 -> 0.87 against the same rule on 12SL ST, PTB-XL dev).
+    if m.morphology.st_median_beat:
+        st_j60 = [(lead, v[1]) for lead, v in m.morphology.st_median_beat.items()]
+    else:
+        st_j60 = [(st.lead, st.j60_uv) for st in m.morphology.st]
     elevated, depressed = [], []
-    for st in m.morphology.st:
-        if st.j60_uv is None:
+    for lead, j60 in st_j60:
+        if j60 is None:
             continue
-        lead_thr = elev_v2v3 if st.lead in ("V2", "V3") else elev
-        if st.j60_uv >= lead_thr:
-            elevated.append(st.lead)
-        elif st.j60_uv <= -depr:
-            depressed.append(st.lead)
+        lead_thr = elev_v2v3 if lead in ("V2", "V3") else elev
+        if j60 >= lead_thr:
+            elevated.append(lead)
+        elif j60 <= -depr:
+            depressed.append(lead)
     # STEMI requires CONTIGUOUS elevation — >=2 leads within one coronary
     # territory. Scattered single-lead elevation is early-repol / noise, not
     # infarction; the old "any >=2 leads" gate was the main false-positive source
