@@ -514,6 +514,23 @@ Full-pipeline results: PTB-XL LVH 0.35 / 0.97 → **0.48 / 0.93**; 664 LVH 0.90 
 → 0.84 / 0.87 (Cornell adds little there and the BBB gate removes a few true
 positives); PTB-XL children 0 / 5 → 1 / 5 at specificity 1.00.
 
+### Infants and toddlers — what the reachable data holds (open item 5)
+
+Searched for 12-lead records aged under 4 in every PhysioNet set reachable from
+this environment: ecg-arrhythmia (45 152 headers: none aged 1–3, "age 0" is
+unknown, D44), PTB-XL (21 799: none under 2, three aged 2–3, all NORM/SR),
+CPSC-2018 (6 868 with an age: none under 1, three aged 1–3). The six toddler
+records were run through the pipeline with the 1–3-year band (PR 80–150, QRS
+45–85, QT 270–420): HR 98–174, PR 96–127 ms, QRS 70–80 ms, QTc(F) 327–370 ms,
+axis 53–78°, juvenile T pattern flagged as expected; the one 1-year-old labelled
+RBBB (CPSC A4546) has PR 229 ms (1° AV block, not in the label), QRS 94 ms and a
+left axis — a 94-ms QRS is wide at that age but sits under the flat 110-ms block
+threshold, so the RBBB is missed. One record is not evidence for a band-relative
+block threshold; it is noted as the first thing to test when an infant set
+appears. Conclusion unchanged: the <1 y and 1–3 y bands cannot be measured or
+calibrated from reachable data; their norm-table entries remain literature
+values (Davignon / Rijnbeek) and are marked so in `pediatric.yaml`.
+
 ### QRS axis against GE 12SL and Glasgow; what PTB-XL's axis label means (open item 7, D49)
 
 PTB-XL+ (Strodthoff et al., PhysioNet) publishes the measurements of two
@@ -959,6 +976,34 @@ beyond it (the segment-angle fit is no longer reliable and the self-check reject
 mis-accepts the warp) — a stated limit, not tuned around. A JPEG-specific bug was
 found on the way: Hough skew estimation chained 8×8 block edges into "lines" and
 read a 3° rotation as 0.3° (maxLineGap 20 → 5).
+
+**Strong perspective — the page quadrilateral (D48).** When the whole page is in
+the frame, the grid-textured region (residual after a local mean, so a vignette
+or shadow does not count as paper) is a quadrilateral whose hull gives the four
+corners; each side is snapped to the outermost grid line (Hough in a band, the
+nearest long parallel line) and the quadrilateral is mapped to a rectangle. The
+step is taken only when the projective part of that homography changes the scale
+across the page by ≥ 1 % (a rotation or a scan is affine and stays with the skew
+step, exact for a rotation); the vanishing-point step then removes the few-pixel
+corner residual, accepted only if the grid stays square and the angle spread
+drops further. Synthetic pages, auto-calibrated, three seeds, mean r / min r:
+
+| Degradation | seed 1 | seed 2 | seed 3 | before D48 |
+|---|:-:|:-:|:-:|:-:|
+| perspective 2 % | 0.93 / 0.89 | 0.94 / 0.90 | 0.85 / 0.69 | 0.76 |
+| perspective 3.5 % | 0.39 / 0.02 | 0.85 / 0.64 | 0.89 / 0.76 | 0.2–0.3 |
+| perspective 5 % | 0.91 / 0.81 | 0.91 / 0.84 | 0.84 / 0.65 | ~0.2 |
+| perspective 8 % | 0.88 / 0.75 | 0.93 / 0.85 | 0.85 / 0.68 | — |
+| photo 2 % (vignette, texture, JPEG 45, 1.5°) | 0.94 / 0.88 | 0.93 / 0.88 | 0.90 / 0.79 | 0.76–0.94 |
+| photo 3.5 % (vignette 0.6, texture 0.5, −2.5°, salt) | 0.58 / 0.22 | 0.06 / −0.17 | 0.21 / −0.10 | 0.27 |
+| rotation 3° / scan combo | 0.93 / 0.88 | 0.92 / 0.82 | 0.92 / 0.82 | unchanged |
+
+Pure perspective up to 8 % is now digitised in 10 of 12 cases (one 3.5 % seed
+fails on a mis-snapped side). Photos with a vignette and paper grain at ≥ 3.5 %
+still fail: on a grainy page the line snap is unreliable and the residual is
+beyond the vanishing-point step. Real photographs remain the open item — the
+ECG-Image-Database and the 2024 challenge images are not reachable (404) from
+this environment.
 
 **Pages rendered from real PTB-XL signals (100 random records of the 1692, 6 px/mm,
 calibration pulse, auto-calibrated).** The digital record goes through the pipeline,
