@@ -496,16 +496,39 @@ def _axis_findings(m: Measurements, norms, fs: FindingSet) -> None:
 
 
 def _low_voltage_findings(m: Measurements, norms, fs: FindingSet) -> None:
-    """Low QRS voltage in the limb leads (TZ §7.5)."""
-    thr = norms.get("voltage_uv", {}).get("low_voltage_limb")
-    amp = m.qrs_amplitude_limb_uv
-    if thr and amp is not None and amp < thr:
-        fs.findings.append(Finding(
-            code="low_qrs_voltage", group="other",
-            label_ru=f"Низкий вольтаж QRS (амплитуда {amp} мкВ)",
-            label_uz=f"Past QRS voltaji (amplituda {amp} µV)",
-            evidence=_ev(qrs_amplitude_limb_uv=amp, threshold=thr), confidence=0.7,
-        ))
+    """Low QRS voltage (TZ §7.5): every limb lead under the limb limit or every
+    precordial lead under the precordial limit, on the median beat (D61). The former
+    median-of-I/II/III measure flagged 8% of ECGs (fold-10 PPV 0.07; D61, D62); it is used only
+    when the median-beat amplitudes are unavailable."""
+    v = norms.get("voltage_uv", {})
+    thr, thr_prec = v.get("low_voltage_limb"), v.get("low_voltage_precordial")
+    limb, prec = m.qrs_amplitude_limb_max_uv, m.qrs_amplitude_precordial_max_uv
+    if limb is None and prec is None:
+        amp = m.qrs_amplitude_limb_uv
+        if thr and amp is not None and amp < thr:
+            fs.findings.append(Finding(
+                code="low_qrs_voltage", group="other",
+                label_ru=f"Низкий вольтаж QRS (амплитуда {amp} мкВ)",
+                label_uz=f"Past QRS voltaji (amplituda {amp} µV)",
+                evidence=_ev(qrs_amplitude_limb_uv=amp, threshold=thr), confidence=0.6,
+            ))
+        return
+    low_limb = bool(thr and limb is not None and limb < thr)
+    low_prec = bool(thr_prec and prec is not None and prec < thr_prec)
+    if not (low_limb or low_prec):
+        return
+    where_ru = " и ".join(x for x, ok in (("в отведениях от конечностей", low_limb),
+                                          ("в грудных отведениях", low_prec)) if ok)
+    where_uz = " va ".join(x for x, ok in (("oyoq-qo'l tarmoqlarida", low_limb),
+                                          ("ko'krak tarmoqlarida", low_prec)) if ok)
+    fs.findings.append(Finding(
+        code="low_qrs_voltage", group="other",
+        label_ru=f"Низкий вольтаж QRS {where_ru} (наибольший QRS: конечности {limb} мкВ, "
+                 f"грудные {prec} мкВ)",
+        label_uz=f"Past QRS voltaji {where_uz} (eng katta QRS: {limb} / {prec} µV)",
+        evidence=_ev(qrs_limb_max_uv=limb, qrs_precordial_max_uv=prec,
+                     limb_threshold=thr, precordial_threshold=thr_prec), confidence=0.7,
+    ))
 
 
 def _conduction_findings(m: Measurements, norms, fs: FindingSet, is_pediatric: bool = False) -> None:
