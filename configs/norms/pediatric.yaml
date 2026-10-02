@@ -101,3 +101,11 @@ st_uv:
 # T-wave inversion in V1-V4 is NORMAL in children ("juvenile T-wave pattern").
 normal_variants:
   juvenile_t_inversion_leads: ["V1", "V2", "V3", "V4"]
+
+# Pre-excitation by delta wave (D51): median over leads of the time from QRS
+# onset to half the maximal QRS slope; PTB-XL WPW 54 ms (p10-p90 26-88) vs 24 ms
+# (18-35) otherwise. Rule: delta_ms >= delta_ms and PR <= pr_max and QRS >= qrs_min.
+wpw:
+  delta_ms: 45
+  pr_max: 140
+  qrs_min: 90

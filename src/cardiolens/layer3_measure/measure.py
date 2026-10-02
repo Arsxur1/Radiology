@@ -332,6 +332,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
     # --- Morphology (peaked/flat/inverted T) ---
     m.morphology.st = m.morphology.st  # populated by _measure_st
     _measure_t_morphology(sig, rpeaks, fs, m)
+    _measure_delta(sig, rpeaks, qrs_on, qrs_off, fs, m)
 
     return m
 
@@ -534,6 +535,44 @@ def _measure_st(
             )
         )
     m.morphology.st = st_list
+
+
+DELTA_SLOPE_FRACTION = 0.5
+
+
+def _measure_delta(sig: SignalRepresentation, rpeaks: np.ndarray, qrs_on: np.ndarray,
+                   qrs_off: np.ndarray, fs: float, m: Measurements) -> None:
+    """Delta-wave descriptor (D51): per lead, ms from the QRS onset until the
+    smoothed |slope| first reaches DELTA_SLOPE_FRACTION of the beat's maximal QRS
+    slope, median over beats; ``delta_ms`` = median over leads. On PTB-XL the
+    median over leads is 54 ms (p10-p90 26-88) on WPW records and 24 ms (18-35)
+    otherwise. Needs QRS bounds; leads without signal are skipped."""
+    if len(rpeaks) < 3 or qrs_on is None or not np.isfinite(qrs_on).any():
+        return
+    k = max(1, int(0.004 * fs))
+    out: dict[str, float] = {}
+    for li, lead in enumerate(sig.lead_names):
+        if _lead_off(sig, lead):
+            continue
+        row = sig.signal[li]
+        slope = np.abs(np.convolve(np.diff(row, prepend=row[0]), np.ones(k) / k, mode="same"))
+        mk = _lead_mask(sig, lead, rpeaks, fs)
+        vals = []
+        for i in np.flatnonzero(mk):
+            a, b = qrs_on[i], qrs_off[i]
+            if not (np.isfinite(a) and np.isfinite(b)) or b <= a + 5:
+                continue
+            a, b = int(a), int(b)
+            s = slope[a:b]
+            mx = float(s.max())
+            if mx <= 0:
+                continue
+            idx = np.flatnonzero(s >= DELTA_SLOPE_FRACTION * mx)
+            vals.append((int(idx[0]) if idx.size else b - a) / fs * 1000.0)
+        if vals:
+            out[lead] = round(float(np.median(vals)), 1)
+    m.morphology.delta_ms_by_lead = out
+    m.morphology.delta_ms = round(float(np.median(list(out.values()))), 1) if out else None
 
 
 def _measure_t_morphology(

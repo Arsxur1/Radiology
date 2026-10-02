@@ -417,17 +417,34 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, patient=None) -
     ivn = _interval_norms(norms, patient)
     qrs_hi = ivn.get("qrs_bbb") or ivn.get("qrs", [None, None])[1]
     pr_lo = ivn.get("pr", [None, None])[0]
-    if iv.qrs_ms is None or not qrs_hi or iv.qrs_ms <= qrs_hi:
+    if iv.qrs_ms is None:
         return
-    # Short PR + wide QRS -> pre-excitation (WPW): the wide QRS is explained by a
-    # delta wave, not by a bundle branch block (TZ §8.1).
-    if pr_lo and iv.pr_ms is not None and iv.pr_ms < pr_lo:
+    wide = bool(qrs_hi) and iv.qrs_ms > qrs_hi
+    # Pre-excitation (WPW), two routes (TZ §8.1): the classic short PR + wide QRS,
+    # or a delta wave — a slurred initial QRS (slow slope for >= wpw.delta_ms in
+    # the median lead) with a PR not above wpw.pr_max and a QRS not narrower than
+    # wpw.qrs_min (D51: PTB-XL WPW 0.35 -> 0.51 at spec 0.981; half of the WPW
+    # records have PR 120-140 and QRS 100-115, outside the classic conjunction).
+    # An RSR' pattern in V1 with a wide QRS is RBBB, not a delta wave.
+    wpw = norms.get("wpw", {})
+    delta = m.morphology.delta_ms
+    classic = wide and bool(pr_lo) and iv.pr_ms is not None and iv.pr_ms < pr_lo
+    by_delta = (delta is not None and wpw.get("delta_ms") is not None and delta >= wpw["delta_ms"]
+                and iv.pr_ms is not None and iv.pr_ms <= wpw.get("pr_max", 140)
+                and iv.qrs_ms >= wpw.get("qrs_min", 90)
+                and not (wide and m.qrs_v1_terminal_positive is True))
+    if classic or by_delta:
+        how = "короткий PR" if classic else f"дельта-волна {delta} мс"
+        how_uz = "qisqa PR" if classic else f"delta to'lqin {delta} ms"
         fs.findings.append(Finding(
             code="wpw_preexcitation", group="interval",
-            label_ru=f"Преэкзитация (WPW): короткий PR {iv.pr_ms} мс + широкий QRS {iv.qrs_ms} мс",
-            label_uz=f"Preeksitatsiya (WPW): qisqa PR {iv.pr_ms} ms + keng QRS {iv.qrs_ms} ms",
-            evidence=_ev(pr_ms=iv.pr_ms, qrs_ms=iv.qrs_ms), confidence=0.7,
+            label_ru=f"Преэкзитация (WPW): {how}, PR {iv.pr_ms} мс, QRS {iv.qrs_ms} мс",
+            label_uz=f"Preeksitatsiya (WPW): {how_uz}, PR {iv.pr_ms} ms, QRS {iv.qrs_ms} ms",
+            evidence=_ev(pr_ms=iv.pr_ms, qrs_ms=iv.qrs_ms, delta_ms=delta, route="classic" if classic else "delta"),
+            confidence=0.7 if classic else 0.6,
         ))
+        return
+    if not wide:
         return
     # BBB typing from the terminal QRS forces in V1 (R' -> RBBB, QS/rS -> LBBB).
     # V6 is only a fallback when V1 is missing: on real LBBB the discordant ST

@@ -68,6 +68,11 @@ class Morphology(BaseModel):
     inverted_t_leads: list[str] = Field(default_factory=list)
     u_wave_leads: list[str] = Field(default_factory=list)
     pathological_q_leads: list[str] = Field(default_factory=list)
+    # Delta-wave descriptor (D51): per lead, the time from QRS onset until the
+    # slope first reaches half of that lead's maximal QRS slope (ms); a slurred
+    # pre-excited upstroke is slow for 40-100 ms, a normal QRS for 15-35 ms.
+    delta_ms_by_lead: dict[str, float] = Field(default_factory=dict)
+    delta_ms: float | None = None         # median over the measurable leads
 
 
 class Measurements(BaseModel):
