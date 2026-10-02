@@ -803,38 +803,243 @@ def _line_angle_spread(gray: np.ndarray) -> float:
     return float(np.mean(parts)) if parts else float("inf")
 
 
+QUAD_MIN_AREA = 0.3            # the page quadrilateral must cover this fraction of the image
+QUAD_MIN_PERSPECTIVE = 0.01    # projective scale change across the page below this: not a perspective (a rotation is affine)
+QUAD_TEXTURE_MIN = 6.0         # grey-level residual after a local mean that counts as grid texture
+
+
+def page_quadrilateral(gray: np.ndarray) -> np.ndarray | None:
+    """The four corners (tl, tr, br, bl) of the printed grid area, or None.
+
+    A photographed page is a quadrilateral against its background; the grid
+    texture (light lines every mm) fills it and nothing else. The convex hull of
+    the grid-textured region, reduced to four points, gives the corners directly —
+    unlike the vanishing-point fit this needs no near-parallel line families and
+    survives strong perspective, as long as the whole page is in the frame.
+    """
+    import cv2
+
+    h, w = gray.shape
+    # Fine structure (grid lines, trace) against a smooth background: the grid
+    # is a periodic pattern a few pixels wide, so the residual after a local mean
+    # marks it; a vignette, a shadow or the table behind the page are smooth and
+    # do not. A plain intensity window would take a darkened corner for paper.
+    g = gray.astype(np.float32)
+    k_hp = 2 * int(min(h, w) / 120) + 1
+    resid = np.abs(g - cv2.blur(g, (k_hp, k_hp)))
+    ink = (resid > QUAD_TEXTURE_MIN).astype(np.uint8)
+    k = max(9, int(min(h, w) / 60))
+    filled = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((k, k), np.uint8))
+    filled = cv2.morphologyEx(filled, cv2.MORPH_OPEN, np.ones((k, k), np.uint8))
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(filled, connectivity=8)
+    if n < 2:
+        return None
+    big = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    if stats[big, cv2.CC_STAT_AREA] < QUAD_MIN_AREA * h * w:
+        return None
+    pts = cv2.findNonZero((labels == big).astype(np.uint8))
+    hull = cv2.convexHull(pts)
+    peri = cv2.arcLength(hull, True)
+    quad = None
+    for eps in (0.01, 0.02, 0.04, 0.06, 0.08):
+        approx = cv2.approxPolyDP(hull, eps * peri, True)
+        if len(approx) == 4:
+            quad = approx.reshape(4, 2).astype(np.float64)
+            break
+    if quad is None:
+        return None
+    # The polygon's corners are hull vertices moved by the morphology (up to k/2
+    # px): refine each side by a least-squares line through the hull points near
+    # it and take the corners as the intersections of adjacent sides.
+    hp = hull.reshape(-1, 2).astype(np.float64)
+    lines = []
+    for i in range(4):
+        a, b = quad[i], quad[(i + 1) % 4]
+        d = b - a
+        nrm = np.array([-d[1], d[0]]) / (np.linalg.norm(d) + 1e-9)
+        dist = np.abs((hp - a) @ nrm)
+        near = hp[dist < max(3.0, 0.75 * k)]
+        if len(near) < 2:
+            near = np.array([a, b])
+        vx, vy, x0, y0 = cv2.fitLine(near.astype(np.float32), cv2.DIST_L2, 0, 0.01, 0.01).ravel()
+        lines.append((float(x0), float(y0), float(vx), float(vy)))
+    refined = []
+    for i in range(4):
+        x1, y1, u1, v1 = lines[i - 1]
+        x2, y2, u2, v2 = lines[i]
+        det = u1 * v2 - v1 * u2
+        if abs(det) < 1e-9:
+            refined.append(quad[i])
+            continue
+        s_ = ((x2 - x1) * v2 - (y2 - y1) * u2) / det
+        refined.append(np.array([x1 + s_ * u1, y1 + s_ * v1]))
+    quad = np.array(refined)
+    # Order: top-left, top-right, bottom-right, bottom-left.
+    s = quad.sum(axis=1)
+    d = quad[:, 0] - quad[:, 1]
+    tl, br = quad[np.argmin(s)], quad[np.argmax(s)]
+    tr, bl = quad[np.argmax(d)], quad[np.argmin(d)]
+    out = np.array([tl, tr, br, bl])
+    if len({tuple(p) for p in out}) < 4:
+        return None
+    # Page-like: every corner angle between 50 and 130 degrees.
+    for i in range(4):
+        a, b, c = out[i - 1], out[i], out[(i + 1) % 4]
+        v1, v2 = a - b, c - b
+        cosang = float(v1 @ v2 / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-9))
+        if not -0.64 < cosang < 0.64:
+            return None
+    return out
+
+
+def _snap_quad_to_grid_lines(gray: np.ndarray, quad: np.ndarray) -> np.ndarray:
+    """Refine a coarse page quadrilateral (hull corners are off by up to ~7 px,
+    which leaves a residual perspective the downstream steps cannot absorb) by
+    snapping each side to the outermost grid line: a Hough line search in a band
+    around the side, keeping the longest line nearly parallel to it, then
+    intersecting adjacent sides. Sides without such a line keep their estimate."""
+    import cv2
+
+    h, w = gray.shape
+    band = max(8, int(min(h, w) / 80))
+    lines = []
+    for i in range(4):
+        a, b = quad[i], quad[(i + 1) % 4]
+        d = b - a
+        length = float(np.linalg.norm(d)) + 1e-9
+        u = d / length
+        nrm = np.array([-u[1], u[0]])
+        poly = np.array([a + nrm * band, b + nrm * band, b - nrm * band, a - nrm * band]).astype(np.int32)
+        mask = np.zeros((h, w), np.uint8)
+        cv2.fillConvexPoly(mask, poly, 1)
+        smooth = cv2.GaussianBlur(gray, (3, 3), 0)     # paper grain must not become edges
+        edges = cv2.Canny(smooth, 30, 90) * mask
+        found = cv2.HoughLinesP(edges, 1, np.pi / 720, threshold=int(0.15 * length),
+                                minLineLength=int(0.4 * length), maxLineGap=int(0.05 * length))
+        best = None
+        if found is not None:
+            side_ang = np.arctan2(u[1], u[0])
+            for x1, y1, x2, y2 in np.asarray(found).reshape(-1, 4):
+                ang = np.arctan2(y2 - y1, x2 - x1)
+                dang = abs((ang - side_ang + np.pi / 2) % np.pi - np.pi / 2)
+                if dang >= np.radians(2.0):
+                    continue
+                # Among long, parallel candidates take the one nearest the coarse
+                # side, so all four sides snap to the same (outermost) grid line.
+                off = abs(float((np.array([x1, y1]) - a) @ nrm))
+                if best is None or off < best[0]:
+                    best = (off, float(x1), float(y1), float(x2), float(y2))
+        if best is None:
+            lines.append((a[0], a[1], u[0], u[1]))
+        else:
+            _, x1, y1, x2, y2 = best
+            v = np.array([x2 - x1, y2 - y1]) / (np.hypot(x2 - x1, y2 - y1) + 1e-9)
+            lines.append((x1, y1, v[0], v[1]))
+    out = []
+    for i in range(4):
+        x1, y1, u1, v1 = lines[i - 1]
+        x2, y2, u2, v2 = lines[i]
+        det = u1 * v2 - v1 * u2
+        if abs(det) < 1e-9:
+            out.append(quad[i])
+            continue
+        s_ = ((x2 - x1) * v2 - (y2 - y1) * u2) / det
+        pt = np.array([x1 + s_ * u1, y1 + s_ * v1])
+        # A snapped corner must stay near the coarse one (the band is narrow).
+        out.append(pt if np.linalg.norm(pt - quad[i]) <= 3 * band else quad[i])
+    return np.array(out)
+
+
+def _dewarp_by_quadrilateral(gray: np.ndarray) -> np.ndarray | None:
+    """Map the page quadrilateral onto an axis-aligned rectangle of the same
+    mean side lengths (the aspect is corrected afterwards from the grid pitch)."""
+    import cv2
+
+    quad = page_quadrilateral(gray)
+    if quad is None:
+        return None
+    h, w = gray.shape
+
+    def homography(q):
+        tl, tr, br, bl = q
+        width = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2.0
+        height = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2.0
+        rect = np.array([[0, 0], [width, 0], [width, height], [0, height]], dtype=np.float32)
+        hm = cv2.getPerspectiveTransform(q.astype(np.float32), rect)
+        return hm / hm[2, 2], width, height
+
+    hm, width, height = homography(quad)
+    # A scan or a plain rotation is an affine map (no projective part): leave it
+    # to the skew step, whose estimate is exact for a rotation; warp only when
+    # the projective terms change the scale across the page by QUAD_MIN_PERSPECTIVE
+    # — judged on the coarse corners, before snapping can add a fake residue.
+    persp = abs(hm[2, 0]) * w + abs(hm[2, 1]) * h
+    if persp < QUAD_MIN_PERSPECTIVE:
+        return None
+    quad = _snap_quad_to_grid_lines(gray, quad)
+    hm, width, height = homography(quad)
+    out_w, out_h = int(round(width)), int(round(height))
+    if out_w < 50 or out_h < 50:
+        return None
+    return cv2.warpPerspective(gray, hm, (out_w, out_h), borderValue=255)
+
+
 def dewarp_page(gray: np.ndarray) -> np.ndarray:
-    """Undo a mild perspective: the grid's horizontal and vertical line families
-    converge to vanishing points under perspective; the homography that sends their
-    vanishing line back to infinity rectifies the page (residual rotation/scale is
-    handled by the skew and grid-pitch steps). Returns the input unchanged when the
-    line families are parallel (no perspective)."""
+    """Undo a perspective. First choice: the page quadrilateral (the grid-textured
+    region's hull, sides snapped to the outermost grid lines) mapped to a
+    rectangle — it works at a strong perspective when the whole page is in the
+    frame and is skipped for a rotation (affine, no projective part); the
+    vanishing-point step then removes the few-pixel corner residual. Without a
+    page quadrilateral the vanishing-point method alone handles a mild
+    perspective (to ~2 %). The input is returned unchanged when neither applies."""
+    by_quad = _dewarp_by_quadrilateral(gray)
+    if by_quad is not None:
+        # Sanity: the rectified page must show a square grid (pitch along x and y
+        # within 10 %); a wrong quadrilateral yields none or a skewed one.
+        px, py = estimate_grid_pitch_xy(by_quad)
+        if px and py and 0.9 < px / py < 1.1:
+            second = _dewarp_by_vanishing_points(by_quad)
+            if second is not None:
+                px2, py2 = estimate_grid_pitch_xy(second)
+                if not (px2 and py2 and 0.95 < px2 / py2 < 1.05
+                        and _line_angle_spread(second) < 0.8 * _line_angle_spread(by_quad)):
+                    second = None
+            return _refine_affine(second if second is not None else by_quad)
+    vp = _dewarp_by_vanishing_points(gray)
+    return _refine_affine(vp) if vp is not None else gray
+
+
+def _dewarp_by_vanishing_points(gray: np.ndarray) -> np.ndarray | None:
+    """The grid's horizontal and vertical line families converge to vanishing
+    points under perspective; the homography that sends their vanishing line
+    back to infinity rectifies the page. Returns None when the families are
+    parallel already or the fit does not make them more parallel (self-check)."""
     import cv2
 
     h, w = gray.shape
     segs = _grid_segments(gray)
     if segs is None:
-        return gray
+        return None
     ang = np.degrees(np.arctan2(segs[:, 3] - segs[:, 1], segs[:, 2] - segs[:, 0]))
     horiz = segs[np.abs(ang) < 10]
     vert = segs[np.abs(np.abs(ang) - 90) < 10]
     vh = _vanishing_point(horiz, True)
     vv = _vanishing_point(vert, False)
     if vh is None and vv is None:
-        return gray
+        return None
     if vh is None:
         vh = np.array([1.0, 0.0, 0.0])
     if vv is None:
         vv = np.array([0.0, 1.0, 0.0])
     linf = np.cross(vh, vv)
     if abs(linf[2]) < 1e-12:
-        return gray
+        return None
     linf = linf / linf[2]
     hm = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [linf[0], linf[1], 1.0]])
     # Keep the page centre fixed and its scale ~unchanged: normalise by the centre's w.
     c = hm @ np.array([w / 2, h / 2, 1.0])
     if not np.isfinite(c).all() or abs(c[2]) < 1e-6:
-        return gray
+        return None
     scale = np.array([[1 / c[2], 0, 0], [0, 1 / c[2], 0], [0, 0, 1]])
     hm = scale @ hm
     # Re-centre so the page centre stays put.
@@ -845,10 +1050,17 @@ def dewarp_page(gray: np.ndarray) -> np.ndarray:
     # Self-check: keep the rectified page only if its grid lines became clearly
     # more parallel (a rotation or a noisy fit must not trigger a warp).
     if not _line_angle_spread(warped) < _line_angle_spread(gray):
-        return gray
-    # The projective step leaves an affine residue (shear, anisotropic scale): make
-    # the horizontal family horizontal and the vertical family vertical, then fix
-    # the aspect from the grid squares (pitch along x vs y).
+        return None
+    return warped
+
+
+def _refine_affine(warped: np.ndarray) -> np.ndarray:
+    """After a projective step an affine residue remains (shear, anisotropic
+    scale): make the horizontal family horizontal and the vertical family vertical,
+    then fix the aspect from the grid squares (pitch along x vs y)."""
+    import cv2
+
+    h, w = warped.shape
     segs2 = _grid_segments(warped)
     if segs2 is not None and len(segs2) >= 8:
         a2 = np.arctan2(segs2[:, 3] - segs2[:, 1], segs2[:, 2] - segs2[:, 0])

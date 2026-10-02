@@ -149,3 +149,14 @@ def test_perspective_photo_is_dewarped(tmp_path):
     with_dewarp = np.mean(_per_lead_r(sig, digitize_page(photo, px_per_mm=None, mm_per_mv=None, dewarp=True)))
     without = np.mean(_per_lead_r(sig, digitize_page(photo, px_per_mm=None, mm_per_mv=None, dewarp=False)))
     assert with_dewarp > 0.7 and with_dewarp > without + 0.15, (with_dewarp, without)
+
+
+def test_strong_perspective_is_dewarped_by_the_page_quadrilateral(page, tmp_path):
+    # 5 % corner displacement is beyond the vanishing-point method (D43 limit ~2 %);
+    # the page quadrilateral (grid-textured hull, sides snapped to the outermost
+    # grid lines) rectifies it when the whole page is in the frame (D48).
+    sig, path = page
+    dst = degrade_image(path, tmp_path / "persp5.png", perspective=0.05, seed=3)
+    traces = digitize_page(dst)
+    rs = _per_lead_r(sig, traces)
+    assert np.mean(rs) > 0.85 and min(rs) > 0.75, rs
