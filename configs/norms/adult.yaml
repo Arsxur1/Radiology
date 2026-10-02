@@ -26,6 +26,13 @@ intervals_ms:
   qrs: [70, 110]
   qt: [350, 450]
   # QTc thresholds are sex-specific below.
+  # LBBB typing (D50): a wide QRS with a negative V1 is LBBB only when it is
+  # definitely wide, or wide with a late intrinsicoid deflection in V5/V6
+  # (ms). Narrower "wide" complexes with an early deflection are non-specific —
+  # on acute STEMI the ST take-off merges with the QRS end and the envelope
+  # over-reads the width by ~20 ms.
+  qrs_lbbb_definite: 135
+  lbbb_intrinsicoid: 60
 
 qtc_ms:
   # Correction formula used by the long/short-QT rules (bazett | fridericia |

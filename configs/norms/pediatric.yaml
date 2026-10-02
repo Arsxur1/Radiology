@@ -34,6 +34,13 @@ intervals_ms:
   # normal: the 9-15 y upper normal (~100 ms) is far below the adult BBB
   # threshold and read 13 % of teenagers as LBBB (D44).
   qrs_bbb: 110
+  # LBBB typing (D50): a wide QRS with a negative V1 is LBBB only when it is
+  # definitely wide, or wide with a late intrinsicoid deflection in V5/V6
+  # (ms). Narrower "wide" complexes with an early deflection are non-specific —
+  # on acute STEMI the ST take-off merges with the QRS end and the envelope
+  # over-reads the width by ~20 ms.
+  qrs_lbbb_definite: 120   # children: 110 is already a block, 120 is definitely wide
+  lbbb_intrinsicoid: 60
 
 # Upper normals by age band (98th percentiles; QRS from the 1838-record
 # ecg-arrhythmia pediatric cohort with this envelope measurement, PR/QT from

@@ -434,6 +434,20 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, patient=None) -
     # segment leaks into the terminal window and flips the V6 sign.
     v1, v6 = m.qrs_v1_terminal_positive, m.qrs_v6_terminal_positive
     term = v1 if v1 is not None else (None if v6 is None else (not v6))
+    # LBBB needs more than "wide + V1 negative": a normal rS in V1 is terminal
+    # negative too, and an acute STEMI whose ST take-off merges with the QRS end
+    # reads 118-128 ms by the envelope (12SL: 98-112) — that call then silenced
+    # the elevation as a block mimic on 37 of 118 missed 12SL-STEMI records (D50).
+    # True CLBBB on PTB-XL is 143-179 ms wide (p10-p90) with an intrinsicoid
+    # deflection in V5/V6 of 54-102 ms; so: definitely wide, or wide with a late
+    # intrinsicoid deflection. Otherwise it is a non-specific wide QRS.
+    lbbb_wide = ivn.get("qrs_lbbb_definite")
+    lbbb_idt = ivn.get("lbbb_intrinsicoid")
+    idt = m.voltages.intrinsicoid_v5_v6_ms if m.voltages is not None else None
+    lbbb_support = (lbbb_wide is None or iv.qrs_ms >= lbbb_wide
+                    or (lbbb_idt is not None and idt is not None and idt >= lbbb_idt))
+    if term is False and not lbbb_support:
+        term = None
     if term is True:
         fs.findings.append(Finding(
             code="rbbb", group="interval",

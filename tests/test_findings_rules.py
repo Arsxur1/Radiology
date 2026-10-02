@@ -163,3 +163,20 @@ def test_header_age_zero_is_unknown():
 
     assert parse_patient_from_header("#Age: 0\n#Sex: Male") == (None, "male")
     assert parse_patient_from_header("#Age: 7\n#Sex: Female") == (7.0, "female")
+
+
+def test_wide_qrs_with_negative_v1_is_lbbb_only_when_definitely_wide_or_late_idt():
+    # D50: an acute STEMI whose ST take-off merges with the QRS end reads
+    # 118-128 ms; with a normal rS in V1 that used to be "LBBB", which silenced
+    # the elevation as a block mimic. True CLBBB is >= 135 ms or has a late
+    # intrinsicoid deflection in V5/V6.
+    from cardiolens.contracts.features import Voltages
+
+    def m(qrs, idt):
+        return Measurements(heart_rate_bpm=75, rhythm_regular=True, qrs_v1_terminal_positive=False,
+                            voltages=Voltages(intrinsicoid_v5_v6_ms=idt),
+                            intervals=Intervals(pr_ms=160, qrs_ms=qrs, qt_ms=400, qtc_bazett_ms=430))
+    assert "wide_qrs_nonspecific" in _find(m(124, 45)).codes() and "lbbb" not in _find(m(124, 45)).codes()
+    assert "lbbb" in _find(m(124, 70)).codes()
+    assert "lbbb" in _find(m(150, 45)).codes()
+    assert "lbbb" in _find(m(150, None)).codes()
