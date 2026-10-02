@@ -83,6 +83,9 @@ class Measurements(BaseModel):
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
     qrs_v1_rs_ratio: float | None = None          # R/S in V1 (dominant R -> RVH, §7.5)
     qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak
+    # Largest QRS peak-to-peak among the limb / precordial leads on the median beat (D61).
+    qrs_amplitude_limb_max_uv: float | None = None
+    qrs_amplitude_precordial_max_uv: float | None = None
     # Delta-wave index on the median beat: initial 40-ms / peak QRS slope energy (D59).
     qrs_initial_energy_ratio: float | None = None
     # NOT YET MEASURED (always None): Layer 3 has no robust estimator for these,

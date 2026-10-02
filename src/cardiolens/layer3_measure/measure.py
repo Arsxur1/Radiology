@@ -26,6 +26,7 @@ from cardiolens.layer3_measure.global_beat import (
     global_initial_qrs_ratio,
     global_intervals,
     global_q_waves,
+    global_qrs_amplitudes,
     global_st,
     global_t_amplitude,
 )
@@ -321,6 +322,12 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             m.qt_ms_by_lead = qt_by_lead
             # Initial Q waves per lead on the median beat (pathological Q, D36).
             m.morphology.q_waves = global_q_waves(sig.signal, rpeaks, fs, list(sig.lead_names))
+            # QRS size per lead on the median beat: low voltage (D61).
+            amps = global_qrs_amplitudes(sig.signal, rpeaks, fs, list(sig.lead_names))
+            limb = [amps[k] for k in ("I", "II", "III", "aVR", "aVL", "aVF") if k in amps]
+            prec = [amps[k] for k in ("V1", "V2", "V3", "V4", "V5", "V6") if k in amps]
+            m.qrs_amplitude_limb_max_uv = max(limb) if len(limb) == 6 else None
+            m.qrs_amplitude_precordial_max_uv = max(prec) if len(prec) == 6 else None
             # Slurred QRS upstroke (delta wave) on the median beat (WPW, D59).
             m.qrs_initial_energy_ratio = global_initial_qrs_ratio(sig.signal, rpeaks, fs)
             # ST on the median beat (D48) — decides the critical STEMI tier.

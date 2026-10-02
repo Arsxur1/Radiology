@@ -216,6 +216,22 @@ def global_initial_qrs_ratio(signal: np.ndarray, rpeaks, fs: float) -> float | N
     return round(float(seg[:n40].mean() / seg.max()), 3)
 
 
+def global_qrs_amplitudes(signal: np.ndarray, rpeaks, fs: float,
+                          lead_names: list[str]) -> dict[str, float]:
+    """QRS peak-to-peak per lead on the median beat between the global QRS onset and
+    offset, µV (D61: low voltage needs every limb or every precordial lead small)."""
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return {}
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    f = global_fiducials(X, a, fs, rr_s)
+    on, off = int(f["qrs_on"]), int(f["qrs_off"])
+    if off - on < 3:
+        return {}
+    return {name: round(float(np.ptp(X[i][on:off + 1])), 1) for i, name in enumerate(lead_names)}
+
+
 def global_intervals(signal: np.ndarray, rpeaks, fs: float) -> tuple[float | None, float | None]:
     """(PR ms, QT ms) from the global fiducials, uncorrected; None where not found."""
     X, a = median_beats(signal, rpeaks, fs)
