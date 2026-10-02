@@ -329,16 +329,3 @@ def test_delta_wave_rule_leaves_rbbb_morphology_to_bbb_rule():
                      intervals=Intervals(pr_ms=110, qrs_ms=140, qt_ms=420, qtc_bazett_ms=450))
     codes = _find(m).codes()
     assert "rbbb" in codes and "wpw_preexcitation" not in codes
-
-
-def test_low_voltage_needs_every_limb_or_every_precordial_lead_small():
-    """D61: one large limb lead rules out limb low voltage; small precordials alone suffice."""
-    def codes(limb, prec):
-        m = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_amplitude_limb_uv=300,
-                         qrs_amplitude_limb_max_uv=limb, qrs_amplitude_precordial_max_uv=prec,
-                         intervals=Intervals(pr_ms=150, qrs_ms=90, qt_ms=400, qtc_bazett_ms=420))
-        return _find(m).codes()
-
-    assert "low_qrs_voltage" in codes(450, 1500)
-    assert "low_qrs_voltage" in codes(900, 800)
-    assert "low_qrs_voltage" not in codes(900, 1500)

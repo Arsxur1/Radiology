@@ -43,8 +43,7 @@ voltage_uv:
   # LVH voltage criteria (Sokolow-Lyon: SV1 + RV5/RV6), microvolts.
   sokolow_lyon_lvh: 3500
   # Low QRS voltage: limb-lead QRS peak-to-peak below this (µV).
-  low_voltage_limb: 500         # every limb lead below (median beat, D61)
-  low_voltage_precordial: 1000  # or every precordial lead below
+  low_voltage_limb: 500
 
 # Right ventricular hypertrophy: dominant R in V1 (R/S > this), with right-axis
 # support. RBBB also gives a dominant V1 R, so it is excluded in the rule.
