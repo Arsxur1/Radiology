@@ -514,6 +514,42 @@ Full-pipeline results: PTB-XL LVH 0.35 / 0.97 → **0.48 / 0.93**; 664 LVH 0.90 
 → 0.84 / 0.87 (Cornell adds little there and the BBB gate removes a few true
 positives); PTB-XL children 0 / 5 → 1 / 5 at specificity 1.00.
 
+### LVH and ST depression against a second algorithm — GE 12SL on PTB-XL+ (open item 6)
+
+The question was whether LVH 0.48 and ST depression 0.28 on PTB-XL are our
+measurement or the label. PTB-XL+ carries the GE 12SL statements and per-lead
+measurements for the same records, so a commercial algorithm can be scored
+against the same cardiologist labels, and our measurements against its (1692
+local records):
+
+| | sens / spec vs the PTB-XL label | n+ |
+|---|:-:|--:|
+| LVH — ours (Sokolow ∪ Cornell, D39) | 0.48 / 0.93 | 198 |
+| LVH — **12SL** (LVH / LVH2 / LVH3 statements) | **0.42 / 0.95** | 198 |
+| ST depression — ours | 0.28 / 0.81 | 125 |
+| ST depression — **12SL** (STDEP2, subendocardial-injury statements) | **0.06 / 0.98** | 125 |
+
+The commercial algorithm does no better than the rules against the LVH label
+and calls almost none of the STD_ records ST depression: both labels encode
+something the ECG measurements alone do not carry (clinical LVH; "non-specific
+ST depression" read by a cardiologist). That settles the item as label
+semantics, with an independent witness.
+
+Measurements agree where they should: R V5/V6, S V1, R aVL, S V3 read 4 %
+lower than 12SL at the median (ratio 0.96, p10 0.87 — different beat selection
+and baselines); the Sokolow-Lyon sum differs by −115 µV at the median (MAE 350 µV)
+and the Cornell sum by −58 µV (MAE 180 µV), so of the 135 records 12SL flags
+Sokolow-positive our sum reaches 3.5 mV on 92 (the voltage criterion sits on a
+continuum and a 4 % amplitude difference moves the borderline cases); the ST
+amplitude at J differs from 12SL's STJ by a median of −9
+(II), +33 (V2), +9 (V3), −29 (V5) µV with MAE 50–100 µV — a third to a whole
+threshold, which is why the elevation/depression descriptors cannot be tuned
+much further against labels of this kind. Our J+80 reads 120–140 µV above
+Glasgow's "ST80" in V2/V3 (near zero in II and V5); the definitions differ (the
+Glasgow value is not referenced to the same baseline), so this is recorded, not
+corrected. Agreement of our LVH call with 12SL's: 0.45 / 0.92 (n+ 163) — the two
+algorithms disagree with each other as much as either disagrees with the label.
+
 ### Infants and toddlers — what the reachable data holds (open item 5)
 
 Searched for 12-lead records aged under 4 in every PhysioNet set reachable from
