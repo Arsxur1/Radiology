@@ -83,8 +83,6 @@ class Measurements(BaseModel):
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
     qrs_v1_rs_ratio: float | None = None          # R/S in V1 (dominant R -> RVH, §7.5)
     qrs_amplitude_limb_uv: float | None = None    # median limb-lead QRS peak-to-peak
-    # Delta-wave index on the median beat: initial 40-ms / peak QRS slope energy (D59).
-    qrs_initial_energy_ratio: float | None = None
     # NOT YET MEASURED (always None): Layer 3 has no robust estimator for these,
     # so the atrial-flutter and complete-AV-block rules that consume them are
     # currently inert. Flutter needs ventricular-QRS cancellation + atrial-

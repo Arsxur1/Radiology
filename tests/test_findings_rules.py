@@ -307,16 +307,3 @@ def test_short_pr_with_rbbb_morphology_stays_rbbb():
     wpw = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_v1_terminal_positive=False,
                        intervals=Intervals(pr_ms=100, qrs_ms=140, qt_ms=420, qtc_bazett_ms=450))
     assert "wpw_preexcitation" in _find(wpw).codes()
-
-
-def test_wpw_from_short_pr_and_delta_wave():
-    """D59: short PR + slurred QRS upstroke is pre-excitation even with a QRS < 110 ms;
-    a short PR with a brisk upstroke is not."""
-    def codes(ratio, qrs=104, pr=110):
-        m = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_initial_energy_ratio=ratio,
-                         intervals=Intervals(pr_ms=pr, qrs_ms=qrs, qt_ms=400, qtc_bazett_ms=430))
-        return _find(m).codes()
-
-    assert "wpw_preexcitation" in codes(0.15)
-    assert "wpw_preexcitation" not in codes(0.40)
-    assert "wpw_preexcitation" not in codes(0.15, pr=150)

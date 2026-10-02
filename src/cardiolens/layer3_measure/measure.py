@@ -23,7 +23,6 @@ from cardiolens.contracts.features import (
 )
 from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer3_measure.global_beat import (
-    global_initial_qrs_ratio,
     global_intervals,
     global_q_waves,
     global_st,
@@ -321,8 +320,6 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             m.qt_ms_by_lead = qt_by_lead
             # Initial Q waves per lead on the median beat (pathological Q, D36).
             m.morphology.q_waves = global_q_waves(sig.signal, rpeaks, fs, list(sig.lead_names))
-            # Slurred QRS upstroke (delta wave) on the median beat (WPW, D59).
-            m.qrs_initial_energy_ratio = global_initial_qrs_ratio(sig.signal, rpeaks, fs)
             # ST on the median beat (D48) — decides the critical STEMI tier.
             m.morphology.st_median_beat = global_st(sig.signal, rpeaks, fs, list(sig.lead_names))
             # T peak on the median beat (D49) — decides the critical hyperkalaemia tier.

@@ -195,27 +195,6 @@ def global_t_amplitude(signal: np.ndarray, rpeaks, fs: float,
     return out
 
 
-def global_initial_qrs_ratio(signal: np.ndarray, rpeaks, fs: float) -> float | None:
-    """Delta-wave index (D59): mean summed slope energy over the first 40 ms after the
-    global QRS onset divided by the QRS peak energy. Pre-excitation starts the QRS with
-    a slow, slurred upstroke: PTB-XL development median 0.16 in WPW vs 0.41-0.44 in
-    bundle-branch block and other records (AUC 0.89)."""
-    X, a = median_beats(signal, rpeaks, fs)
-    if X is None:
-        return None
-    rp = np.asarray(rpeaks, dtype=float)
-    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
-    f = global_fiducials(X, a, fs, rr_s)
-    on, off = int(f["qrs_on"]), int(f["qrs_off"])
-    base = np.median(X[:, max(0, on - int(0.04 * fs)):max(on, 1)], axis=1, keepdims=True)
-    energy = _smooth(np.sum(np.abs(np.diff(X - base, axis=1)), axis=0), max(1, int(0.01 * fs)))
-    seg = energy[on:off + 1]
-    n40 = int(0.04 * fs)
-    if seg.size <= n40 or seg.max() <= 0:
-        return None
-    return round(float(seg[:n40].mean() / seg.max()), 3)
-
-
 def global_intervals(signal: np.ndarray, rpeaks, fs: float) -> tuple[float | None, float | None]:
     """(PR ms, QT ms) from the global fiducials, uncorrected; None where not found."""
     X, a = median_beats(signal, rpeaks, fs)
