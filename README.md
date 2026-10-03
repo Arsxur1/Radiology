@@ -431,7 +431,7 @@ SCP/SNOMED-адаптеры (`build_ptbxl_dataset`, `build_ecg_arrhythmia_datase
 ## Тесты
 
 ```bash
-pytest -q          # 213 тестов (ruff clean; CI: Python 3.11/3.12)
+pytest -q          # 216 тестов (ruff clean; CI: Python 3.11/3.12)
 ```
 
 ## Архитектура
