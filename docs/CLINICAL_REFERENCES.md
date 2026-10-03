@@ -909,6 +909,23 @@ at spec 0.991, band macro-sensitivity 0.34 → 0.48; 9–15 y (620) right axis
 (1692, adult table) unchanged: left 0.862 / 0.916, right 0.746 / 0.981, macro 0.626.
 
 
+### Pediatric residuals after D51 and D53 (improvement 5)
+
+What is left on the pediatric cohort is label semantics, not measurement:
+
+- **Right axis deviation.** With the age-banded 105° limit the label scores
+  15/22 (4–8 y) and 6/13 (9–15 y). The chart label follows the adult +90°
+  criterion: at 90° the same records give 20/22 and 14/15, at the cost of
+  flagging 11–17 % of all children (spec 0.84–0.87). The axis measurement is
+  not in question (MAE 4.7° against GE 12SL, D49); the published pediatric 98th
+  percentile stays the norm, and the gap to the label is reported as such.
+- **WPW 2/6.** One child is 3 ms under the delta threshold (PR 108, delta 42);
+  lowering the threshold to 40 ms would recover it and cost 4 false WPW among
+  1688 adults on PTB-XL (0.981 → 0.978). One child has delta 68 ms but PR 164
+  and reads as LBBB; two show no pre-excitation on the tracing. No threshold
+  is changed for a single record.
+- **Bands < 1 y and 1–3 y** remain unmeasured: no reachable set holds them.
+
 ### Calibration of the AF gates — train/test halves (item 2)
 
 The AF rule fires on `rr_cv >= rhythm.af_rr_cv_min` and `p_wave_ratio <=
