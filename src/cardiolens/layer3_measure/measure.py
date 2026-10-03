@@ -213,6 +213,7 @@ PAGE_BEAT_SNAP_S = 0.06         # a beat is snapped to the column's summed-defle
 PAGE_BEAT_EDGE_START_S = 0.30   # no beat without a full P-QRS window before it
 PAGE_BEAT_EDGE_END_S = 0.45     # no beat without a T wave window after it
 PAGE_BEAT_RHYTHM_FRACTION = 0.3 # the rhythm lead's own extreme is used when its deflection is this fraction of the column's
+PAGE_BEAT_MATCH_S = 0.10        # a single-lead beat within this of a column beat is the same beat
 
 
 def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray, fs: float) -> np.ndarray | None:
@@ -314,17 +315,34 @@ def measure(sig: SignalRepresentation) -> Measurements:
     except Exception:
         rpeaks = np.array([], dtype=int)
     page_windows = getattr(sig.provenance, "lead_windows", None)
+    page_confirmed = False
     if page_windows:
         # The single-lead detector both drops beats (small complexes lost to the
         # page) and adds P/T waves on the strip; the column detector sees four
         # leads at every moment and replaces it whenever it finds a rhythm.
         page = _page_beats(sig, page_windows, cleaned, fs)
         if page is not None and len(page) >= 3:
-            rpeaks = page
-            m.notes.append("beats detected on the page from every lead valid in each column (D55)")
+            # Merge, do not replace: a single-lead beat confirmed by the column
+            # detector keeps its own position (the R the delineation is tuned
+            # to); an unconfirmed one is a P/T oversense and goes; a column beat
+            # with no single-lead partner is a missed beat and is added.
+            tol = int(PAGE_BEAT_MATCH_S * fs)
+            kept = [r for r in rpeaks if page.size and np.min(np.abs(page - r)) <= tol]
+            added = [p for p in page if not rpeaks.size or np.min(np.abs(rpeaks - p)) > tol]
+            merged = np.unique(np.asarray(kept + added, dtype=int))
+            if len(merged) >= 3:
+                n_add, n_drop = len(added), len(rpeaks) - len(kept)
+                rpeaks = merged
+                page_confirmed = True
+                if n_add or n_drop:
+                    m.notes.append(f"page beats: {n_add} added, {n_drop} dropped by the column detector (D55)")
 
-    rpeaks = _reject_non_qrs_detections(
-        sig.signal, rpeaks, fs, windows=getattr(sig.provenance, "lead_windows", None), lead_names=sig.lead_names)
+    # The column detector has already judged every page beat within its own
+    # column; the single-lead oversense gate would re-judge a confirmed beat at
+    # the rhythm lead's R, up to 50 ms from the envelope peak, and drop it.
+    if not page_confirmed:
+        rpeaks = _reject_non_qrs_detections(
+            sig.signal, rpeaks, fs, windows=getattr(sig.provenance, "lead_windows", None), lead_names=sig.lead_names)
     m.r_peaks_samples = rpeaks.tolist()
     m.n_beats = len(rpeaks)
 
