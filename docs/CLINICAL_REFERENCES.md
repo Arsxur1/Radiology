@@ -962,6 +962,35 @@ records with an RR CV of 0.5 and above — ectopy, or flutter without the label.
 Pediatric cohort (1591, no AF label): AF specificity 0.962 → 0.963, unchanged; CPSC-2018 (9 AF)
 8/9 at spec 0.986; PTBDB alert numbers unchanged (day 0–1 14/61, controls 3/80).
 
+### LUDB — interval MAE against cardiologist wave marks (improvement 7, D59)
+
+The Lobachevsky University database (200 ten-second 12-lead records, 500 Hz)
+became reachable; it carries cardiologist-marked P, QRS and T onsets/offsets on
+every lead — the TZ §16 interval benchmark that was missing. The reference per
+record is the median over beats of each annotated lead, then over the 12 leads
+(PR = P onset → QRS onset, QRS = onset → offset, QT = QRS onset → T offset);
+beats without a P give no PR. `validate --ludb data/ludb`:
+
+| interval | MAE vs the marks | records |
+|---|:-:|:-:|
+| PR | **8.9 ms** | 176 (records whose marks hold a P before the QRS) |
+| QRS | **9.8 ms** | 200 |
+| QT | **15.6 ms** | 200 |
+
+(Synthetic stimuli gave PR/QT MAE ≈ 1–3 ms; this is the first number against
+human marks on real recordings.) The header diagnoses, mapped where a code
+exists: AF 11/15 at spec 0.995, AF ∪ flutter 12/18 at 0.989, LBBB 4/4, RBBB 3/4
+(the 29 *incomplete* RBBB records are not RBBB gold), 1° AV block 6/10 at 0.953,
+sinus bradycardia 25/25 at 0.846. Two LUDB labels follow their own definitions
+and are reported as such, not scored as misses: "left ventricular hypertrophy"
+on 108 of 200 records (0/108 by our voltage criteria — LUDB marks it from the
+cardiologist's overall reading), "left axis deviation" on 66 (8/66: the axis we
+measure on them has a median of −2°, p10 −32°, p90 +22°, only 12 % below −30°,
+so LUDB's label covers what our table calls a normal or mildly leftward axis).
+Eight records carry a "STEMI: <wall>" statement: the alert fires on 0, the
+descriptor on 1 — not yet examined record by record; left as an open
+observation next to the PTBDB day-0–1 result.
+
 ### Calibration of the AF gates — train/test halves (item 2)
 
 The AF rule fires on `rr_cv >= rhythm.af_rr_cv_min` and `p_wave_ratio <=
