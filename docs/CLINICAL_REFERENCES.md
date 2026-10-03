@@ -1550,6 +1550,104 @@ the QRS. Downstream on a degraded STEMI page: HR within 3 bpm, QRS axis within 1
 calibration pulse remain untested/unimplemented; `provenance.confidence` is the panel
 column coverage, so a bad photo lowers confidence rather than inventing a trace.
 
+### Application review — the four blockers (D60–D62, risk tiers, protocol)
+
+**Blocker 1 — error analysis by clinical risk tier.** `configs/risk_tiers.yaml`
+groups the scored codes into critical (TZ §10), major and minor; the harness pools
+every miss and false call per tier at the label level and at the case level
+(the escalation view: a case with any critical gold label is caught when any
+critical label is reported). Codes a dataset never labels are reported as call
+counts, not false alerts. The prospective protocol with the acceptance targets
+per tier is `docs/VALIDATION_PROTOCOL.md`. The first run exposed the burden of
+critical false alerts: on the 664 set 35 % of cases without a critical label
+received one, driven by two rules — peaked T (141 calls) and long QT (91 false).
+The per-dataset tier tables after the two corrections below are in the table at
+the end of this section.
+
+**D60 — long QT under a wide QRS.** Of the 91 false long-QT calls on the 664 set,
+60 carried a QRS ≥ 120 ms (LBBB 36, RBBB 20) and 42 were in AF. The QT of a
+bundle branch block carries the conduction delay; the rule now judges
+QT − 0.485 × QRS (Bogossian 2014) when the QRS is ≥ 120 ms or a BBB is present.
+Sweep on the 664 set (gold "prolonged QT", 23 positives) and PTB-XL (LNGQT, 117):
+
+| long-QT rule | 664 tp / fp | PTB-XL tp / fp |
+|---|:-:|:-:|
+| Fridericia QTc > 450 / 460 (before) | 16 / 91 | 57 / 174 |
+| **QT − 0.485 × QRS under a wide QRS (Bogossian, adopted)** | **14 / 43** | **57 / 80** |
+| QT − (QRS − 100) under a wide QRS | 14 / 46 | — |
+| JT + 100 ms under a wide QRS | 14 / 46 | — |
+| + 10 / 20 ms margin in AF (on top of Bogossian) | 13 / 38 · 13 / 35 | — |
+
+The AF margin is not principled (QTc on the mean RR is the standard in AF) and
+was not adopted. The two 664 positives lost are LBBB records whose adjusted QTc
+falls just under 450; the dataset's "prolonged QT" label on a BBB record is
+itself a measurement without the adjustment.
+
+**D61 — peaked T by shape, and the T window.** The hard-coded rule (T > 400 µV
+and T/QRS > 0.5 in two leads) fired on 141 of 664 records (21 %) and 235 of 1692
+PTB-XL records (14 %). On the median beat, the "T" of the called leads had a
+half-amplitude width of 8–20 ms (p10–p50) — the fixed 100–450 ms window after
+the R peak reached the next QRS at fast rates (median HR of the calls 127) and
+the S wave under a wide QRS; 68 of the 141 calls had no lead with a deflection
+≥ 40 ms wide. The genuine tall T of this population is common: the 90th
+percentile of the tallest precordial T is 1.45 mV (p99 2.5 mV), so amplitude
+alone cannot be the criterion. Prevalence of candidate criteria on the 664 set
+(≥ 2 leads, aVR excluded; half-width floor 40 ms applied):
+
+| criterion | 664 records |
+|---|:-:|
+| old rule (T ≥ 400, T/QRS ≥ 0.5, no shape) | 141 (21.2 %) |
+| T ≥ 400, T/QRS ≥ 0.5, half-width ≥ 40 ms | 62 (9.3 %) |
+| T ≥ 1000 precordial / 500 limb, T/QRS ≥ 0.75, half-width ≥ 40 | 12 (1.8 %) |
+| … and half-width ≤ 110 ms | 10 (1.5 %) |
+| **… and asymmetry 0.6–1.6 (adopted)** | **6 (0.9 %)** |
+| the adopted criterion on PTB-XL | 6 of 1692 (0.4 %) |
+
+The T window now starts after the QRS (half the QRS width + 40 ms past the R, at
+least 100 ms) and ends 200 ms before the next beat; every lead gets a `TWave`
+descriptor (amplitude, T/QRS, half-width, asymmetry) and the norm table's
+`t_wave` block holds the thresholds (pediatric 1500 / 700 µV — children's tall
+precordial T are normal — unvalidated, no labelled pediatric cases). No open
+database labels hyperkalaemia, so the criterion's sensitivity is measured for
+the first time on the MIMIC-IV-ECG "TALL T WAVES" statements (D62, below).
+
+**Blocker 2 — STEMI alert sensitivity: three experiments on PTBDB, all negative.**
+Groups: MI 0–1 d 62, MI 2–3 d 35, MI 4–7 d 68, MI later 178, healthy controls
+80, other 126.
+
+| criterion | MI 0–1 d | MI 2–3 d | MI later | controls | other |
+|---|:-:|:-:|:-:|:-:|:-:|
+| current alert | 14/62 | 8/35 | 7/178 | **3/80** | 4/126 |
+| territory sum of the two best leads ≥ 200 µV (each ≥ 75) | 21/62 | 12/35 | 31/178 | 30/80 | 15/126 |
+| sum ≥ 250 | 16/62 | 10/35 | 14/178 | 17/80 | 13/126 |
+| sum ≥ 300 | 13/62 | 8/35 | 9/178 | 13/80 | 4/126 |
+| sum ≥ 300 with reciprocal depression lowering the sum to 150 | 18/62 | 8/35 | 11/178 | 13/80 | 7/126 |
+
+Every summed criterion trades specificity on healthy controls faster than it
+gains sensitivity: the J-point amplitudes of the acute records overlap those of
+the controls. Serial criterion with the patient's own late (> 7 d) record as a
+pseudo-baseline (57 patients): Δ J ≥ 100 µV in two leads of a territory catches
+13/57 — the same records as the alert — union 17/57, false 0/14 on repeated
+control ECGs and 6/71 on late-vs-late MI pairs; the pseudo-baseline is a
+post-infarction record, not a true baseline. Learnable second voice: HGB on the
+v2 features trained on CPSC physician ST elevation (220/820) and 12SL STEMI
+statements (178/1833), cross-validated AUC 0.944 — on PTBDB AUC 0.59 (acute MI
+vs controls), 29/80 controls positive at the training set's spec-0.95 threshold:
+no transfer. Reading: PTBDB's "MI ≤ 1 day" admits NSTEMI and evolved ECGs; the
+misses are not sub-threshold STEMI but a label that is not "STEMI on the ECG".
+Hence D62: MIMIC-IV-ECG carries the cart's explicit "*** CONSIDER ACUTE ST
+ELEVATION MI ***" statement on ~14 500 of 800 035 records.
+
+**Blocker 4 — children under 3.** The 247 "age 0" records of the ecg-arrhythmia
+pediatric fetch are missing ages, not infants: their labels are adult (sinus
+rhythm 161, flutter 19, sinus bradycardia 16) where the 4–5-year-olds carry
+sinus tachycardia 353 of 542, and the database has no record aged 1, 2 or 3 at
+all (0 → 247, then 4 → 299). The Challenge-2021 Georgia set (10 334 headers
+scanned) holds three records under 18, aged 14–16, none under 14.
+ECG-Image-Database, Challenge-2024 and every pediatric slug tried return 404. The bands < 1 y and 1–3 y remain without
+data; the norm-table entries for them are the references' values and are marked
+so.
+
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is
 not clinically validated and is not a medical device. Every report carries the
