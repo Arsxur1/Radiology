@@ -66,3 +66,26 @@ def test_digital_record_unchanged_without_windows():
     a = _reject_non_qrs_detections(sig.signal, rpeaks, fs)
     b = _reject_non_qrs_detections(sig.signal, rpeaks, fs, windows=None, lead_names=sig.lead_names)
     assert np.array_equal(a, b) and len(a) == len(rpeaks)
+
+
+def test_column_beat_detector_finds_beats_the_rhythm_strip_loses():
+    """D55: a near-isoelectric lead II on the page loses beats to the single-lead
+    detector; the column detector sees the chest leads of each column."""
+    from cardiolens.layer3_measure.measure import _page_beats
+
+    sig, windows = _page_like(scale_by_column=(1.0, 1.0, 1.0, 1.0))
+    true = _true_rpeaks(sig)
+    fs = sig.sampling_rate_hz
+    ii = sig.lead_names.index("II")
+    sig.signal[ii] *= 0.12                                # rhythm strip almost flat
+    beats = _page_beats(sig, windows, sig.signal[ii].astype(float), fs)
+    assert beats is not None and len(beats) >= len(true)   # it also finds the first beat nk skips
+    for r in true:                                          # every record beat within 60 ms of one
+        assert np.min(np.abs(beats - r)) <= 0.06 * fs
+
+
+def test_column_beat_detector_is_silent_without_windows():
+    from cardiolens.layer3_measure.measure import _page_beats
+
+    sig = generate_synthetic_ecg(heart_rate_bpm=72)
+    assert _page_beats(sig, {}, sig.lead("II").astype(float), sig.sampling_rate_hz) is None

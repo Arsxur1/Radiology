@@ -12,6 +12,7 @@ rather than fabricating a value (TZ §0).
 from __future__ import annotations
 
 import warnings
+from itertools import pairwise
 
 import numpy as np
 
@@ -206,6 +207,78 @@ def _delineate(cleaned: np.ndarray, rpeaks: np.ndarray, fs: float):
         return None
 
 
+PAGE_BEAT_MIN_FRACTION = 0.35   # envelope peak, as a fraction of its column's 90th-percentile peak
+PAGE_BEAT_MIN_RR_S = 0.24       # refractory distance between beats (250 bpm)
+PAGE_BEAT_SNAP_S = 0.06         # a beat is snapped to the column's summed-deflection apex within this window
+PAGE_BEAT_EDGE_S = 0.10         # no beat is taken this close to the page's time edges
+
+
+def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray, fs: float) -> np.ndarray | None:
+    """Beat times on a 3x4 page from every lead valid at each moment (D55).
+
+    The rhythm strip alone drops beats when lead II is near-isoelectric (a 0.2-mV
+    QRS with a 20-ms S lost to the page) or a P wave outranks a small R under
+    LBBB. Each time column of the page carries four leads; the spatial-velocity
+    envelope over the leads valid in that column peaks on every true QRS. The
+    envelope is normalised per column (its own 90th-percentile peak, so a column
+    of limb leads is not judged against the chest leads), beats are its peaks
+    above ``PAGE_BEAT_MIN_FRACTION`` with a ``PAGE_BEAT_MIN_RR_S`` refractory
+    distance, and each beat is snapped to the rhythm lead's nearest extreme so
+    downstream delineation sees an R on the strip. Returns None when the page
+    has no column structure.
+    """
+    from scipy.signal import find_peaks
+
+    n = sig.signal.shape[1]
+    t = np.arange(n) / fs
+    valid = np.zeros((len(sig.lead_names), n), dtype=bool)
+    for i, ln in enumerate(sig.lead_names):
+        if ln in windows:
+            t0, t1 = windows[ln]
+            valid[i] = (t >= t0) & (t <= t1)
+        else:
+            valid[i] = True
+    starts = sorted({0} | {int(round(w[0] * fs)) for w in windows.values()} | {n})
+    cols = [(a, b) for a, b in pairwise(starts) if b - a > int(0.5 * fs)]
+    if len(cols) < 2:
+        return None
+    env = np.zeros(n)
+    for a, b in cols:
+        rows = [i for i in range(len(sig.lead_names)) if valid[i, a:b].all() and not is_lead_off(sig.signal[i, a:b])]
+        if not rows:
+            continue
+        e = spatial_velocity(sig.signal[rows, a:b], fs)
+        pk, _ = find_peaks(e, distance=max(1, int(PAGE_BEAT_MIN_RR_S * fs)))
+        ref = float(np.percentile(e[pk], 90)) if pk.size >= 3 else float(e.max())
+        if ref > 0:
+            env[a:b] = e / ref
+    peaks, _ = find_peaks(env, height=PAGE_BEAT_MIN_FRACTION, distance=max(1, int(PAGE_BEAT_MIN_RR_S * fs)))
+    edge = int(PAGE_BEAT_EDGE_S * fs)      # the page's first/last columns start on a filter transient
+    peaks = peaks[(peaks >= edge) & (peaks < n - edge)]
+    if peaks.size < 2:
+        return None
+    # The envelope peaks on the steepest slope, not the apex: snap each beat to
+    # the moment of maximal summed |deflection| over the column's valid leads
+    # (the R/S apex seen by all of them), so the beat times are as steady as on
+    # the digital record and a near-isoelectric rhythm lead cannot jitter them.
+    w = int(PAGE_BEAT_SNAP_S * fs)
+    col_rows = {}
+    for a, b in cols:
+        rows = [i for i in range(len(sig.lead_names)) if valid[i, a:b].all() and not is_lead_off(sig.signal[i, a:b])]
+        col_rows[(a, b)] = (rows, np.median(sig.signal[rows, a:b], axis=1) if rows else None)
+    snapped = []
+    for p in peaks:
+        key = next(((a, b) for a, b in cols if a <= p < b), None)
+        rows, base = col_rows.get(key, ([], None))
+        lo, hi = max(0, p - w), min(n, p + w + 1)
+        if rows:
+            seg = np.abs(sig.signal[rows, lo:hi] - base[:, None]).sum(axis=0)
+        else:
+            seg = np.abs(rhythm_row[lo:hi] - float(np.median(rhythm_row)))
+        snapped.append(lo + int(np.argmax(seg)))
+    return np.unique(np.asarray(snapped, dtype=int))
+
+
 def measure(sig: SignalRepresentation) -> Measurements:
     """Full Layer-3 measurement pass (TZ §6)."""
     import neurokit2 as nk
@@ -221,6 +294,15 @@ def measure(sig: SignalRepresentation) -> Measurements:
         rpeaks = np.asarray(info["ECG_R_Peaks"], dtype=int)
     except Exception:
         rpeaks = np.array([], dtype=int)
+    page_windows = getattr(sig.provenance, "lead_windows", None)
+    if page_windows:
+        # The single-lead detector both drops beats (small complexes lost to the
+        # page) and adds P/T waves on the strip; the column detector sees four
+        # leads at every moment and replaces it whenever it finds a rhythm.
+        page = _page_beats(sig, page_windows, cleaned, fs)
+        if page is not None and len(page) >= 3:
+            rpeaks = page
+            m.notes.append("beats detected on the page from every lead valid in each column (D55)")
 
     rpeaks = _reject_non_qrs_detections(
         sig.signal, rpeaks, fs, windows=getattr(sig.provenance, "lead_windows", None), lead_names=sig.lead_names)
