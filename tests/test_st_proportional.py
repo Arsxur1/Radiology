@@ -9,7 +9,13 @@ Sgarbossa / Armstrong): then it is a STEMI on top of the block.
 import numpy as np
 
 from cardiolens.config import load_norms
-from cardiolens.contracts.features import Intervals, Measurements, Morphology, STMeasurement, Voltages
+from cardiolens.contracts.features import (
+    Intervals,
+    Measurements,
+    Morphology,
+    STMeasurement,
+    Voltages,
+)
 from cardiolens.contracts.signal import STANDARD_12_LEADS, Patient, SignalRepresentation
 from cardiolens.layer4_findings import detect_findings
 
