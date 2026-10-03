@@ -1508,15 +1508,19 @@ whole HR loss was the merge — confirmed by switching the column detector off:
 | clean | D52 | 0.936 | 1.49 (88 %) | 6.7° (93 %) | 12.2 ms | 0.78 | 51 % |
 | clean | ungated merge + tighter snap | 0.936 | 1.23 (92 %) | 6.4° (94 %) | 13.0 ms | 0.79 | 52 % |
 | clean | **final** | 0.936 | **1.11 (94 %)** | 6.4° (94 %) | 12.9 ms | 0.79 | 52 % |
+| clean | + texture de-warp (D64) | 0.935 | 1.12 (94 %) | 6.4° (94 %) | 13.0 ms | 0.81 | 55 % |
 | scan (1°, blur, JPEG 60) | D52 | 0.922 | 1.77 (88 %) | 7.3° (93 %) | 12.6 ms | 0.66 | 30 % |
 | scan | ungated merge + tighter snap | 0.922 | 1.09 (93 %) | 7.8° (92 %) | 13.0 ms | 0.66 | 31 % |
 | scan | **final** | 0.922 | **1.05 (94 %)** | 7.6° (92 %) | 12.9 ms | 0.67 | 32 % |
+| scan | + texture de-warp (D64) | 0.915 | 1.13 (94 %) | 7.7° (92 %) | 13.1 ms | 0.67 | 35 % |
 | photo 2 % (vignette 0.4, texture, JPEG 45, 1.5°) | D52 | 0.654 | 6.15 (52 %) | 14.2° (80 %) | 24.9 ms | 0.46 | 10 % |
 | photo 2 % | ungated merge + tighter snap | 0.603 | 8.43 (39 %) | 11.7° (79 %) | 24.7 ms | 0.41 | 7 % |
 | photo 2 % | **final** | 0.654 | **5.73 (60 %)** | 13.8° (82 %) | 24.5 ms | 0.46 | 11 % |
+| photo 2 % | **+ texture de-warp (D64)** | **0.800** | **4.27 (70 %)** | **10.0° (87 %)** | 27.4 ms | **0.60** | **32 %** |
 | photo 3.5 % (vignette 0.6, texture, salt, JPEG 40, −2.5°) | D52 | 0.235 (6 failures) | 8.48 (35 %) | 26.2° (60 %) | 32.6 ms | 0.37 | 7 % |
 | photo 3.5 % | ungated merge + tighter snap | 0.244 (6) | 11.2 (22 %) | 26.6° (62 %) | 33.4 ms | 0.36 | 7 % |
 | photo 3.5 % | **final** | 0.235 (6) | **7.69 (38 %)** | 24.0° (65 %) | 30.9 ms | 0.39 | 12 % |
+| photo 3.5 % | **+ texture de-warp (D64)** | **0.515 (5)** | **6.12 (66 %)** | 22.0° (66 %) | 27.7 ms | **0.45** | 15 % |
 
 The final state is better than or equal to D52 on heart rate, finding overlap
 and identical sets on every degradation, with the trace itself unchanged (r is a
