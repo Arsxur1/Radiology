@@ -514,6 +514,79 @@ Full-pipeline results: PTB-XL LVH 0.35 / 0.97 → **0.48 / 0.93**; 664 LVH 0.90 
 → 0.84 / 0.87 (Cornell adds little there and the BBB gate removes a few true
 positives); PTB-XL children 0 / 5 → 1 / 5 at specificity 1.00.
 
+### STEMI alert against ST-elevation labels — GE 12SL "STEMI" on PTB-XL+ and CPSC-2018 (open item 1, D50)
+
+PTBDB gave only a proxy (days from infarction, D38). Two label sets closer to the
+alert's own definition are reachable: the GE 12SL **STEMI** statement on PTB-XL+
+(178 records in PTB-XL; the 141 not in the balanced sample were fetched, 148
+records 12SL calls normal serve as controls) and the physician label **ST
+elevation** of CPSC-2018 (220 records from the 2020 challenge training set, with
+300 ST-depression and 300 sinus-rhythm records as controls;
+`fetch_challenge.py`). Neither is a clinical STEMI adjudication — 12SL applies its
+own criteria, CPSC's "STE" is a 12-lead reading — but both are ST-elevation
+labels, not dates.
+
+| Set | alert sens | false alerts | `st_elevation_any` |
+|---|:-:|:-:|:-:|
+| 12SL STEMI, 178 — before | 0.34 | 0 / 148 normal | 0.75 |
+| 12SL STEMI — **after D50** | **0.40** | 0 / 148 | 0.76 |
+| CPSC-2018 STE, 220 — before | 0.33 | spec 0.993 (STD + NSR, 600) | 0.80 |
+| CPSC-2018 STE — **after D50** | **0.36** | spec 0.990 | 0.80 |
+
+What the 12SL misses showed (118 before): 42 of the 178 STEMI records carried our
+`lbbb` call while 12SL calls none of them LBBB — our QRS read 118–128 ms where
+12SL reads 98–112 (the ST take-off merges with the QRS end and the envelope
+offset lands late), and "wide + V1 terminal negative" (a normal rS is terminal
+negative) made it LBBB, whose discordant-ST context silenced the elevation on 37
+misses. True CLBBB on PTB-XL is 143–179 ms wide (p10–p90) with an intrinsicoid
+deflection of 54–102 ms in V5/V6, so LBBB now needs QRS ≥ 135 ms (120 in
+children) or ≥ the block threshold with intrinsicoid ≥ 60 ms; otherwise the QRS is
+`wide_qrs_nonspecific`, which is not an elevation-mimic context. On the data this
+keeps 72/72 called CLBBB and frees 22/42 STEMI records. Cost and benefit on the
+other sets (before → after, sens / spec):
+
+| | PTB-XL lbbb (85) | 664 lbbb (83) | PTB-XL st_elevation spec (STE_ gold) | 664 st_elevation | PTBDB day 0–1 alert / controls |
+|---|:-:|:-:|:-:|:-:|:-:|
+| before | 0.85 / 0.87 | 0.77 / 0.94 | 0.974 | 0.41 / 0.985 | 0.23 (14/61) / 3 of 80 |
+| after D50 | 0.84 / **0.94** | 0.70 / 0.97 | 0.966 | 0.41 / 0.979 | 0.23 (14/61) / 3 of 80 (unchanged; territory 13/14) |
+
+LBBB specificity on PTB-XL rises by 7 points (≈ 110 fewer false LBBB) at 1–7
+points of LBBB sensitivity; the alert gains 6 points on the 12SL set with no new
+false alert among its normals and loses 0.6–0.8 points of specificity on the
+broader PTB-XL / 664 negatives. The remaining 106 misses: sub-threshold J
+elevation (median 148 µV at the maximal lead), 26 % under an LVH call (the
+strain-discordance context), 16 % still LBBB — the next layer is the LVH context,
+already at the edge of the false-alert budget.
+
+### WPW by delta wave (open item 4, D51)
+
+PTB-XL, 79 WPW records: the classic rule (PR < 120 **and** QRS > 110) found 0.35.
+The misses have PR 109 / 131 / 176 ms (p10 / median / p90; Glasgow reads
+98 / 122 / 142) and QRS 88 / 106 / 147 — only 15 of 51 have a short PR, 21 a wide
+QRS, none both; Glasgow's per-lead delta-wave confidence is ≥ 50 % on 71 % of
+the WPW records and 12SL calls WPW on 52 %. A delta-wave descriptor was added:
+per lead, the time from the QRS onset until the smoothed slope first reaches
+half of the beat's maximal QRS slope (a slurred pre-excited upstroke is slow for
+a long stretch), median over beats and then over leads. On PTB-XL it reads
+54 ms (p10–p90 26–88) on WPW and 24 ms (18–35) otherwise. Rule sweep on 1688
+records (1609 non-WPW), the classic rule OR delta ≥ T with PR ≤ P and QRS ≥ Q:
+
+| rule | sens | spec | false |
+|---|:-:|:-:|--:|
+| classic only | 0.35 | 0.984 | 26 |
+| **delta ≥ 45, PR ≤ 140, QRS ≥ 90** (chosen) | **0.51** | 0.981 | 31 |
+| delta ≥ 40, PR ≤ 140, QRS ≥ 90 | 0.56 | 0.978 | 35 |
+| delta ≥ 35, PR ≤ 140 | 0.57 | 0.973 | 43 |
+
+An RSR' in V1 with a wide QRS keeps the RBBB reading. Validation: PTB-XL
+0.35 → **0.51 / 0.98**; 664 (3 WPW) 0 / 3 at spec 0.973; CPSC (no WPW label)
+spec 0.993; pediatric cohort (1591 children, 6 WPW) 0 / 6 → **2 / 6** at spec 1.000.
+The four missed children: one is a near miss (PR 108, delta 42 ms — 3 ms under
+the threshold), one has delta 68 ms but PR 164 ms and reads as LBBB (QRS 114),
+two have PR 159–188 ms with delta 27 and 2 ms (no pre-excitation visible on this
+tracing — intermittent conduction or a chart label). Lowering the delta
+threshold would cost adult specificity (table above) and recovers one child.
+
 ### LVH and ST depression against a second algorithm — GE 12SL on PTB-XL+ (open item 6)
 
 The question was whether LVH 0.48 and ST depression 0.28 on PTB-XL are our
