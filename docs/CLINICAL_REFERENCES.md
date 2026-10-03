@@ -1295,7 +1295,12 @@ Twenty clean pages, page / record (6 px/mm):
 What remains is the render resolution: a narrow low complex (an S of −2 mm
 lasting 20 ms) is one column at 6 px/mm and loses up to half its depth after
 resampling and the band-pass; the 150-Hz-equivalent page, not the tracker, is
-the limit there. The remaining AF pages were already at the gate on the digital
+the limit there. Checked (improvement 3): replacing the polyphase resampler by
+linear interpolation for pages (which keeps every column's value exactly) does
+not change the per-lead peak-to-peak ratio at all (0.968 either way on the same
+20 pages) — the loss is already in the trace read from the ink, not in the
+150 → 500 Hz step — so the resampler stays as it is; at 12 px/mm (≈ 300 dpi)
+the ratio is 0.974 and r 0.969, which is where real scans sit. The remaining AF pages were already at the gate on the digital
 record (RR CV 0.17–0.24 with a P/R ratio that the page moves from 0.5 to 0.3).
 **100 clean pages, re-run with all of D52** (same records and script as the D47
 code comparison): finding sets identical on **36 → 51** of 100 pages; QRS bias
