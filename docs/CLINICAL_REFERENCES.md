@@ -1169,6 +1169,49 @@ still separates a page from its record on the remaining 69 % of clean pages is
 rhythm semantics at the margins (a P/R ratio at the AF gate, one dropped R peak)
 and QRS width on wide-complex records; real photographs remain unmeasured.
 
+### Pages: amplitude under-read and the AF gate (open item 3, D52)
+
+After D47 the code disagreements on the 100 clean pages were dominated by
+voltage, not width: `low_qrs_voltage` appeared on 19 pages, `lvh` was lost on 7,
+and AF appeared on 6. Twenty pages checked column by column, plus the synthetic
+page, gave three independent causes; none needed a threshold.
+
+1. **Adjacent apex columns demoted each other.** A spike tip two columns wide
+   is two adjacent apexes (each the middle of its own three-column plateau);
+   each marked the other as a flank, and the flank rule overwrote both with the
+   raw-run midpoint. A 26-px R on the synthetic page read as 17 px (lead III
+   514 → 328 µV). Apex columns are now excluded from the flank pass.
+2. **The P/T oversense gate compared beats measured on different lead sets.**
+   On a 3×4 page each time column carries four leads and the other eight are
+   zero; the spatial-velocity envelope of a beat under aVR/aVL/aVF is a
+   fraction of one under V1–V3, so a whole column of true beats was rejected
+   against the record-wide 90th percentile — HR fell by a quarter, RR
+   variability tripled, false AF (3 of the 6 AF pages). Beats are now grouped by
+   the leads valid at their time and judged within the group.
+3. **The limb amplitude was a pooled median over (lead, beat) pairs.** On a
+   page lead II contributes ten beats and I/III two each, so the "limb"
+   amplitude was the lead-II amplitude (one page read 881 → 225 µV with the
+   waveform itself at 0.83 of the record). It is now the median of per-lead
+   medians; on digital records the change is within a point (PTB-XL
+   `low_qrs_voltage` 0.74 / 0.91 → 0.73 / 0.91, 664 0.72 / 0.86 → 0.73 / 0.86).
+
+Twenty clean pages, page / record (6 px/mm):
+
+| | limb amplitude ratio, median (p10) | per-lead peak-to-peak ratio | QRS bias | mean r | codes Jaccard | `low_qrs_voltage` added | `lvh` lost |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| D47 | 0.87 (0.67) | 0.92 | +13.5 ms | 0.930 | 0.75 | 3 | 2 |
+| + gate per lead set, balanced limb amplitude | 0.83 (0.68) | 0.92 | +15.1 ms | 0.930 | 0.78 | 1 | 2 |
+| + apex fix (D52) | **0.91 (0.80)** | **0.97** | **+9.7 ms** | 0.932 | 0.78 | 1 | 2 |
+| relaxed apex condition (no outer ±3 px margin), rejected | 0.86 (0.67) | 0.93 | +19.5 ms | 0.928 | 0.76 | 3 | 2 |
+
+What remains is the render resolution: a narrow low complex (an S of −2 mm
+lasting 20 ms) is one column at 6 px/mm and loses up to half its depth after
+resampling and the band-pass; the 150-Hz-equivalent page, not the tracker, is
+the limit there. The remaining AF pages were already at the gate on the digital
+record (RR CV 0.17–0.24 with a P/R ratio that the page moves from 0.5 to 0.3).
+The 100-page re-evaluation follows below once it has run.
+
+
 ### Paper-page digitisation benchmark (item 5d)
 
 Synthetic 12-lead pages (3×4 layout + lead-II rhythm strip, 6 px/mm, 25 mm/s,
