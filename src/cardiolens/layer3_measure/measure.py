@@ -583,10 +583,14 @@ def _measure_st(
         slope = np.abs(np.convolve(np.diff(row, prepend=row[0]), np.ones(max(1, int(0.005 * fs))) / max(1, int(0.005 * fs)), mode="same"))
         mk = _lead_mask(sig, lead, rpeaks, fs)
         lead_pairs = [(on, j) for on, j, i in all_pairs if mk[i]] or pairs
-        j_vals, j60_vals, j80_vals = [], [], []
+        j_vals, j60_vals, j80_vals, s_vals, r_vals = [], [], [], [], []
         for on, j in lead_pairs:
             lo, hi = max(0, on - b_lo), max(1, on - b_hi)
             baseline = float(np.median(row[lo:hi])) if hi > lo else float(row[max(0, on - 1)])
+            if j > on:
+                q = row[on:min(len(row), j + 1)]
+                s_vals.append(baseline - float(np.min(q)))
+                r_vals.append(float(np.max(q)) - baseline)
             if j_win > 0 and j + j_win < len(row) and j > on:
                 qrs_slope = float(np.max(slope[on:j + 1]))
                 flat = np.flatnonzero(slope[j:j + j_win] <= J_REFINE_SLOPE_FRACTION * qrs_slope)
@@ -604,6 +608,8 @@ def _measure_st(
                 j60_uv=round(float(np.median(j60_vals)), 1) if j60_vals else None,
                 j80_uv=round(float(np.median(j80_vals)), 1) if j80_vals else None,
                 qrs_net_uv=round(_qrs_amplitude(row, rpeaks[mk] if mk.any() else rpeaks, fs), 1),
+                s_depth_uv=round(float(np.median(s_vals)), 1) if s_vals else None,
+                r_height_uv=round(float(np.median(r_vals)), 1) if r_vals else None,
             )
         )
     m.morphology.st = st_list

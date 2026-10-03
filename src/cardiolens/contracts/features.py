@@ -40,6 +40,8 @@ class STMeasurement(BaseModel):
     j60_uv: float | None = None
     j80_uv: float | None = None
     qrs_net_uv: float | None = None   # signed net QRS deflection (concordance checks)
+    s_depth_uv: float | None = None   # depth of the S wave below the PR baseline (proportional ST rules)
+    r_height_uv: float | None = None  # height of the R wave above the PR baseline
 
 
 class Voltages(BaseModel):
