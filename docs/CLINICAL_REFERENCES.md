@@ -1219,8 +1219,11 @@ AF pages: three records are at the AF gate on the digital record itself (RR CV
 0.17–0.24 with a P/R ratio the page lowers from 0.5 to 0.3), two lose several
 beats to the rhythm-strip detector (a near-isoelectric lead II of 0.2 mV with a
 20-ms S, and an LBBB record whose P waves are taken for R) — the one-beat case
-(RR CV 0.07 → 0.28) is healed by the regularity guard. The degraded-page
-table follows once the degraded-page run completes.
+(RR CV 0.07 → 0.28) is healed by the regularity guard — an isolated RR of
+1.8–2.2 medians counts as two intervals for the regularity statistic when such
+intervals are at most a quarter of the series; its cost on digital records is one
+PTB-XL AF record (0.545 / 0.969 → 0.537 / 0.969; 664 AF 0.80 / 0.728 → 0.80 /
+0.733). The degraded-page table follows once the degraded-page run completes.
 
 
 
