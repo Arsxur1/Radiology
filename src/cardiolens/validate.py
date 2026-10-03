@@ -34,10 +34,23 @@ def main() -> None:
     ap.add_argument("--ecg-arrhythmia",
                     help="path to a local PhysioNet ecg-arrhythmia (Chapman/Ningbo) checkout")
     ap.add_argument("--mimic", help="path to a local MIMIC-IV-ECG subset (fetch_mimic): gold = cart statements")
+    ap.add_argument("--ecg-images",
+                    help="folder of ECG photographs paired with their WFDB records: digitise and compare")
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--age-min", type=float, help="keep patients at least this old (years)")
     ap.add_argument("--age-max", type=float, help="keep patients at most this old (years)")
     args = ap.parse_args()
+
+    if args.ecg_images:
+        from cardiolens.validation.ecg_images import evaluate_images
+
+        report = evaluate_images(args.ecg_images, limit=args.limit)
+        print(f"=== CardioLens digitisation on photographs — {args.ecg_images} ===")
+        for line in report.lines():
+            print(line)
+        print("\nJSON:")
+        print(json.dumps(report.summary(), ensure_ascii=False, indent=2))
+        return
 
     if args.ptbxl:
         cases = build_ptbxl_dataset(args.ptbxl, limit=args.limit)
