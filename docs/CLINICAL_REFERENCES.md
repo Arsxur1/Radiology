@@ -1407,12 +1407,21 @@ record, RR CV at the record's value). 100 clean pages, D52 → D55:
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | D52 | 51 % | 0.78 | 1.49 (88 %) | 5 | 5 | +6.0 / +4.0 ms | 6 |
 | D55, beats on the column apex | 50 % | — | 1.24 (94 %) | 3 | 1 | +7.7 / +5.5 ms | 9 |
-| D55, beats on the rhythm lead's R (final) | numbers follow once the run completes |
+| **D55 final** (merge with the single-lead list, strong-envelope additions, boundary beats judged on the strip) | **52 %** | see the degraded table | **1.23 (92 %)** | **2** | **2** | +7.1 / +4.0 ms | 6 |
 
-The three remaining AF pages are at the AF gate on the digital record itself
-(RR CV 0.17–0.24). Snapping every beat to the column apex shifted the R
-reference by up to 30 ms against the rhythm lead and widened QRS/QT, hence the
-final placement on the rhythm lead's own R whenever it carries a clear complex.
+The two remaining AF pages are at the AF gate on the digital record itself
+(RR CV 0.17–0.24). Three design turns were measured on the way: snapping every
+beat to the column apex shifted the R reference by up to 30 ms against the
+rhythm lead and widened QRS/QT; replacing the single-lead list outright added
+tall T waves of slow rhythms as beats (HR 103 → 117 on one page); and judging
+boundary beats by the columns dropped a beat sitting exactly on a column edge.
+The final form merges: a single-lead beat confirmed by a column beat within
+100 ms keeps its position, an unconfirmed one goes, a column beat without a
+partner is added only at ≥ 0.6 of the column reference, and a beat on a column
+boundary or page edge is judged on the rhythm strip's own slope. The two pages
+that stopped matching are a wide-QRS bradycardia whose *digital* reference
+dropped every other beat (46 vs 66 bpm; the page is right) and one page with
+one extra beat.
 
 **D57.** A stage-by-stage diagnostic on two records × six degradations × three
 seeds showed where the strong photo fails: with a rotation of −2.5° and/or a
