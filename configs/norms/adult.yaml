@@ -89,6 +89,16 @@ st_uv:
   # same specificity (0.80 / 0.82) — see D37.
   any_elevation_uv: 100
   any_elevation_discordant_uv: 200
+  # Proportional (Smith-modified Sgarbossa / Armstrong) rescue of DISCORDANT
+  # elevation under LBBB / LVH / pre-excitation for the STEMI-grade alert: a lead
+  # whose J-point elevation is at least proportional_discordant_ratio of its own
+  # S-wave depth (and >= proportional_discordant_min_uv with the usual J+60
+  # plateau) counts as primary elevation. On PTB-XL+ 12SL-STEMI under an
+  # LVH/LBBB context it rescues 10 of 45 misses at 0 false alerts on 148 normals
+  # (3 plain-LBBB false fires among 352 context records); CPSC 9 of 37 at 0 false;
+  # PTBDB 1 of 6 (D54).
+  proportional_discordant_ratio: 0.25
+  proportional_discordant_min_uv: 100
   depression_significant: 100
   depression_upsloping_uv: 50
 

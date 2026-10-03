@@ -338,19 +338,21 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
         ))
 
 
-def _territorial_st_elevation(elevated, depressed, elev, fs: FindingSet) -> None:
+def _territorial_st_elevation(elevated, depressed, elev, fs: FindingSet, proportional=()) -> None:
     """Focal (single-territory) ST elevation → STEMI with reciprocal check (§8.1)."""
     terr = _territory_of(set(elevated))
     if terr:
         ru, uz, recip = terr
         recip_present = sorted(recip & set(depressed))
         recip_txt = f"; реципрокная депрессия в {', '.join(recip_present)}" if recip_present else ""
+        ev = _ev(leads=",".join(elevated), territory=ru, reciprocal=",".join(recip_present) or "none")
+        if proportional:
+            ev += _ev(discordant_proportional=",".join(proportional))
         fs.findings.append(Finding(
             code="st_elevation", group="ischemia",
             label_ru=f"Элевация ST, {ru} территория ({', '.join(elevated)}){recip_txt}",
             label_uz=f"ST elevatsiyasi, {uz} hudud ({', '.join(elevated)})",
-            evidence=_ev(leads=",".join(elevated), territory=ru,
-                         reciprocal=",".join(recip_present) or "none"), confidence=0.8,
+            evidence=ev, confidence=0.8,
         ))
     else:
         # Elevation without two contiguous leads of one territory is not a STEMI
@@ -548,6 +550,11 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
     # counts only when it is large (Sgarbossa-like), see D37.
     any_thr = float(thr.get("any_elevation_uv", thr["elevation_significant"]))
     any_disc_thr = float(thr.get("any_elevation_discordant_uv", 2 * any_thr))
+    # Proportional rescue of discordant elevation (Smith-modified Sgarbossa /
+    # Armstrong, D54): J >= prop_ratio x the lead's own S depth and >= prop_min_uv.
+    prop_ratio = thr.get("proportional_discordant_ratio")
+    prop_min = float(thr.get("proportional_discordant_min_uv", thr["elevation_significant"]))
+    proportional: list[str] = []
     # With a bundle branch block, pre-excitation or LVH the expected repolarisation
     # is discordant to the QRS; only concordant deviations count as primary.
     secondary_ctx = bool(fs.codes() & _SECONDARY_ST_CONTEXT)
@@ -579,13 +586,22 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
             continue
         ctx = elevation_mimic_ctx if dev > 0 else secondary_ctx
         if ctx and st.qrs_net_uv is not None and (st.qrs_net_uv > 0) != (dev > 0):
-            discordant.append(st.lead)
             # Discordant ELEVATION is the expected repolarisation of a BBB/LVH and
-            # must not raise a STEMI alert. Discordant DEPRESSION is still ST
-            # depression (strain pattern) — reported, and explained by the
-            # LVH-strain / BBB causal chains rather than as primary ischemia.
+            # must not raise a STEMI alert — unless it is out of proportion to the
+            # S wave it follows (>= prop_ratio of the S depth): that is primary
+            # elevation on top of the block / hypertrophy (D54). Discordant
+            # DEPRESSION is still ST depression (strain pattern) — reported, and
+            # explained by the LVH-strain / BBB causal chains.
             if dev > 0:
-                continue
+                s_depth = st.s_depth_uv
+                if (prop_ratio is not None and s_depth and s_depth > 0 and j is not None
+                        and j >= prop_min and j / s_depth >= float(prop_ratio)):
+                    proportional.append(st.lead)
+                else:
+                    discordant.append(st.lead)
+                    continue
+            else:
+                discordant.append(st.lead)
         (elevated if dev > 0 else depressed).append(st.lead)
 
     if len(elevated) >= 2:
@@ -602,7 +618,8 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
                              reciprocal="none"), confidence=0.6,
             ))
         else:
-            _territorial_st_elevation(elevated, depressed, thr.get("elevation_significant"), fs)
+            _territorial_st_elevation(elevated, depressed, thr.get("elevation_significant"), fs,
+                                      proportional=sorted(set(proportional) & set(elevated)))
     if len(depressed) >= 2:
         disc = sorted(set(depressed) & set(discordant))
         fs.findings.append(Finding(
