@@ -823,6 +823,41 @@ correctly. The norm-table entries were changed only where the cohort's own
 percentiles contradicted the table, and each entry is a documented number in
 `configs/norms/pediatric.yaml`.
 
+### Pediatric QRS-axis normal range by age band (D53)
+
+The cohort's 35 children aged 4–15 labelled "right axis deviation" scored 0/35
+by construction: the pediatric table carried one axis range, −30…180°, for every
+age (set for infants, where a rightward axis is physiological). Our measured
+axis on those children is 88–176° (median 110° at 4–8 y, 97° at 9–15 y) — the
+axis itself agrees with GE 12SL to 4.7° (D49) — so the limit, not the
+measurement, was the miss.
+
+Diagnosis on the cohort (1586 children with an axis, halves by name hash; the
+PTB-XL 64 children have 2 RAD labels, both at 91–94°):
+
+| band | n | RAD gold | axis p2 / p50 / p98, non-RAD | RAD | upper limit | sens half 0 / half 1 | spec half 0 / half 1 |
+|---|--:|--:|:-:|:-:|:-:|:-:|:-:|
+| 4–8 y | 977 | 22 | −21 / 72 / 117° | −64 / 110 / 176° | 90° | 7/7 / 13/15 | 0.844 / 0.834 |
+| | | | | | 100° | 5/7 / 12/15 | 0.919 / 0.933 |
+| | | | | | **105°** | 5/7 / 10/15 | **0.940 / 0.962** |
+| | | | | | 110° | 4/7 / 9/15 | 0.958 / 0.973 |
+| 9–15 y | 670 | 15 | −31 / 72 / 117° | −72 / 97 / 174° | 90° | 6/7 / 8/8 | 0.890 / 0.847 |
+| | | | | | 100° | 3/7 / 3/8 | 0.951 / 0.939 |
+| | | | | | **105°** | 3/7 / 3/8 | **0.966 / 0.960** |
+| | | | | | 110° | 1/7 / 3/8 | 0.979 / 0.966 |
+
+The chosen limits are the reference tables' 98th percentiles (Davignon,
+Rijnbeek), rounded to 5°: ≤ 30 d 190°, < 1 y 125°, 1–3 y 115°, 3–15 y 105°; no
+age keeps the wide range. 90° would reproduce the label (0.87–1.0) but flag
+11–17 % of children — the label uses the adult +90° criterion, which is not a
+pediatric norm. At 105°: 4–8 y **15/22 at spec 0.951**, 9–15 y **6/15 at spec
+0.963**; the misses are at 88–101° or are northwest axes (`extreme_axis`). The
+cohort's own 98th percentile of the measured axis among unlabelled children is
+117° in both bands, above the reference 105° — label noise in the negatives or a
+cohort effect; the published value is kept. The electrode-reversal gate uses the
+same band range. Validation by band and on PTB-XL (adults untouched) follows once the runs complete.
+
+
 ### Calibration of the AF gates — train/test halves (item 2)
 
 The AF rule fires on `rr_cv >= rhythm.af_rr_cv_min` and `p_wave_ratio <=
