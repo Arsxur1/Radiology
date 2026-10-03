@@ -74,7 +74,10 @@ def _pick_rhythm_lead(sig: SignalRepresentation) -> int:
     return 0
 
 
-def _reject_non_qrs_detections(signal: np.ndarray, rpeaks: np.ndarray, fs: float) -> np.ndarray:
+def _reject_non_qrs_detections(
+    signal: np.ndarray, rpeaks: np.ndarray, fs: float,
+    windows: dict[str, tuple[float, float]] | None = None, lead_names: list[str] | None = None,
+) -> np.ndarray:
     """Drop peak detections that are a P or T wave, not a QRS.
 
     At slow rates or after long pauses the adaptive peak detector accepts a tall
@@ -84,16 +87,39 @@ def _reject_non_qrs_detections(signal: np.ndarray, rpeaks: np.ndarray, fs: float
     >= 0.7 of the record's reference on every true QRS and at <= 0.11 on P/T waves
     (PTB-XL and synthetic checks). A detection below OVERSENSE_ENV_FRACTION of the
     90th-percentile envelope peak is discarded.
+
+    On a digitised 3x4 page each column carries a different set of leads (the
+    other channels are zero there), so the envelope of a beat under aVR/aVL/aVF
+    is a fraction of one under V1–V3 and a whole column of true beats would be
+    rejected against a reference set by the chest leads (D52). With lead windows
+    given, beats are grouped by the leads valid at their time, the envelope is
+    built from those leads only and the reference is taken within the group; a
+    group too small for a percentile (< 3 beats) keeps all its beats.
     """
     if len(rpeaks) < 3:
         return rpeaks
-    env = spatial_velocity(signal, fs)
     w = int(0.03 * fs)
-    peaks = np.array([float(env[max(0, int(r) - w):int(r) + w].max()) for r in rpeaks])
-    ref = float(np.percentile(peaks, 90))
-    if ref <= 0:
-        return rpeaks
-    return rpeaks[peaks >= OVERSENSE_ENV_FRACTION * ref]
+    names = lead_names or []
+    valid_sets: list[tuple[int, ...]] = []
+    for r in rpeaks:
+        t = float(r) / fs
+        if windows and names:
+            rows = tuple(i for i, ln in enumerate(names) if ln not in windows or windows[ln][0] <= t <= windows[ln][1])
+        else:
+            rows = tuple(range(signal.shape[0]))
+        valid_sets.append(rows)
+    keep = np.ones(len(rpeaks), dtype=bool)
+    for rows in set(valid_sets):
+        members = np.flatnonzero([vs == rows for vs in valid_sets])
+        if len(members) < 3 or not rows:
+            continue
+        env = spatial_velocity(signal[list(rows)], fs)
+        peaks = np.array([float(env[max(0, int(rpeaks[i]) - w):int(rpeaks[i]) + w].max()) for i in members])
+        ref = float(np.percentile(peaks, 90))
+        if ref <= 0:
+            continue
+        keep[members] = peaks >= OVERSENSE_ENV_FRACTION * ref
+    return rpeaks[keep]
 
 
 def _lead_off(sig: SignalRepresentation, lead: str) -> bool:
@@ -165,7 +191,8 @@ def measure(sig: SignalRepresentation) -> Measurements:
     except Exception:
         rpeaks = np.array([], dtype=int)
 
-    rpeaks = _reject_non_qrs_detections(sig.signal, rpeaks, fs)
+    rpeaks = _reject_non_qrs_detections(
+        sig.signal, rpeaks, fs, windows=getattr(sig.provenance, "lead_windows", None), lead_names=sig.lead_names)
     m.r_peaks_samples = rpeaks.tolist()
     m.n_beats = len(rpeaks)
 
@@ -460,19 +487,28 @@ def _p_amplitude(sig: SignalRepresentation, p_on: np.ndarray, p_off: np.ndarray)
 
 
 def _limb_qrs_amplitude(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
-    """Median QRS peak-to-peak across the limb leads I/II/III (µV, TZ §7.5)."""
+    """Median QRS peak-to-peak across the limb leads I/II/III (µV, TZ §7.5).
+
+    Per lead the median over its beats, then the median across leads. A pooled
+    median over all (lead, beat) pairs is dominated by whichever lead has the
+    most beats — on a 3x4 page the rhythm strip carries ten beats and I/III two
+    each, so the "limb" amplitude became the lead-II amplitude (D52).
+    """
     limb = [ln for ln in ("I", "II", "III") if ln in sig.lead_names and not _lead_off(sig, ln)]
     if not limb or len(rpeaks) == 0:
         return None
     win = int(0.05 * fs)
-    amps = []
+    per_lead = []
     for lead in limb:
         row = sig.lead(lead)
+        amps = []
         for r in rpeaks[_lead_mask(sig, lead, rpeaks, fs)]:
             a, b = max(0, r - win), min(len(row), r + win)
             seg = row[a:b]
             amps.append(float(np.max(seg) - np.min(seg)))
-    return round(float(np.median(amps)), 1) if amps else None
+        if amps:
+            per_lead.append(float(np.median(amps)))
+    return round(float(np.median(per_lead)), 1) if per_lead else None
 
 
 def _measure_st(
