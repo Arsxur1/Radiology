@@ -78,8 +78,10 @@ def test_column_beat_detector_finds_beats_the_rhythm_strip_loses():
     fs = sig.sampling_rate_hz
     ii = sig.lead_names.index("II")
     sig.signal[ii] *= 0.12                                # rhythm strip almost flat
-    beats = _page_beats(sig, windows, sig.signal[ii].astype(float), fs)
-    assert beats is not None and len(beats) >= len(true)   # it also finds the first beat nk skips
+    found = _page_beats(sig, windows, sig.signal[ii].astype(float), fs)
+    assert found is not None
+    beats, heights = found
+    assert len(beats) >= len(true) and np.all(heights >= 0.35)
     for r in true:                                          # every record beat within 60 ms of one
         assert np.min(np.abs(beats - r)) <= 0.06 * fs
 

@@ -214,9 +214,11 @@ PAGE_BEAT_EDGE_START_S = 0.30   # no beat without a full P-QRS window before it
 PAGE_BEAT_EDGE_END_S = 0.45     # no beat without a T wave window after it
 PAGE_BEAT_RHYTHM_FRACTION = 0.3 # the rhythm lead's own extreme is used when its deflection is this fraction of the column's
 PAGE_BEAT_MATCH_S = 0.10        # a single-lead beat within this of a column beat is the same beat
+PAGE_BEAT_ADD_FRACTION = 0.6    # a column beat with no single-lead partner is added only above this envelope height
 
 
-def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray, fs: float) -> np.ndarray | None:
+def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray,
+                fs: float) -> tuple[np.ndarray, np.ndarray] | None:
     """Beat times on a 3x4 page from every lead valid at each moment (D55).
 
     The rhythm strip alone drops beats when lead II is near-isoelectric (a 0.2-mV
@@ -255,11 +257,13 @@ def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray
         ref = float(np.percentile(e[pk], 90)) if pk.size >= 3 else float(e.max())
         if ref > 0:
             env[a:b] = e / ref
-    peaks, _ = find_peaks(env, height=PAGE_BEAT_MIN_FRACTION, distance=max(1, int(PAGE_BEAT_MIN_RR_S * fs)))
+    peaks, props = find_peaks(env, height=PAGE_BEAT_MIN_FRACTION, distance=max(1, int(PAGE_BEAT_MIN_RR_S * fs)))
+    heights = props["peak_heights"]
     # The page's first/last columns start on a filter transient, and a beat needs
     # a full P-QRS before it and a T wave after it for the delineation that
     # follows (the single-lead detector skips such edge beats too).
-    peaks = peaks[(peaks >= int(PAGE_BEAT_EDGE_START_S * fs)) & (peaks < n - int(PAGE_BEAT_EDGE_END_S * fs))]
+    inside = (peaks >= int(PAGE_BEAT_EDGE_START_S * fs)) & (peaks < n - int(PAGE_BEAT_EDGE_END_S * fs))
+    peaks, heights = peaks[inside], heights[inside]
     if peaks.size < 2:
         return None
     # The envelope peaks on the steepest slope, not the apex: snap each beat to
@@ -277,8 +281,9 @@ def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray
     # mean per-lead deflection); only a near-flat rhythm lead falls back to the
     # column apex — otherwise the QRS/QT search windows would shift.
     rhythm_base = float(np.median(rhythm_row))
-    snapped = []
-    for p in peaks:
+    snapped, kept_heights = [], []
+    for p, hgt in zip(peaks, heights, strict=True):
+        kept_heights.append(float(hgt))
         key = next(((a, b) for a, b in cols if a <= p < b), None)
         rows, base = col_rows.get(key, ([], None))
         lo, hi = max(0, p - w), min(n, p + w + 1)
@@ -296,7 +301,9 @@ def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray
         else:
             seg = own_pos if own_pos.max() > 0 else own
         snapped.append(lo + int(np.argmax(seg)))
-    return np.unique(np.asarray(snapped, dtype=int))
+    pos = np.asarray(snapped, dtype=int)
+    order = np.argsort(pos)
+    return pos[order], np.asarray(kept_heights)[order]
 
 
 def measure(sig: SignalRepresentation) -> Measurements:
@@ -320,15 +327,33 @@ def measure(sig: SignalRepresentation) -> Measurements:
         # The single-lead detector both drops beats (small complexes lost to the
         # page) and adds P/T waves on the strip; the column detector sees four
         # leads at every moment and replaces it whenever it finds a rhythm.
-        page = _page_beats(sig, page_windows, cleaned, fs)
-        if page is not None and len(page) >= 3:
+        found = _page_beats(sig, page_windows, cleaned, fs)
+        if found is not None and len(found[0]) >= 3:
+            page, heights = found
             # Merge, do not replace: a single-lead beat confirmed by the column
             # detector keeps its own position (the R the delineation is tuned
             # to); an unconfirmed one is a P/T oversense and goes; a column beat
-            # with no single-lead partner is a missed beat and is added.
+            # with no single-lead partner is a missed beat and is added when its
+            # envelope is unmistakably a QRS (a tall T wave of a slow rhythm
+            # reaches the confirmation level but not this one).
             tol = int(PAGE_BEAT_MATCH_S * fs)
-            kept = [r for r in rpeaks if page.size and np.min(np.abs(page - r)) <= tol]
-            added = [p for p in page if not rpeaks.size or np.min(np.abs(rpeaks - p)) > tol]
+            # A beat on a column boundary or at the page's time edges is clipped
+            # in the panel leads and cannot be judged by the columns: keep it.
+            n_s = sig.signal.shape[1]
+            edges = np.array(sorted({int(round(w[0] * fs)) for w in page_windows.values()} | {0, n_s}))
+            def _unjudgeable(r):
+                return (np.min(np.abs(edges - r)) <= tol or r < int(PAGE_BEAT_EDGE_START_S * fs)
+                        or r >= n_s - int(PAGE_BEAT_EDGE_END_S * fs))
+            confirmed = [r for r in rpeaks if page.size and np.min(np.abs(page - r)) <= tol]
+            # Such a beat is judged on the rhythm strip alone, which runs across
+            # every boundary: its slope must reach half of the confirmed beats'.
+            slope = spatial_velocity(cleaned[None, :], fs)
+            w_s = int(0.03 * fs)
+            s_at = lambda r: float(slope[max(0, int(r) - w_s):int(r) + w_s].max())
+            s_ref = float(np.median([s_at(r) for r in confirmed])) if confirmed else 0.0
+            kept = [r for r in rpeaks if (r in confirmed) or (_unjudgeable(r) and s_at(r) >= 0.5 * s_ref)]
+            added = [p for p, hgt in zip(page, heights, strict=True)
+                     if hgt >= PAGE_BEAT_ADD_FRACTION and (not rpeaks.size or np.min(np.abs(rpeaks - p)) > tol)]
             merged = np.unique(np.asarray(kept + added, dtype=int))
             if len(merged) >= 3:
                 n_add, n_drop = len(added), len(rpeaks) - len(kept)
