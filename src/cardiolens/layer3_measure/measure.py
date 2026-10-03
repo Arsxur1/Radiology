@@ -216,6 +216,39 @@ PAGE_BEAT_RHYTHM_FRACTION = 0.3 # the rhythm lead's own extreme is used when its
 PAGE_BEAT_MATCH_S = 0.10        # a single-lead beat within this of a column beat is the same beat
 PAGE_BEAT_ADD_FRACTION = 0.6    # a column beat with no single-lead partner is added only above this envelope height
 PAGE_BEAT_MIN_AGREEMENT = 0.6   # the columns are trusted when they confirm this share of the judgeable single-lead beats, or when their list is the more regular one
+PAGE_BEAT_ADD_MIN_RR = 0.6      # an added beat needs this fraction of the confirmed median RR to each neighbour (room for a missed beat)
+PAGE_BEAT_DROP_MAX_GAP = 1.6    # dropping a beat may not open a gap longer than this × the confirmed median RR (a true beat the columns missed)
+
+
+def _fit_page_edits_to_rhythm(confirmed: list, kept: list, added: list, rpeaks: np.ndarray) -> tuple[list, list]:
+    """Keep only the column-detector edits that fit the rhythm the confirmed beats
+    define (D55). An added beat needs room for itself — PAGE_BEAT_ADD_MIN_RR of
+    the confirmed median RR to each kept neighbour; dropping a single-lead beat may
+    not open a gap longer than PAGE_BEAT_DROP_MAX_GAP median RRs, because no rhythm
+    has such a gap and the columns simply missed a true beat there. Fewer than
+    three confirmed beats define no rhythm: the edits pass unchanged."""
+    if len(confirmed) < 3:
+        return kept, added
+    med_rr = float(np.median(np.diff(np.sort(np.asarray(confirmed, dtype=float)))))
+    base = np.sort(np.asarray(kept, dtype=int))
+
+    def _neighbours(x, arr):
+        left, right = arr[arr < x], arr[arr > x]
+        return (left[-1] if left.size else None), (right[0] if right.size else None)
+
+    def _has_room(p):
+        left, right = _neighbours(p, base)
+        return ((left is None or p - left >= PAGE_BEAT_ADD_MIN_RR * med_rr)
+                and (right is None or right - p >= PAGE_BEAT_ADD_MIN_RR * med_rr))
+
+    added = [p for p in added if _has_room(p)]
+    kept = list(kept)
+    for r in sorted(set(np.asarray(rpeaks).tolist()) - set(kept)):
+        left, right = _neighbours(r, base)
+        if left is not None and right is not None and right - left > PAGE_BEAT_DROP_MAX_GAP * med_rr:
+            kept.append(r)
+            base = np.sort(np.append(base, r))
+    return kept, added
 
 
 def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray,
@@ -355,6 +388,13 @@ def measure(sig: SignalRepresentation) -> Measurements:
             kept = [r for r in rpeaks if (r in confirmed) or (_unjudgeable(r) and s_at(r) >= 0.5 * s_ref)]
             added = [p for p, hgt in zip(page, heights, strict=True)
                      if hgt >= PAGE_BEAT_ADD_FRACTION and (not rpeaks.size or np.min(np.abs(rpeaks - p)) > tol)]
+            # Both edits must fit the rhythm the confirmed beats define. On a
+            # badly extracted photo the column envelopes peak on noise and the
+            # merge added a third of the beats inside normal RR intervals (HR
+            # 69 -> 95 on a page read at r 0.77) or dropped true beats the
+            # columns failed to confirm (HR 100 -> 79). A missed beat has room
+            # for itself; dropping a true beat opens a gap no rhythm has.
+            kept, added = _fit_page_edits_to_rhythm(confirmed, kept, added, rpeaks)
             # On a badly extracted page (a strong photo) the column envelopes are
             # noise and would re-write a sound single-lead list: the columns are
             # trusted only when they confirm most of the judgeable single-lead beats.

@@ -91,3 +91,28 @@ def test_column_beat_detector_is_silent_without_windows():
 
     sig = generate_synthetic_ecg(heart_rate_bpm=72)
     assert _page_beats(sig, {}, sig.lead("II").astype(float), sig.sampling_rate_hz) is None
+
+
+def test_page_edits_must_fit_the_rhythm():
+    """D55 on photos: column beats inside normal RR intervals are noise and are
+    not added; a single-lead beat whose removal would open a two-RR gap is a true
+    beat the columns missed and stays."""
+    from cardiolens.layer3_measure.measure import _fit_page_edits_to_rhythm
+
+    true = np.arange(300, 5000, 400).tolist()             # a regular rhythm, RR 400 samples
+    missed = 3500                                         # the strip missed this beat; the columns found it
+    unconfirmed = 2300                                    # the strip found this one; the columns did not
+    confirmed = [r for r in true if r not in (missed, unconfirmed)]
+    kept = list(confirmed)
+    rpeaks = np.array(sorted(kept + [unconfirmed]))
+    noise = [1000, 1850, 4150]                            # column peaks inside normal RR intervals
+    kept2, added2 = _fit_page_edits_to_rhythm(confirmed, kept, noise + [missed], rpeaks)
+    assert added2 == [missed]                             # the real gap is filled, the noise is not
+    assert unconfirmed in kept2                           # the drop that would open a 2-RR gap is undone
+
+
+def test_page_edits_pass_when_no_rhythm_is_defined():
+    from cardiolens.layer3_measure.measure import _fit_page_edits_to_rhythm
+
+    kept, added = _fit_page_edits_to_rhythm([100, 500], [100, 500], [300], np.array([100, 500, 900]))
+    assert added == [300] and kept == [100, 500]
