@@ -211,6 +211,7 @@ PAGE_BEAT_MIN_FRACTION = 0.35   # envelope peak, as a fraction of its column's 9
 PAGE_BEAT_MIN_RR_S = 0.24       # refractory distance between beats (250 bpm)
 PAGE_BEAT_SNAP_S = 0.06         # a beat is snapped to the column's summed-deflection apex within this window
 PAGE_BEAT_EDGE_S = 0.10         # no beat is taken this close to the page's time edges
+PAGE_BEAT_RHYTHM_FRACTION = 0.3 # the rhythm lead's own extreme is used when its deflection is this fraction of the column's
 
 
 def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray, fs: float) -> np.ndarray | None:
@@ -266,15 +267,26 @@ def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray
     for a, b in cols:
         rows = [i for i in range(len(sig.lead_names)) if valid[i, a:b].all() and not is_lead_off(sig.signal[i, a:b])]
         col_rows[(a, b)] = (rows, np.median(sig.signal[rows, a:b], axis=1) if rows else None)
+    # Downstream delineation is anchored on the rhythm lead's R, so a beat is
+    # placed on that lead's own extreme whenever it carries a clear complex
+    # there (its deflection at least PAGE_BEAT_RHYTHM_FRACTION of the column's
+    # mean per-lead deflection); only a near-flat rhythm lead falls back to the
+    # column apex — otherwise the QRS/QT search windows would shift.
+    rhythm_base = float(np.median(rhythm_row))
     snapped = []
     for p in peaks:
         key = next(((a, b) for a, b in cols if a <= p < b), None)
         rows, base = col_rows.get(key, ([], None))
         lo, hi = max(0, p - w), min(n, p + w + 1)
+        own = np.abs(rhythm_row[lo:hi] - rhythm_base)
         if rows:
-            seg = np.abs(sig.signal[rows, lo:hi] - base[:, None]).sum(axis=0)
+            per_lead = np.abs(sig.signal[rows, lo:hi] - base[:, None])
+            if own.max() >= PAGE_BEAT_RHYTHM_FRACTION * per_lead.max(axis=1).mean():
+                seg = own
+            else:
+                seg = per_lead.sum(axis=0)
         else:
-            seg = np.abs(rhythm_row[lo:hi] - float(np.median(rhythm_row)))
+            seg = own
         snapped.append(lo + int(np.argmax(seg)))
     return np.unique(np.asarray(snapped, dtype=int))
 
