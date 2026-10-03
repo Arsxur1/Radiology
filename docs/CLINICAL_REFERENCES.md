@@ -1436,7 +1436,8 @@ record, RR CV at the record's value). 100 clean pages, D52 → D55:
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | D52 | 51 % | 0.78 | 1.49 (88 %) | 5 | 5 | +6.0 / +4.0 ms | 6 |
 | D55, beats on the column apex | 50 % | — | 1.24 (94 %) | 3 | 1 | +7.7 / +5.5 ms | 9 |
-| **D55 final** (merge with the single-lead list, strong-envelope additions, boundary beats judged on the strip) | **52 %** | see the degraded table | **1.23 (92 %)** | **2** | **2** | +7.1 / +4.0 ms | 6 |
+| D55, merge with the single-lead list, strong-envelope additions, boundary beats judged on the strip | 52 % | 0.79 | 1.23 (92 %) | 2 | 2 | +7.1 / +4.0 ms | 6 |
+| **D55 final** (+ edits must fit the rhythm: room for an added beat, no gap opened by a drop) | **52 %** | **0.79** | **1.11 (94 %)** | **2** | **2** | +7.0 / +4.0 ms | 6 |
 
 The two remaining AF pages are at the AF gate on the digital record itself
 (RR CV 0.17–0.24). Three design turns were measured on the way: snapping every
@@ -1494,7 +1495,37 @@ Two records × three seeds were not representative of 100 pages; the lesson is
 recorded in D57 and the previous snap stands. The full photo at 3.5 % stays
 unreadable under every configuration: the grid texture itself is destroyed by
 grain, salt and JPEG 40, and that is the limit, not the quadrilateral.
-The 100-page degraded table follows once its run completes.
+
+**The 100-page degradation table, D52 → this round.** The first run of this
+round (column beats without the rhythm gates, tighter snap) is shown because it
+is what the two corrections were measured against: the snap cost the photo's
+trace, the ungated merge cost its heart rate (the trace being identical, the
+whole HR loss was the merge — confirmed by switching the column detector off:
+2 % photo 48 → 52 %, 3.5 % photo 24 → 35 %, both exactly the D52 numbers).
+
+| page (100 PTB-XL records) | state | r | HR MAE (≤ 3 bpm) | axis MAE (≤ 15°) | QRS MAE | codes Jaccard | identical sets |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| clean | D52 | 0.936 | 1.49 (88 %) | 6.7° (93 %) | 12.2 ms | 0.78 | 51 % |
+| clean | ungated merge + tighter snap | 0.936 | 1.23 (92 %) | 6.4° (94 %) | 13.0 ms | 0.79 | 52 % |
+| clean | **final** | 0.936 | **1.11 (94 %)** | 6.4° (94 %) | 12.9 ms | 0.79 | 52 % |
+| scan (1°, blur, JPEG 60) | D52 | 0.922 | 1.77 (88 %) | 7.3° (93 %) | 12.6 ms | 0.66 | 30 % |
+| scan | ungated merge + tighter snap | 0.922 | 1.09 (93 %) | 7.8° (92 %) | 13.0 ms | 0.66 | 31 % |
+| scan | **final** | 0.922 | **1.05 (94 %)** | 7.6° (92 %) | 12.9 ms | 0.67 | 32 % |
+| photo 2 % (vignette 0.4, texture, JPEG 45, 1.5°) | D52 | 0.654 | 6.15 (52 %) | 14.2° (80 %) | 24.9 ms | 0.46 | 10 % |
+| photo 2 % | ungated merge + tighter snap | 0.603 | 8.43 (39 %) | 11.7° (79 %) | 24.7 ms | 0.41 | 7 % |
+| photo 2 % | **final** | 0.654 | **5.73 (60 %)** | 13.8° (82 %) | 24.5 ms | 0.46 | 11 % |
+| photo 3.5 % (vignette 0.6, texture, salt, JPEG 40, −2.5°) | D52 | 0.235 (6 failures) | 8.48 (35 %) | 26.2° (60 %) | 32.6 ms | 0.37 | 7 % |
+| photo 3.5 % | ungated merge + tighter snap | 0.244 (6) | 11.2 (22 %) | 26.6° (62 %) | 33.4 ms | 0.36 | 7 % |
+| photo 3.5 % | **final** | 0.235 (6) | **7.69 (38 %)** | 24.0° (65 %) | 30.9 ms | 0.39 | 12 % |
+
+The final state is better than or equal to D52 on heart rate, finding overlap
+and identical sets on every degradation, with the trace itself unchanged (r is a
+property of the digitiser, which this round left where D52 had it). The QRS MAE
+on clean pages moved 12.2 → 12.9 ms: confirmed beats keep the single-lead R
+position while added beats sit on the column apex, and the delineation window
+differs by a few ms between the two. The 3.5 % photo remains unreadable (r 0.24,
+six pages without a page quadrilateral); its rhythm numbers are those of a
+single-lead detector on noise, not of a digitised record.
 
 
 ### Paper-page digitisation benchmark (item 5d)
