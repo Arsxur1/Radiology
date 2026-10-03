@@ -210,7 +210,8 @@ def _delineate(cleaned: np.ndarray, rpeaks: np.ndarray, fs: float):
 PAGE_BEAT_MIN_FRACTION = 0.35   # envelope peak, as a fraction of its column's 90th-percentile peak
 PAGE_BEAT_MIN_RR_S = 0.24       # refractory distance between beats (250 bpm)
 PAGE_BEAT_SNAP_S = 0.06         # a beat is snapped to the column's summed-deflection apex within this window
-PAGE_BEAT_EDGE_S = 0.10         # no beat is taken this close to the page's time edges
+PAGE_BEAT_EDGE_START_S = 0.30   # no beat without a full P-QRS window before it
+PAGE_BEAT_EDGE_END_S = 0.45     # no beat without a T wave window after it
 PAGE_BEAT_RHYTHM_FRACTION = 0.3 # the rhythm lead's own extreme is used when its deflection is this fraction of the column's
 
 
@@ -254,8 +255,10 @@ def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray
         if ref > 0:
             env[a:b] = e / ref
     peaks, _ = find_peaks(env, height=PAGE_BEAT_MIN_FRACTION, distance=max(1, int(PAGE_BEAT_MIN_RR_S * fs)))
-    edge = int(PAGE_BEAT_EDGE_S * fs)      # the page's first/last columns start on a filter transient
-    peaks = peaks[(peaks >= edge) & (peaks < n - edge)]
+    # The page's first/last columns start on a filter transient, and a beat needs
+    # a full P-QRS before it and a T wave after it for the delineation that
+    # follows (the single-lead detector skips such edge beats too).
+    peaks = peaks[(peaks >= int(PAGE_BEAT_EDGE_START_S * fs)) & (peaks < n - int(PAGE_BEAT_EDGE_END_S * fs))]
     if peaks.size < 2:
         return None
     # The envelope peaks on the steepest slope, not the apex: snap each beat to
