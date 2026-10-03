@@ -60,6 +60,28 @@ def _interval_norms(norms: dict[str, Any], patient) -> dict[str, Any]:
     return base
 
 
+def _axis_range(norms: dict[str, Any], patient) -> tuple[float, float] | None:
+    """Normal QRS-axis range, by age band when the table has ``axis_deg_by_age``.
+
+    A rightward axis is physiological in infants and the pediatric table once
+    carried one range to 180° for every child; with it, 35 cohort children aged
+    4–15 labelled "right axis deviation" (measured 88–134°) scored 0/35 (D53).
+    Band = first entry whose age limit the patient is under; no match (or no
+    age) falls back to ``axis_deg.qrs_normal``.
+    """
+    ad = norms.get("axis_deg", {})
+    base = ad.get("qrs_normal")
+    bands = norms.get("axis_deg_by_age") or []
+    age_days = getattr(patient, "age_days", None)
+    age_years = getattr(patient, "age_years", None)
+    for band in bands:
+        if "age_days_max" in band and age_days is not None and age_days <= band["age_days_max"]:
+            return tuple(band["qrs_normal"])
+        if "age_years_max" in band and age_years is not None and age_years <= band["age_years_max"]:
+            return tuple(band["qrs_normal"])
+    return tuple(base) if base else None
+
+
 def _hr_range(norms: dict[str, Any], patient) -> tuple[float, float] | None:
     """Resolve HR norm range, honouring pediatric age-banding (TZ §6)."""
     if "heart_rate_bpm" in norms:
@@ -199,7 +221,7 @@ def detect_findings(
     # Axis first (Romhilt-Estes and the pediatric criteria use it), then
     # Sokolow-Lyon / Cornell / Romhilt-Estes for adults, age-band voltages for
     # children (layer4_findings/hypertrophy.py).
-    _axis_findings(m, norms, fs)
+    _axis_findings(m, norms, fs, sig.patient)
     hypertrophy_findings(m, norms, fs, sig.patient)
 
     # ------------------------------------------------------------------ #
@@ -246,7 +268,7 @@ def detect_findings(
     # the axis is outside the pediatric normal range (D44).
     axis_ok_for_age = True
     if is_pediatric and m.axes.qrs_deg is not None:
-        lo_ax, hi_ax = norms.get("axis_deg", {}).get("qrs_normal", [-30, 180])
+        lo_ax, hi_ax = _axis_range(norms, sig.patient) or (-30, 180)
         axis_ok_for_age = lo_ax <= m.axes.qrs_deg <= hi_ax
     if la_ra_reversed and not (is_pediatric and axis_ok_for_age):
         fs.findings.append(Finding(
@@ -366,11 +388,11 @@ def _atrial_enlargement_findings(m: Measurements, norms, fs: FindingSet) -> None
         ))
 
 
-def _axis_findings(m: Measurements, norms, fs: FindingSet) -> None:
-    """QRS-axis deviation (TZ §7.4)."""
+def _axis_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
+    """QRS-axis deviation (TZ §7.4); the normal range is age-banded in children (D53)."""
     axis = m.axes.qrs_deg
     ad = norms.get("axis_deg", {})
-    rng = ad.get("qrs_normal")
+    rng = _axis_range(norms, patient)
     if axis is None or not rng:
         return
     lo, hi = rng
