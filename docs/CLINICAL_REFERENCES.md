@@ -558,6 +558,35 @@ elevation (median 148 µV at the maximal lead), 26 % under an LVH call (the
 strain-discordance context), 16 % still LBBB — the next layer is the LVH context,
 already at the edge of the false-alert budget.
 
+### STEMI on top of LBBB / LVH — proportional discordant elevation (D54)
+
+Under LBBB, LVH or pre-excitation the alert ignored every discordant
+elevation, and 26 % of the 12SL-STEMI misses sat under such a context. The
+Smith-modified Sgarbossa criterion (LBBB) and Armstrong's rule (LVH) treat a
+discordant J-point elevation of at least 25 % of the lead's own S-wave depth as
+primary. Layer 3 now measures the S depth and R height per lead (from the PR
+baseline inside the QRS); the rule needs J ≥ 100 µV with the J+60 plateau and
+J / S ≥ 0.25, and the alert's evidence names the proportional leads.
+
+Sweep on the context records (an `lvh` or `lbbb` finding on the record), misses
+rescued / false fires:
+
+| J ≥ · ratio ≥ | 12SL-STEMI (45 missed under context) | NML (4) / other (352) | CPSC STE (37 missed) | other (39) | PTBDB MI 0–1 d (6 missed) | controls (5) / other (81) |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| 100 · 0.20 | 14 | 0 / 15 | 10 | 0 | 1 | 0 / 8 |
+| **100 · 0.25** | **10** | **0 / 9** | **9** | **0** | **1** | **0 / 5** |
+| 100 · 0.30 | 7 | 0 / 5 | 9 | 0 | 0 | 0 / 4 |
+| 150 · 0.25 | 9 | 0 / 7 | 6 | 0 | 1 | 0 / 3 |
+| 200 · 0.25 | 7 | 0 / 5 | 6 | 0 | 1 | 0 / 1 |
+
+Of the 9 "other" fires on PTB-XL+ at the chosen point, five carry a 12SL
+infarction statement (ALMI, ASMI, AMI, ALMI+IMI) and are not false in the
+clinical sense; three are plain LBBB with a very deep S (one with J 2.0 mV over
+an S of 5.0 mV) and one has no statement. The PTBDB "other" fires are later-day
+MI records. The discordant ratio among context records without MI sits at a
+median 0.09–0.11, 98th percentile 0.16–0.28, so 0.25 is at the tail of the
+expected secondary repolarisation. Validation on the five sets follows below.
+
 ### WPW by delta wave (open item 4, D51)
 
 PTB-XL, 79 WPW records: the classic rule (PR < 120 **and** QRS > 110) found 0.35.
