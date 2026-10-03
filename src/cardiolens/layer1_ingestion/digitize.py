@@ -920,7 +920,7 @@ def _snap_quad_to_grid_lines(gray: np.ndarray, quad: np.ndarray) -> np.ndarray:
         smooth = cv2.GaussianBlur(gray, (3, 3), 0)     # paper grain must not become edges
         edges = cv2.Canny(smooth, 30, 90) * mask
         found = cv2.HoughLinesP(edges, 1, np.pi / 720, threshold=int(0.15 * length),
-                                minLineLength=int(0.6 * length), maxLineGap=int(0.05 * length))
+                                minLineLength=int(0.4 * length), maxLineGap=int(0.05 * length))
         best = None
         if found is not None:
             side_ang = np.arctan2(u[1], u[0])
@@ -931,12 +931,12 @@ def _snap_quad_to_grid_lines(gray: np.ndarray, quad: np.ndarray) -> np.ndarray:
                     continue
                 # Among long, parallel candidates take the one nearest the coarse
                 # side, so all four sides snap to the same (outermost) grid line.
-                # Both ends must lie inside the band: a line with the right angle
-                # but crossing the side (a trace, a shadow edge on a rotated or
-                # vignetted photo) moved corners by 20-30 px and skewed the page (D57).
-                off = max(abs(float((np.array([x1, y1]) - a) @ nrm)), abs(float((np.array([x2, y2]) - a) @ nrm)))
-                if off > band:
-                    continue
+                # Tighter acceptance (both ends inside the band, 60 % of the side,
+                # corner move within one band) was measured on 100 pages and
+                # rejected: it lost the 2 % photo (r 0.65 -> 0.59) and 5 %
+                # perspective for a gain only on rotated, vignetted 3.5 % photos,
+                # where no snap variant beats the coarse quadrilateral (D57).
+                off = abs(float((np.array([x1, y1]) - a) @ nrm))
                 if best is None or off < best[0]:
                     best = (off, float(x1), float(y1), float(x2), float(y2))
         if best is None:
@@ -955,9 +955,8 @@ def _snap_quad_to_grid_lines(gray: np.ndarray, quad: np.ndarray) -> np.ndarray:
             continue
         s_ = ((x2 - x1) * v2 - (y2 - y1) * u2) / det
         pt = np.array([x1 + s_ * u1, y1 + s_ * v1])
-        # A snapped corner must stay near the coarse one: a snap is a refinement
-        # of a few pixels, never a move of tens (D57).
-        out.append(pt if np.linalg.norm(pt - quad[i]) <= band else quad[i])
+        # A snapped corner must stay near the coarse one (the band is narrow).
+        out.append(pt if np.linalg.norm(pt - quad[i]) <= 3 * band else quad[i])
     return np.array(out)
 
 

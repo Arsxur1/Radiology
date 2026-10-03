@@ -1452,13 +1452,14 @@ that stopped matching are a wide-QRS bradycardia whose *digital* reference
 dropped every other beat (46 vs 66 bpm; the page is right) and one page with
 one extra beat.
 
-**D57.** A stage-by-stage diagnostic on two records × six degradations × three
-seeds showed where the strong photo fails: with a rotation of −2.5° and/or a
-vignette, the grid-line snap of D48 chose a Hough line with the right angle but
-crossing the coarse side (a trace, a shadow edge); corners moved 20–30 px and
-the warp skewed the page. The snap now requires both ends of the line inside
-the search band, a span of 60 % of the side and a corner move within one band
-width. A/B on the same cases (r of the digitised page, snap / no snap):
+**D57 (negative result, reverted).** A stage-by-stage diagnostic on two records ×
+six degradations × three seeds showed where the strong photo fails: with a
+rotation of −2.5° and/or a vignette, the grid-line snap of D48 chose a Hough
+line with the right angle but crossing the coarse side (a trace, a shadow edge);
+corners moved 20–30 px and the warp skewed the page. Three tighter acceptance
+rules were tried (both ends of the line inside the search band, a span of 60 %
+of the side, a corner move within one band width). A/B on the same seeded cases
+(r of the digitised page, snap / no snap):
 
 | variant (3.5 %, seeds 1–3, two records) | before D57 | after D57 | coarse quadrilateral only |
 |---|:-:|:-:|:-:|
@@ -1467,14 +1468,32 @@ width. A/B on the same cases (r of the digitised page, snap / no snap):
 | full photo (vignette, texture, salt, JPEG 40, rotation) | 0.43 / 0.03 / 0.05 · 0.38 / 0.02 / 0.75 | 0.43 / 0.03 / 0.02 · 0.38 / 0.02 / 0.75 | 0.43 / 0.03 / 0.46 · 0.38 / 0.02 / 0.75 |
 | pure perspective 2 / 3.5 / 5 / 8 % (reference) | — | 17 of 24 better than coarse, 4 worse by ≤ 0.06, one failure at 2 % (seed 3) | — |
 
-On the rotated and vignetted pages the coarse quadrilateral alone would still
-be better; on pure perspective the snap is what makes 5–8 % readable (0.84–0.95
-against 0.36–0.84), so it stays. An arbiter between the two warps by the grid's
-angle spread was measured and rejected: it picks right in 8 of the 13 diverging
-cases but breaks a 5 % page (0.90 → 0.54), and in the one 2 % failure both warps
-have identical metrics (the failure is downstream of the warp). The full photo at
-3.5 % stays unreadable with or without the snap: the grid texture itself is
-destroyed by grain, salt and JPEG 40, and that is the limit, not the quadrilateral.
+On 24 seeded cases the tighter snap looked like a win. **On 100 pages it was a
+loss**, and the three rules were reverted. The 100-page degradation run with the
+tighter snap read the 2 % photo at r 0.60 (was 0.65), HR within 3 bpm on 39 %
+(was 52 %) and a finding-set overlap of 0.41 (was 0.46); an A/B with the two
+changes of this round switched off separately attributed the whole loss to the
+snap (D55 off: no change; tighter snap off: r 0.654, HR within 3 bpm 48 %,
+overlap 0.44). A sweep of seven snap configurations over five degradations of
+the same 100 pages (mean r of the digitised trace):
+
+| degradation (100 pages) | previous snap (D48: span ≥ 40 %, one end in band, move ≤ 3 bands) | tighter snap (D57) | midpoint in band, ends ≤ 2 bands, move ≤ 3 bands | no snap |
+|---|:-:|:-:|:-:|:-:|
+| photo 2 % (vignette 0.4, texture, JPEG 45, rotation 1.5°) | **0.654** | 0.594 | 0.648 | 0.618 |
+| pure perspective 5 % | **0.844** | 0.826 | 0.799 | 0.755 |
+| pure perspective 8 % | **0.792** | 0.781 | 0.791 | 0.634 |
+| perspective 3.5 % + vignette 0.6 + rotation −2.5° (no grain) | 0.387 | 0.434 | 0.385 | **0.479** |
+| full photo 3.5 % (vignette, texture, salt, JPEG 40, rotation) | 0.230 | 0.228 | 0.210 | 0.216 |
+
+The previous snap is best or tied on four of the five degradations; the only
+case the tighter rules improved is the rotated, vignetted page, where the best
+choice is no snap at all (0.48 against 0.39) — and an arbiter between the two
+warps by the grid's angle spread had already been measured and rejected (it
+picks right in 8 of the 13 diverging cases but breaks a 5 % page, 0.90 → 0.54).
+Two records × three seeds were not representative of 100 pages; the lesson is
+recorded in D57 and the previous snap stands. The full photo at 3.5 % stays
+unreadable under every configuration: the grid texture itself is destroyed by
+grain, salt and JPEG 40, and that is the limit, not the quadrilateral.
 The 100-page degraded table follows once its run completes.
 
 
