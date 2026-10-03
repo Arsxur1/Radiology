@@ -1561,8 +1561,26 @@ counts, not false alerts. The prospective protocol with the acceptance targets
 per tier is `docs/VALIDATION_PROTOCOL.md`. The first run exposed the burden of
 critical false alerts: on the 664 set 35 % of cases without a critical label
 received one, driven by two rules — peaked T (141 calls) and long QT (91 false).
-The per-dataset tier tables after the two corrections below are in the table at
-the end of this section.
+After the two corrections below (D60, D61), case-level numbers per dataset
+(caught / positives · false alerts / negatives; "calls" are codes the dataset
+does not label):
+
+| dataset | critical: caught · false alerts | unlabelled critical calls | major | minor |
+|---|---|---|---|---|
+| ecg-arrhythmia 664 | 44/80 (0.55) · **52/584 (0.089)**, was 204/584 (0.35) | complete AV block 3, peaked T 1 (was 141) | 288/324 · 86/340 | 419/436 · 130/228 |
+| PTB-XL 1692 | 69/160 (0.43) · 130/1532 (0.085): long QT 80, ST elevation 60 (STE_ semantics) | peaked T 4 (was 235) | 431/573 · 265/1119 | 1398/1440 · 186/252 |
+| PTBDB 549 (MI ≤ 3 d = 96) | 22/96 (0.23) · 18/453 (0.04) | long QT 20 (was 35), peaked T 4 (was 121) | not labelled | not labelled |
+| CPSC-2018 820 | 81/220 (0.37) · 6/600 (0.01) | long QT 11, peaked T 1 | 26/308 · 25/512 | 319/333 · 370/487 ("normal" is not labelled "sinus rhythm") |
+| LUDB 200 | 0/8 · 0/192 | long QT 10, peaked T 1 | 20/116 (LVH is LUDB's own definition) · 7/84 | 181/190 · 7/10 |
+| pediatric 1591 (4–15 y) | 1/5 · 37/1586 (0.023; ST elevation 34) | peaked T 0 | 6/11 · 95/1580 (ST depression 96) | 990/1008 · 528/583 |
+
+The critical false-alert rate is now under the protocol's 5 % on PTBDB, CPSC,
+LUDB and the children and at 8.5–8.9 % on the two sets whose labels are the
+loosest (PTB-XL STE_, the 664 set's long QT); the critical case sensitivity is
+far from the 0.90 target everywhere, dominated by the STEMI alert on labels
+that are not "STEMI on the ECG" (blocker 2) and by long QT at the 450/460 ms
+threshold. The pediatric ST-elevation false calls (34 of 1586) are the J-point
+elevation of children's early repolarisation and are the next pediatric item.
 
 **D60 — long QT under a wide QRS.** Of the 91 false long-QT calls on the 664 set,
 60 carried a QRS ≥ 120 ms (LBBB 36, RBBB 20) and 42 were in AF. The QT of a
