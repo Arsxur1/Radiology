@@ -296,6 +296,7 @@ def _trace_rows_tracked(mask: np.ndarray, thin: np.ndarray, x0: int, x1: int, y0
     tops = {k: raw_ext[k][0] for k in keys}
     bots = {k: raw_ext[k][1] for k in keys}
     flanks: set[int] = set()
+    apexes: set[int] = set()
     for idx, k in enumerate(keys):
         ra, rb = raw_ext[k]
         if rb - ra + 1 < tall:
@@ -311,19 +312,23 @@ def _trace_rows_tracked(mask: np.ndarray, thin: np.ndarray, x0: int, x1: int, y0
             plateau = [q for q in left[-1:] + [k] + right[:1] if abs(tops[q] - ra) <= 1]
             if plateau[len(plateau) // 2] == k:
                 out[k] = ya + ra + stroke / 2.0
+                apexes.add(k)
                 flanks.update(q for q in left[-TRACK_FLANK:] + right[:TRACK_FLANK] if q != k)
         elif (rb >= bots[left[-1]] and rb >= bots[right[0]]
                 and rb > max(bots[left[0]], bots[right[-1]]) + TRACK_TURN_PX):
             plateau = [q for q in left[-1:] + [k] + right[:1] if abs(bots[q] - rb) <= 1]
             if plateau[len(plateau) // 2] == k:
                 out[k] = ya + rb - stroke / 2.0
+                apexes.add(k)
                 flanks.update(q for q in left[-TRACK_FLANK:] + right[:TRACK_FLANK] if q != k)
     # On the flanks of a thick spike the skeleton runs sit near the blob's base
     # (the medial axis of a filled spike is one line up its middle), reading the
     # flank far too low under blur. There the raw run's midpoint is the fair
     # estimate: its lateral-spread bias matters at the QRS onset/offset columns,
-    # which lie farther out, not next to the apex.
-    for q in flanks:
+    # which lie farther out, not next to the apex. A tip two columns wide is two
+    # adjacent apexes (each is the middle of its own three-column plateau); they
+    # must not demote each other to flanks — that read a 26-px R as 17 px (D52).
+    for q in flanks - apexes:
         ra, rb = raw_ext[q]
         if rb - ra + 1 >= tall:
             out[q] = ya + (ra + rb) / 2.0
