@@ -1698,6 +1698,44 @@ wide QRS without a delta requirement) has a 50 % positive predictive value on
 PTB-XL (28 true / 28 false) and fires on bundle branch blocks with a PR of
 100–118 ms.
 
+**Blocker 3 — photographs: what breaks the 2 % photo, and the grid-texture
+de-warp (D64).** No reachable source holds real photographs (adapter in place,
+`validate --ecg-images`). An ablation of the photo degradation on the 100
+rendered pages (r of the digitised trace, edge-based de-warp):
+
+| degradation | r | pages r < 0.5 |
+|---|:-:|:-:|
+| vignette only | 0.936 | 0 |
+| photo without perspective (vignette, texture, blur, JPEG, rotation) | 0.900 | 5 |
+| perspective 2 % + vignette | 0.835 | 7 |
+| perspective 2 % only | 0.813 | 9 |
+| photo without JPEG | 0.757 | 19 |
+| photo without rotation | 0.693 | 28 |
+| **full 2 % photo** | **0.654** | **34** |
+| photo without vignette | 0.623 | 34 |
+| photo without texture | 0.553 | 49 |
+| photo without blur | 0.422 | 63 |
+
+Geometry is the loss, and the edge-based estimate gets *worse* when the image is
+sharper (no blur, no texture): the Hough vote on Canny edges is won by traces,
+shadow edges and grain. The grid is a periodic texture that survives all of
+those; its local frequency per tile, fitted by one homography, rectifies the
+page (D64; details in DECISIONS). A/B on the same 100 pages:
+
+| degradation | edge-based de-warp | **grid-texture de-warp** |
+|---|:-:|:-:|
+| scan (rotation 1°, blur, JPEG 60) | 0.922 (2 pages < 0.5) | 0.922 — affine gate, de-skew path |
+| perspective 2 % only | 0.813 (9) | **0.909 (1)** |
+| perspective 5 % only | 0.844 (4) | **0.907 (1)** |
+| photo 2 % (vignette 0.4, texture, blur, JPEG 45, 1.5°) | 0.654 (34) | **0.805 (13)** |
+| perspective 3.5 % + vignette 0.6 + rotation −2.5° | 0.387 (68) | **0.843 (9)** |
+| full photo 3.5 % (vignette, texture, salt, JPEG 40, −2.5°) | 0.230 (79, 4 failures) | **0.515 (44, 5 failures)** |
+
+Without the affine gate the texture fit applied to scans cost 0.922 → 0.850
+(10 pages under 0.5): on a rotation the de-skew is exact and the frequency
+estimate is not. The end-to-end 100-page table (HR, axis, QRS, finding sets)
+with the texture de-warp follows in the page-digitisation section above.
+
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is
 not clinically validated and is not a medical device. Every report carries the
