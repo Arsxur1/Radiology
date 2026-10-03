@@ -32,7 +32,7 @@ def _pipeline_to_input(sig, mode):
 
 
 def test_stub_report_is_bilingual_and_grounded():
-    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=750, potassium=6.5)
+    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=1200, potassium=6.5)
     data, saf, cfg = _pipeline_to_input(sig, "A")
     rep = interpret(data, saf, provider=StubProvider(),
                     min_overall=cfg.confidence.autonomous_min_overall, quality_ok=True)
@@ -59,7 +59,7 @@ def test_grounding_drops_ungrounded_claims():
 
 
 def test_mode_B_escalates_on_critical():
-    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=750, potassium=6.5)
+    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=1200, potassium=6.5)
     data, saf, cfg = _pipeline_to_input(sig, "B")
     rep = interpret(data, saf, provider=StubProvider(),
                     min_overall=cfg.confidence.autonomous_min_overall, quality_ok=True)
@@ -76,7 +76,7 @@ def test_mode_B_autonomous_when_clean():
 
 
 def test_mode_A_always_decision_support():
-    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=750, potassium=6.5)
+    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=1200, potassium=6.5)
     data, saf, cfg = _pipeline_to_input(sig, "A")
     rep = interpret(data, saf, provider=StubProvider(),
                     min_overall=cfg.confidence.autonomous_min_overall, quality_ok=True)

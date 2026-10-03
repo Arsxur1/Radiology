@@ -29,7 +29,7 @@ def test_end_to_end_normal():
 
 
 def test_all_outputs_written(tmp_path):
-    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=750, potassium=6.6)
+    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=1200, potassium=6.6)
     result = run_pipeline(sig, mode="B")
     paths = write_all_outputs(result, str(tmp_path), stem="t")
     for key in ("json", "waveform_svg", "causal_graph_png", "pdf", "conclusion_txt"):

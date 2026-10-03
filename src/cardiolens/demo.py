@@ -21,7 +21,7 @@ _CASES = {
     "normal": dict(heart_rate_bpm=72),
     "brady": dict(heart_rate_bpm=44),
     "tachy": dict(heart_rate_bpm=125),
-    "hyperk": dict(heart_rate_bpm=72, t_amp_uv=750, potassium=6.6),
+    "hyperk": dict(heart_rate_bpm=72, t_amp_uv=1200, potassium=6.6),
     "stemi": dict(heart_rate_bpm=70, st_elevation_uv=250, st_leads=["II", "III", "aVF"]),
     "child": dict(heart_rate_bpm=95, age_years=6),
 }

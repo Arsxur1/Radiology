@@ -88,7 +88,7 @@ def test_pediatric_juvenile_t_not_pathologic():
 
 # --- Layer 5: causal engine ---
 def test_hyperkalemia_chain_activates():
-    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=750, potassium=6.5)
+    sig = generate_synthetic_ecg(heart_rate_bpm=72, t_amp_uv=1200, potassium=6.5)
     _, fnd, _ = _run(sig)
     g = analyze(fnd, load_rule_base(), sig.context)
     assert "hyperkalemia_severity_chain" in g.activated_rules

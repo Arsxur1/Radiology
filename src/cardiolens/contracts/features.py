@@ -60,10 +60,26 @@ class Voltages(BaseModel):
     p_terminal_v1_uv_ms: float | None = None    # negative terminal P force in V1 (|µV| x ms)
 
 
+class TWave(BaseModel):
+    """Per-lead T-wave descriptor measured on the median beat (TZ §6; D61).
+
+    ``half_width_ms`` is the width at half the peak amplitude and ``asymmetry``
+    the up-slope / down-slope time ratio: a hyperkalaemic T is tall, narrow and
+    symmetric ("tented"), a normal tall T is broad-based and asymmetric, and a
+    deflection narrower than ~40 ms in the T window is a QRS remnant, not a T."""
+
+    lead: str
+    amplitude_uv: float
+    qrs_ratio: float | None = None
+    half_width_ms: float | None = None
+    asymmetry: float | None = None
+
+
 class Morphology(BaseModel):
     """Waveform morphology descriptors (TZ §6)."""
 
     st: list[STMeasurement] = Field(default_factory=list)
+    t_waves: list[TWave] = Field(default_factory=list)
     # Leads exhibiting each morphology, for evidence trails.
     peaked_t_leads: list[str] = Field(default_factory=list)
     flat_t_leads: list[str] = Field(default_factory=list)

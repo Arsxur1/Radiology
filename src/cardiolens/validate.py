@@ -13,6 +13,7 @@ import json
 from cardiolens.validation import (
     build_ecg_arrhythmia_dataset,
     build_ludb_dataset,
+    build_mimic_dataset,
     build_ptbdb_dataset,
     build_ptbxl_dataset,
     build_synthetic_dataset,
@@ -32,6 +33,7 @@ def main() -> None:
                     help="PTBDB: MI ECGs recorded at most this many days after the infarction are STEMI gold")
     ap.add_argument("--ecg-arrhythmia",
                     help="path to a local PhysioNet ecg-arrhythmia (Chapman/Ningbo) checkout")
+    ap.add_argument("--mimic", help="path to a local MIMIC-IV-ECG subset (fetch_mimic): gold = cart statements")
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--age-min", type=float, help="keep patients at least this old (years)")
     ap.add_argument("--age-max", type=float, help="keep patients at most this old (years)")
@@ -49,6 +51,9 @@ def main() -> None:
     elif args.ecg_arrhythmia:
         cases = build_ecg_arrhythmia_dataset(args.ecg_arrhythmia, limit=args.limit)
         source = f"ecg-arrhythmia ({args.ecg_arrhythmia})"
+    elif args.mimic:
+        cases = build_mimic_dataset(args.mimic, limit=args.limit)
+        source = f"MIMIC-IV-ECG ({args.mimic}, gold = the cart's statements)"
     else:
         cases = build_synthetic_dataset()
         source = "synthetic (offline)"

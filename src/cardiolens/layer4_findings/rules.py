@@ -238,13 +238,7 @@ def detect_findings(
     _t_inversion_findings(m, is_pediatric, fs)
 
     # Peaked T-waves feed the hyperkalemia causal chain.
-    if len(m.morphology.peaked_t_leads) >= 2:
-        fs.findings.append(Finding(
-            code="peaked_t_waves", group="other",
-            label_ru="Высокие остроконечные зубцы T",
-            label_uz="Baland uchli T to'lqinlar",
-            evidence=_ev(leads=",".join(m.morphology.peaked_t_leads)), confidence=0.7,
-        ))
+    _peaked_t_findings(m, norms, fs)
     if len(m.morphology.flat_t_leads) >= 3:
         fs.findings.append(Finding(
             code="flat_t_waves", group="other",
@@ -321,6 +315,20 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
         qtc, formula = iv.qtc_bazett_ms, "bazett"
     if qtc is None:
         return
+    # Under a wide QRS the QT carries the conduction delay, not repolarisation:
+    # two thirds of the long-QT false calls on the 664 set had QRS >= 120 ms
+    # (LBBB 36, RBBB 20 of 91). Bogossian's correction (QT - 0.485 x QRS) is
+    # applied to the QTc before the threshold; the measured QTc stays as is.
+    wide_ms = qtc_norms.get("wide_qrs_ms")
+    frac = qtc_norms.get("wide_qrs_qt_fraction")
+    adjusted_from = None
+    if (wide_ms and frac and iv.qt_ms and iv.qrs_ms
+            and (iv.qrs_ms >= float(wide_ms) or fs.codes() & {"lbbb", "rbbb"})):
+        qt_adj = iv.qt_ms - float(frac) * iv.qrs_ms
+        if qt_adj > 0:
+            adjusted_from = qtc
+            # Bazett/Fridericia scale linearly with QT; Framingham is additive.
+            qtc = round(qtc - (iv.qt_ms - qt_adj) if formula == "framingham" else qtc * qt_adj / iv.qt_ms, 1)
     if is_pediatric:
         upper = qtc_norms.get("upper")
         short_lower = qtc_norms.get("short_lower")
@@ -329,11 +337,16 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
         upper = qtc_norms.get("female_upper" if sex == "female" else "male_upper")
         short_lower = qtc_norms.get("short_lower")
     if upper and qtc > upper:
+        ev = _ev(qtc_ms=qtc, formula=formula, upper=upper)
+        if adjusted_from is not None:
+            ev += _ev(qtc_measured_ms=adjusted_from, qrs_adjustment="bogossian")
         fs.findings.append(Finding(
             code="long_qt", group="interval",
-            label_ru=f"Удлинение QT (QTc {qtc} мс, {formula})",
-            label_uz=f"QT uzayishi (QTc {qtc} ms, {formula})",
-            evidence=_ev(qtc_ms=qtc, formula=formula, upper=upper), confidence=0.85,
+            label_ru=f"Удлинение QT (QTc {qtc} мс, {formula}"
+                     + (", с поправкой на широкий QRS)" if adjusted_from is not None else ")"),
+            label_uz=f"QT uzayishi (QTc {qtc} ms, {formula}"
+                     + (", keng QRS uchun tuzatilgan)" if adjusted_from is not None else ")"),
+            evidence=ev, confidence=0.85,
         ))
     elif short_lower and qtc < short_lower:
         fs.findings.append(Finding(
@@ -369,6 +382,45 @@ def _territorial_st_elevation(elevated, depressed, elev, fs: FindingSet, proport
             label_ru=f"Элевация ST без территориальной картины ({', '.join(elevated)})",
             label_uz=f"Hududiy manzarasiz ST elevatsiyasi ({', '.join(elevated)})",
             evidence=_ev(leads=",".join(elevated), threshold_uv=elev), confidence=0.5,
+        ))
+
+
+_PRECORDIAL = {"V1", "V2", "V3", "V4", "V5", "V6"}
+
+
+def _peaked_t_findings(m: Measurements, norms, fs: FindingSet) -> None:
+    """Tall, narrow, symmetric ("tented") T waves in >= 2 leads — the hyperkalaemia
+    pattern (TZ §7, §8; D61). Thresholds from the norm table's ``t_wave`` block:
+    amplitude (precordial / limb), T/QRS ratio, half-width window and up/down
+    asymmetry window. Amplitude alone is not a criterion: in the 664 set the 90th
+    percentile of the tallest precordial T is 1.45 mV, and the old amplitude rule
+    fired on 21 % of records, half of them on QRS remnants in the T window."""
+    tw = norms.get("t_wave", {})
+    amp_p, amp_l = tw.get("peaked_min_uv_precordial"), tw.get("peaked_min_uv_limb")
+    if not (amp_p and amp_l):
+        return
+    ratio_min = float(tw.get("peaked_t_qrs_ratio", 0.0))
+    hw_lo, hw_hi = tw.get("peaked_half_width_ms", [0, 10**6])
+    as_lo, as_hi = tw.get("peaked_asymmetry", [0.0, 10**6])
+    leads = []
+    for t in m.morphology.t_waves:
+        if t.lead == "aVR" or t.half_width_ms is None or t.asymmetry is None:
+            continue
+        amp_min = float(amp_p if t.lead in _PRECORDIAL else amp_l)
+        if (t.amplitude_uv >= amp_min and (t.qrs_ratio or 0.0) >= ratio_min
+                and float(hw_lo) <= t.half_width_ms <= float(hw_hi)
+                and float(as_lo) <= t.asymmetry <= float(as_hi)):
+            leads.append(t.lead)
+    m.morphology.peaked_t_leads = leads
+    if len(leads) >= int(tw.get("peaked_min_leads", 2)):
+        fs.findings.append(Finding(
+            code="peaked_t_waves", group="other",
+            label_ru="Высокие остроконечные зубцы T",
+            label_uz="Baland uchli T to'lqinlar",
+            evidence=_ev(leads=",".join(leads),
+                         amplitude_uv=",".join(str(round(t.amplitude_uv)) for t in m.morphology.t_waves if t.lead in leads),
+                         half_width_ms=",".join(str(round(t.half_width_ms)) for t in m.morphology.t_waves if t.lead in leads)),
+            confidence=0.7,
         ))
 
 

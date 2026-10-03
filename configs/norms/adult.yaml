@@ -47,6 +47,25 @@ qtc_ms:
   male_upper: 450
   female_upper: 460
   short_lower: 350
+  # Under a wide QRS (>= wide_qrs_ms, or a bundle branch block) the long-QT rule
+  # judges QT - wide_qrs_qt_fraction x QRS (Bogossian 2014): two thirds of the
+  # long-QT false calls on the 664 set carried a QRS >= 120 ms (D60).
+  wide_qrs_ms: 120
+  wide_qrs_qt_fraction: 0.485
+
+# Peaked ("tented") T of hyperkalaemia (D61): tall AND narrow AND symmetric, in
+# >= 2 leads. Amplitude alone is not specific — the 90th percentile of the
+# tallest precordial T in the 664 set is 1.45 mV. Half-width and asymmetry are
+# measured on the median beat; a deflection under 40 ms wide is not a T wave.
+# Prevalence of the pattern with these values: 0.9 % of the 664 set, 0.4 % of
+# PTB-XL (the old amplitude rule: 21 % and 14 %).
+t_wave:
+  peaked_min_uv_precordial: 1000
+  peaked_min_uv_limb: 500
+  peaked_t_qrs_ratio: 0.75
+  peaked_half_width_ms: [40, 110]
+  peaked_asymmetry: [0.6, 1.6]
+  peaked_min_leads: 2
 
 axis_deg:
   qrs_normal: [-30, 90]

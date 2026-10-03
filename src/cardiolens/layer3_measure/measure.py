@@ -21,6 +21,7 @@ from cardiolens.contracts.features import (
     Intervals,
     Measurements,
     STMeasurement,
+    TWave,
 )
 from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer2_preprocess.quality import is_lead_off
@@ -219,6 +220,10 @@ PAGE_BEAT_MIN_AGREEMENT = 0.6   # the columns are trusted when they confirm this
 PAGE_BEAT_ADD_MIN_RR = 0.6      # an added beat needs this fraction of the confirmed median RR to each neighbour (room for a missed beat)
 PAGE_BEAT_DROP_MAX_GAP = 1.6    # dropping a beat may not open a gap longer than this × the confirmed median RR (a true beat the columns missed)
 PAGE_BEAT_GATE_MIN_CONFIRMED = 5  # fewer confirmed beats define no rhythm (three gave a median RR twice the true one)
+# T-wave measurement validity (D61): a deflection narrower than this at half amplitude
+# is a QRS remnant, not a T wave; the T window ends this long before the next beat.
+T_MIN_HALF_WIDTH_S = 0.04
+T_NEXT_BEAT_GUARD_S = 0.20
 
 
 def _fit_page_edits_to_rhythm(confirmed: list, kept: list, added: list, rpeaks: np.ndarray) -> tuple[list, list]:
@@ -861,12 +866,25 @@ def _measure_delta(sig: SignalRepresentation, rpeaks: np.ndarray, qrs_on: np.nda
 def _measure_t_morphology(
     sig: SignalRepresentation, rpeaks: np.ndarray, fs: float, m: Measurements
 ) -> None:
-    """Classify T-wave morphology per lead (peaked / flat / inverted) (TZ §6)."""
+    """Measure the T wave per lead on the median beat (amplitude, QRS ratio,
+    half-width, asymmetry) and classify flat / inverted T (TZ §6).
+
+    The T window starts after the QRS (half the QRS width plus 40 ms past the R,
+    at least 100 ms) and ends 200 ms before the next beat: the fixed 100-450 ms
+    window reached the next QRS at fast rates and the S wave under a wide QRS,
+    and 68 of 141 "peaked T" calls on the 664 set were QRS remnants 8-20 ms wide
+    (D61). A deflection narrower than T_MIN_HALF_WIDTH_S is not a T wave and is
+    neither inverted nor peaked. Peaked T itself is decided by the rules from the
+    norm table (``t_wave``), on the descriptors stored in ``morphology.t_waves``."""
     if len(rpeaks) < 2:
         return
     rr = int(np.median(np.diff(rpeaks))) if len(rpeaks) >= 2 else int(0.8 * fs)
-    t_start = int(0.10 * fs)
-    t_end = min(int(0.45 * fs), rr - 1)
+    qrs_ms = m.intervals.qrs_ms or 90.0
+    t_start = max(int(0.10 * fs), int((qrs_ms / 2000.0 + 0.04) * fs))
+    t_end = min(int(0.45 * fs), rr - int(T_NEXT_BEAT_GUARD_S * fs))
+    if t_end - t_start < int(0.08 * fs):
+        t_end = min(int(0.45 * fs), rr - 1)          # very fast rhythm: keep what room there is
+    min_hw = int(T_MIN_HALF_WIDTH_S * fs)
     for li, lead in enumerate(sig.lead_names):
         row = sig.signal[li]
         if _lead_off(sig, lead):
@@ -875,20 +893,32 @@ def _measure_t_morphology(
         if len(rp) == 0:
             continue
         qrs_amp = abs(_qrs_amplitude(row, rp, fs)) + 1e-6
-        t_amps = []
-        for r in rp:
-            a, b = r + t_start, r + t_end
-            if b < len(row) and a < b:
-                seg = row[a:b] - float(np.median(row))
-                t_amps.append(seg[np.argmax(np.abs(seg))])
-        if not t_amps:
+        base = float(np.median(row))
+        segs = [row[r + t_start:r + t_end] - base for r in rp if r + t_end < len(row) and t_end > t_start]
+        if not segs:
             continue
-        t_amp = float(np.median(t_amps))
+        length = min(len(s) for s in segs)
+        med = np.median(np.stack([s[:length] for s in segs]), axis=0)
+        peak = int(np.argmax(np.abs(med)))
+        t_amp = float(med[peak])
         ratio = t_amp / qrs_amp
-        if t_amp < 0 and abs(t_amp) > 100.0:
+        # Half-amplitude width and up/down-slope asymmetry of the median beat's T.
+        above = np.abs(med) >= 0.5 * abs(t_amp)
+        lo = peak
+        while lo > 0 and above[lo - 1]:
+            lo -= 1
+        hi = peak
+        while hi < length - 1 and above[hi + 1]:
+            hi += 1
+        half_width = hi - lo + 1
+        asym = (peak - lo + 0.5) / (hi - peak + 0.5)
+        is_t = half_width >= min_hw
+        m.morphology.t_waves.append(TWave(
+            lead=lead, amplitude_uv=round(t_amp, 1), qrs_ratio=round(ratio, 3),
+            half_width_ms=round(half_width / fs * 1000.0, 1) if is_t else None,
+            asymmetry=round(asym, 2) if is_t else None))
+        if is_t and t_amp < 0 and abs(t_amp) > 100.0:
             m.morphology.inverted_t_leads.append(lead)
-        elif ratio > 0.5 and t_amp > 400.0:
-            m.morphology.peaked_t_leads.append(lead)
         elif abs(t_amp) < 100.0 and abs(ratio) < 0.15:
             # "Flat" needs to be small in absolute AND relative terms: a 100 uV
             # absolute cut alone flagged 70 % of children (small limb-lead

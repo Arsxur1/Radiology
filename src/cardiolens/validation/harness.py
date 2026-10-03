@@ -148,7 +148,7 @@ def build_synthetic_dataset() -> list[LabeledCase]:
     # Hyperkalemia (peaked T).
     for i in range(3):
         cases.append(LabeledCase(
-            generate_synthetic_ecg(heart_rate_bpm=72, pr_ms=150, t_amp_uv=760,
+            generate_synthetic_ecg(heart_rate_bpm=72, pr_ms=150, t_amp_uv=1200,
                                    potassium=6.5, seed=60 + i),
             {"sinus_rhythm", "peaked_t_waves"}, gold_pr_ms=150, name=f"hyperk_{i}"))
 
@@ -575,4 +575,67 @@ def build_ludb_dataset(root: str | Path, limit: int = 5000) -> list[LabeledCase]
         )
         cases.append(LabeledCase(signal=sig, gold_findings=gold, gold_pr_ms=ivs["pr"], gold_qt_ms=ivs["qt"],
                                  gold_qrs_ms=ivs["qrs"], name=f"ludb_{name}", meta=meta))
+    return cases
+
+
+# MIMIC-IV-ECG cart statements (upper-cased) -> finding codes. An algorithm's
+# reading, not a physician's — but an explicit ECG-level statement, which is what
+# the STEMI alert and the hyperkalaemia T pattern lack everywhere else (D62).
+_MIMIC_STATEMENTS: list[tuple[str, str, str | None]] = [
+    # (regex, code, exclusion regex applied to the same statement)
+    (r"\*\*\* CONSIDER ACUTE ST ELEVATION MI \*\*\*|ST ELEVATION, CONSIDER ACUTE INFARCT|INFARCT, ACUTE\b", "st_elevation", None),
+    (r"TALL T WAVES", "peaked_t_waves", None),
+    (r"PROLONGED QT", "long_qt", None),
+    (r"LEFT BUNDLE BRANCH BLOCK", "lbbb", r"INCOMPLETE"),
+    (r"RIGHT BUNDLE BRANCH BLOCK", "rbbb", r"INCOMPLETE"),
+    (r"ATRIAL FIBRILLATION", "atrial_fibrillation", None),
+    (r"ATRIAL FLUTTER", "atrial_flutter", None),
+    (r"SINUS BRADYCARDIA", "sinus_bradycardia", None),
+    (r"SINUS TACHYCARDIA", "sinus_tachycardia", None),
+    (r"\bSINUS RHYTHM\b|\bSINUS ARRHYTHMIA\b|SINUS BRADYCARDIA|SINUS TACHYCARDIA", "sinus_rhythm", None),
+    (r"1ST DEGREE A-?V BLOCK", "first_degree_av_block", r"BORDERLINE"),
+    (r"COMPLETE HEART BLOCK|3RD DEGREE A-?V BLOCK|COMPLETE A-?V BLOCK", "complete_av_block", None),
+    (r"LEFT VENTRICULAR HYPERTROPHY", "lvh", r"POSSIBLE|CONSIDER|CANNOT"),
+    (r"LEFT AXIS DEVIATION", "left_axis_deviation", r"BORDERLINE"),
+    (r"RIGHT AXIS DEVIATION", "right_axis_deviation", r"BORDERLINE"),
+    (r"LOW QRS VOLTAGE", "low_qrs_voltage", None),
+    (r"WOLFF|WPW|PRE-?EXCITATION", "wpw_preexcitation", None),
+    (r"ST DEPRESSION", "st_depression", r"JUNCTIONAL|NONSPECIFIC"),
+]
+
+
+def mimic_statements_to_codes(statements) -> set[str]:
+    """Finding codes named by a record's cart statements (see ``_MIMIC_STATEMENTS``)."""
+    codes: set[str] = set()
+    for s in statements:
+        up = str(s).upper()
+        for pat, code, excl in _MIMIC_STATEMENTS:
+            if re.search(pat, up) and not (excl and re.search(excl, up)):
+                codes.add(code)
+    return codes
+
+
+def build_mimic_dataset(root: str | Path, limit: int = 5000) -> list[LabeledCase]:  # pragma: no cover
+    """MIMIC-IV-ECG subset fetched by ``fetch_mimic``: gold = the cart's statements.
+
+    No age or sex is available in the open files (adult norms apply; MIMIC holds
+    adults only). ``meta`` carries the selection classes and the raw statements."""
+    import json
+
+    from cardiolens.layer1_ingestion import load_wfdb
+
+    root = Path(root)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    cases: list[LabeledCase] = []
+    for rec in manifest["records"][:limit]:
+        path = root / rec["record"]
+        if not path.with_suffix(".hea").exists() or not path.with_suffix(".dat").exists():
+            continue
+        try:
+            sig = load_wfdb(path)
+        except Exception:  # noqa: S112 - skip unreadable records
+            continue
+        cases.append(LabeledCase(sig, mimic_statements_to_codes(rec.get("statements", [])),
+                                 name=f"mimic_{rec['study_id']}",
+                                 meta={"classes": rec.get("classes", []), "statements": rec.get("statements", [])}))
     return cases

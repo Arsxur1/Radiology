@@ -65,6 +65,22 @@ qtc_ms:
   # 2nd percentile of Fridericia QTc in the pediatric cohort is 321-329 ms; the
   # adult 340 flagged 12 % of 4-8-year-olds as short QT (D44).
   short_lower: 320
+  # Wide-QRS adjustment of the long-QT rule (Bogossian), as in the adult table (D60).
+  wide_qrs_ms: 120
+  wide_qrs_qt_fraction: 0.485
+
+# Peaked T of hyperkalaemia (D61). Children carry tall precordial T waves as a
+# normal finding (V2-V4 up to 1-1.5 mV in school age), so the amplitude floor is
+# higher than the adult one; the shape criteria are the same. Set from the
+# references' upper limits, prevalence checked on the 1591-child cohort — not a
+# validated pediatric hyperkalaemia criterion (no labelled pediatric cases).
+t_wave:
+  peaked_min_uv_precordial: 1500
+  peaked_min_uv_limb: 700
+  peaked_t_qrs_ratio: 0.75
+  peaked_half_width_ms: [40, 110]
+  peaked_asymmetry: [0.6, 1.6]
+  peaked_min_leads: 2
 
 # Right-axis deviation is a normal variant in neonates/infants (TZ §6). The
 # fallback range (no age) stays wide; the normal range by age band is the
