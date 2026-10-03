@@ -592,7 +592,8 @@ _MIMIC_STATEMENTS: list[tuple[str, str, str | None]] = [
     (r"ATRIAL FLUTTER", "atrial_flutter", None),
     (r"SINUS BRADYCARDIA", "sinus_bradycardia", None),
     (r"SINUS TACHYCARDIA", "sinus_tachycardia", None),
-    (r"\bSINUS RHYTHM\b|\bSINUS ARRHYTHMIA\b|SINUS BRADYCARDIA|SINUS TACHYCARDIA", "sinus_rhythm", None),
+    # as in the SNOMED map: a sinus brady-/tachycardia statement is that code alone
+    (r"\bSINUS RHYTHM\b|\bSINUS ARRHYTHMIA\b", "sinus_rhythm", None),
     (r"1ST DEGREE A-?V BLOCK", "first_degree_av_block", r"BORDERLINE"),
     (r"COMPLETE HEART BLOCK|3RD DEGREE A-?V BLOCK|COMPLETE A-?V BLOCK", "complete_av_block", None),
     (r"LEFT VENTRICULAR HYPERTROPHY", "lvh", r"POSSIBLE|CONSIDER|CANNOT"),

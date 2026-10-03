@@ -22,7 +22,7 @@ def test_exclusions_keep_borderline_possible_and_incomplete_out():
 def test_rhythm_and_hyperkalaemia_statements():
     codes = mimic_statements_to_codes(["SINUS BRADYCARDIA", "TALL T WAVES - CONSIDER ACUTE ISCHEMIA OR HYPERKALEMIA",
                                        "PROLONGED QT INTERVAL", "LEFT BUNDLE BRANCH BLOCK"])
-    assert codes == {"sinus_rhythm", "sinus_bradycardia", "peaked_t_waves", "long_qt", "lbbb"}
+    assert codes == {"sinus_bradycardia", "peaked_t_waves", "long_qt", "lbbb"}
     assert mimic_statements_to_codes(["ATRIAL FIBRILLATION WITH RAPID VENTRICULAR RESPONSE"]) == {"atrial_fibrillation"}
 
 
