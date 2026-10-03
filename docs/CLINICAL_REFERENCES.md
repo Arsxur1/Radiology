@@ -595,7 +595,12 @@ contiguous leads of one territory, so a single proportional lead does not fire):
 **0.414 → 0.483 at spec 0.979** (unchanged — the Ningbo label includes
 elevation under hypertrophy and block), macro-sensitivity 0.652 → 0.660. PTB-XL
 STE_ (28) 1/28 as before, specificity 0.966 → 0.964 (three more records among
-1664 negatives); LBBB and LVH rows unchanged on every set. PTBDB (549) follows once its run completes.
+1664 negatives); LBBB and LVH rows unchanged on every set. PTBDB (549): day 0–1
+0.23 (14/61, territory 14/14), day 4–7 3 → 4 alerts, 80 healthy controls 3 false
+alerts as before, bundle branch block 0/17. A first run lost one day-0–1 alert:
+a rescued discordant lead from a second territory made the elevation "diffuse"
+and the pericarditis pattern replaced the alert — the territory count for that
+pattern now uses the primary (concordant) leads only.
 
 
 ### WPW by delta wave (open item 4, D51)
