@@ -20,6 +20,12 @@ rhythm:
   # Conducted P: refined P onset on >= 50 % of beats with beat-to-beat PR SD below
   # this excludes AF (same physiology as the AV-dissociation gate, D26/D28).
   af_pr_std_max_ms: 40
+  # Fibrillatory-wave route (D58): an irregular rhythm (RR CV above af_rr_cv_min)
+  # whose QRS-blanked residual has a 4-9 Hz / 0.5-4 Hz band-power index at or
+  # above this is AF even when the amplitude P gate sees "organised P" (coarse
+  # f-waves). Chosen on PTB-XL (123 AF): 0.537 -> 0.626 at spec 0.969 -> 0.958;
+  # ecg-arrhythmia halves +2 AF on one half, no new false alarm on either.
+  af_fwave_index_min: 0.45
 
 intervals_ms:
   pr: [120, 200]

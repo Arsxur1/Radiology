@@ -86,6 +86,7 @@ class Measurements(BaseModel):
     rr_cv: float | None = None                # RR coefficient of variation
     hrv_sdnn_ms: float | None = None
     p_wave_ratio: float | None = None         # fraction of beats with an organised P (AF gate)
+    fwave_index: float | None = None          # fibrillatory-wave band-power index (AF evidence, D58)
     p_onset_ratio: float | None = None        # fraction of beats with a refined P onset (PR)
     pr_std_ms: float | None = None            # beat-to-beat PR variability (AV dissociation gate)
     qrs_v1_terminal_positive: bool | None = None  # terminal forces in V1 (R' -> RBBB)

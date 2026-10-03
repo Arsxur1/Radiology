@@ -24,7 +24,7 @@ from cardiolens.contracts.features import (
 )
 from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer2_preprocess.quality import is_lead_off
-from cardiolens.layer3_measure.atrial import atrial_activity
+from cardiolens.layer3_measure.atrial import atrial_activity, fwave_index
 from cardiolens.layer3_measure.delineation import (
     P_ONSET_MIN_FRACTION,
     P_ONSET_MIN_UV,
@@ -481,6 +481,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
             av = False
             notes.append("atrial activity: no organised P waves -> not AV dissociation")
         m.atrial_rate_bpm, m.av_dissociation = rate, av
+        m.fwave_index = fwave_index(atrial_leads, rpeaks, fs, qrs_on=qrs_on, qrs_off=qrs_off)
         m.notes.extend(notes)
 
     # --- QTc ---

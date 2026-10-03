@@ -161,13 +161,19 @@ def detect_findings(
     # alone read pediatric sinus arrhythmia as AF (15 of 64 PTB-XL children).
     conducted_p = ((m.p_onset_ratio or 0.0) >= 0.5 and m.pr_std_ms is not None
                    and m.pr_std_ms < rh.get("af_pr_std_max_ms", 40))
-    if ((m.rr_cv or 0) > af_cv and m.p_wave_ratio is not None and m.p_wave_ratio < af_p
-            and not conducted_p):
+    # Fibrillatory waves as the second route (D58): the amplitude P gate takes
+    # coarse f-waves for organised P on a third of the PTB-XL AF records; an
+    # irregular rhythm with a high 4-9 Hz residual and no conducted P is AF too.
+    af_fw = rh.get("af_fwave_index_min")
+    no_p = m.p_wave_ratio is not None and m.p_wave_ratio < af_p
+    fwaves = af_fw is not None and m.fwave_index is not None and m.fwave_index >= float(af_fw)
+    if (m.rr_cv or 0) > af_cv and (no_p or fwaves) and not conducted_p:
         fs.findings.append(Finding(
             code="atrial_fibrillation", group="rhythm",
             label_ru="Фибрилляция предсердий (нерегулярный ритм, отсутствие P)",
             label_uz="Bo'lmachalar fibrillyatsiyasi (notekis ritm, P yo'q)",
-            evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio, pr_std_ms=m.pr_std_ms),
+            evidence=_ev(rr_cv=m.rr_cv, p_wave_ratio=m.p_wave_ratio, pr_std_ms=m.pr_std_ms,
+                         fwave_index=m.fwave_index, route="f_waves" if (fwaves and not no_p) else "no_p"),
             confidence=0.7,
         ))
 

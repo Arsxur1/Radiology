@@ -63,6 +63,9 @@ FLUTTER_SPECTRAL_SHARPNESS = 10.0     # peak / median PSD inside the band
 FLUTTER_SPECTRAL_RATIO = 1.0          # band power / low-band power
 FLUTTER_SPECTRAL_LEADS = ("II", "III", "aVF", "V1")
 FLUTTER_SPECTRAL_MIN_LEADS = 2
+FWAVE_BAND_HZ = (4.0, 9.0)            # fibrillatory waves: broadband, 240-540/min
+FWAVE_LOW_HZ = (0.5, 4.0)
+FWAVE_LEADS = ("II", "V1")
 # AV dissociation.
 AV_DISSOCIATION_RATE_RANGE = (45.0, 200.0)
 # Real third-degree blocks (PTB-XL) include a junctional escape at 70 with atria at
@@ -205,6 +208,31 @@ def flutter_spectrum(
     med = float(np.median(hits))
     agreeing = [h for h in hits if abs(h - med) <= 0.10 * med]
     return round(float(np.median(agreeing)), 1) if len(agreeing) >= FLUTTER_SPECTRAL_MIN_LEADS else None
+
+
+def fwave_index(
+    leads: dict[str, np.ndarray], rpeaks: np.ndarray, fs: float,
+    qrs_on: np.ndarray | None = None, qrs_off: np.ndarray | None = None,
+) -> float | None:
+    """Fibrillatory-wave index (D58): band power 4-9 Hz over 0.5-4 Hz of the
+    QRS-blanked residual, median over II and V1. Fibrillatory waves are
+    broadband in that band and leave no organised P; a sinus baseline, T waves
+    and respiration sit below 4 Hz. On PTB-XL AF records the median is 0.36
+    (p10-p90 0.11-1.10), on records without AF or flutter 0.25 (0.12-0.44)."""
+    vals = []
+    for name in FWAVE_LEADS:
+        x = leads.get(name)
+        if x is None or len(x) < 2 * fs:
+            continue
+        y = _blank_qrs(x, rpeaks, qrs_on, qrs_off, fs)
+        y = y - float(np.median(y))
+        nperseg = int(min(4.0 * fs, len(y)))
+        f, p = welch(y, fs=fs, nperseg=nperseg, noverlap=int(0.75 * nperseg))
+        band = (f >= FWAVE_BAND_HZ[0]) & (f <= FWAVE_BAND_HZ[1])
+        low = (f >= FWAVE_LOW_HZ[0]) & (f < FWAVE_LOW_HZ[1])
+        if band.any() and low.any():
+            vals.append(float(p[band].sum() / (p[low].sum() + 1e-12)))
+    return round(float(np.median(vals)), 3) if vals else None
 
 
 def _locked_harmonic(rate: float, hr: float) -> int | None:
