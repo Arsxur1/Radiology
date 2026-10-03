@@ -40,6 +40,7 @@ class TierMetrics:
     case_false_alert: int = 0                  # ... that received a label of the tier anyway
     missed_by_code: dict[str, int] = field(default_factory=dict)
     false_by_code: dict[str, int] = field(default_factory=dict)
+    unlabelled_calls: dict[str, int] = field(default_factory=dict)   # codes the dataset never labels: call counts only
     targets: dict[str, float] = field(default_factory=dict)
 
     @property
@@ -72,6 +73,7 @@ class TierMetrics:
             "case_negative": self.case_negative, "case_false_alert": self.case_false_alert,
             "case_false_alert_rate": self.case_false_alert_rate,
             "missed_by_code": dict(self.missed_by_code), "false_by_code": dict(self.false_by_code),
+            "unlabelled_calls": dict(self.unlabelled_calls),
             "targets": dict(self.targets), "meets": self.meets(),
         }
 
@@ -80,16 +82,25 @@ def score_risk_tiers(predictions: list[set[str]], gold: list[set[str]],
                      labels: list[str] | None = None, tiers: dict | None = None) -> dict[str, TierMetrics]:
     """Pool the per-case prediction / gold sets by risk tier.
 
-    ``labels`` restricts the codes counted to those the dataset scores (a tier
-    code the dataset never labels contributes nothing); ``tiers`` defaults to
-    the yaml."""
+    ``labels`` restricts the codes counted to those the dataset scores. A code
+    that no gold set of the dataset carries cannot be a miss or a false call —
+    the dataset simply does not label it (no open database labels the
+    hyperkalaemia T pattern) — so such codes are left out of the tier's metrics
+    and only their call counts are reported (``unlabelled_calls``): a prevalence
+    to judge against clinical expectation, not an error rate. ``tiers`` defaults
+    to the yaml."""
     cfg = tiers if tiers is not None else load_risk_tiers()
     targets = cfg.get("targets", {})
+    labelled: set[str] = set().union(*gold) if gold else set()
     out: dict[str, TierMetrics] = {}
     for tier, codes in cfg["tiers"].items():
-        codes = [c for c in codes if labels is None or c in labels]
+        tier_codes = [c for c in codes if labels is None or c in labels]
+        codes = [c for c in tier_codes if c in labelled]
         tm = TierMetrics(tier=tier, codes=codes, pooled=ClassMetrics(label=tier),
                          targets=dict(targets.get(tier, {})))
+        for code in tier_codes:
+            if code not in labelled:
+                tm.unlabelled_calls[code] = sum(code in p for p in predictions)
         code_set = set(codes)
         if not code_set:                       # the dataset labels none of this tier: no metric
             out[tier] = tm
@@ -136,5 +147,8 @@ def risk_report_lines(risk: dict[str, TierMetrics]) -> list[str]:
         if tm.false_by_code:
             false = ", ".join(f"{c} {n}" for c, n in sorted(tm.false_by_code.items(), key=lambda x: -x[1]))
             lines.append(f"{'':9s}   false:  {false}")
+        if tm.unlabelled_calls:
+            calls = ", ".join(f"{c} {n}" for c, n in sorted(tm.unlabelled_calls.items(), key=lambda x: -x[1]))
+            lines.append(f"{'':9s}   not labelled by this dataset (calls only): {calls}")
     lines.append("targets are the protocol's thresholds for an adjudicated set; on database labels they are reported, not claimed")
     return lines

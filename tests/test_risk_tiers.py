@@ -27,6 +27,16 @@ def test_labels_restrict_the_codes_and_empty_support_gives_none():
     assert r["critical"].meets() == {"case_sensitivity": None, "case_false_alert_rate": None}
 
 
+def test_a_code_the_dataset_never_labels_is_a_call_count_not_a_false_alert():
+    preds = [{"long_qt", "st_elevation"}, {"long_qt"}, set()]
+    gold = [{"st_elevation"}, set(), set()]           # nobody labels long QT here
+    r = score_risk_tiers(preds, gold, tiers=TIERS)
+    c = r["critical"]
+    assert c.codes == ["st_elevation"] and c.unlabelled_calls == {"long_qt": 2}
+    assert c.case_false_alert == 0 and c.pooled.fp == 0
+    assert "not labelled by this dataset (calls only): long_qt 2" in "\n".join(risk_report_lines(r))
+
+
 def test_yaml_tiers_cover_every_scored_label_exactly_once():
     cfg = load_risk_tiers()
     codes = [c for tier in cfg["tiers"].values() for c in tier]
