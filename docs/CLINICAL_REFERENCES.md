@@ -855,7 +855,13 @@ pediatric norm. At 105°: 4–8 y **15/22 at spec 0.951**, 9–15 y **6/15 at sp
 cohort's own 98th percentile of the measured axis among unlabelled children is
 117° in both bands, above the reference 105° — label noise in the negatives or a
 cohort effect; the published value is kept. The electrode-reversal gate uses the
-same band range. Validation by band and on PTB-XL (adults untouched) follows once the runs complete.
+same band range.
+
+Validation (`validate --ecg-arrhythmia data/ecg-arrhythmia-pediatric --age-min/--age-max`):
+4–8 y (971) right axis deviation **0 / 22 → 15 / 22 at spec 0.950**, left axis 2 / 3
+at spec 0.991, band macro-sensitivity 0.34 → 0.48; 9–15 y (620) right axis
+**0 / 13 → 6 / 13 at spec 0.960**, left axis 5 / 7 at spec 0.993, macro 0.58. PTB-XL
+(1692, adult table) unchanged: left 0.862 / 0.916, right 0.746 / 0.981, macro 0.626.
 
 
 ### Calibration of the AF gates — train/test halves (item 2)
