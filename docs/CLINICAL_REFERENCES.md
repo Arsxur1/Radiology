@@ -926,6 +926,41 @@ What is left on the pediatric cohort is label semantics, not measurement:
   is changed for a single record.
 - **Bands < 1 y and 1–3 y** remain unmeasured: no reachable set holds them.
 
+### AF by fibrillatory waves (improvement 6, D58)
+
+Of the 57 AF misses on PTB-XL, 43 had "organised P" by the amplitude gate
+(coarse f-waves taken for P), 10 an RR CV ≤ 0.10, 15 the conducted-P veto, and
+10 were read as flutter (family-correct). Layer 3 now measures a fibrillatory-wave
+index — band power 4–9 Hz over 0.5–4 Hz of the QRS-blanked residual, median over
+II and V1:
+
+| | AF (123) p10 / p50 / p90 | non-AF, non-flutter (1513) | AF misses |
+|---|:-:|:-:|:-:|
+| f-wave index | 0.11 / 0.36 / 1.10 | 0.12 / 0.25 / 0.44 | 0.16 / 0.46 / 1.74 |
+
+The AF rule gains a second route: irregular rhythm **and** (no organised P
+**or** index ≥ `af_fwave_index_min`), with the conducted-P veto kept. Sweep
+(PTB-XL; the single-lead gates are unchanged):
+
+| index ≥ | with veto: sens / false of 1513 | without veto |
+|---|:-:|:-:|
+| 0.35 | 0.667 / 77 | 0.715 / 101 |
+| **0.45** | **0.626 / 64** | 0.659 / 73 |
+| 0.60 | 0.585 / 58 | 0.602 / 62 |
+| 0.80 | 0.561 / 52 | 0.569 / 53 |
+| baseline | 0.537 / 47 | |
+
+On the ecg-arrhythmia halves the route adds 2 AF on one half (0.767 → 0.814)
+and nothing on the other, with no new false alarm on either. A spectral
+sharpness cap (f-waves are broadband, flutter a sharp peak) changed nothing on
+the halves and was not kept. Validation with the rule inside the pipeline:
+PTB-XL AF **0.537 → 0.667 at spec 0.969 → 0.953** (AF ∪ flutter family 0.581 →
+0.654 at 0.968 → 0.956, macro-sensitivity 0.626 → 0.633, `sinus_rhythm`
+specificity 0.779 → 0.797); 664 AF 0.80 → 0.825 at spec 0.733 → 0.724 (family
+0.764 → 0.79 at spec 0.952, unchanged). The new fires on PTB-XL negatives are
+records with an RR CV of 0.5 and above — ectopy, or flutter without the label.
+Pediatric cohort, CPSC and PTBDB follow once their runs complete.
+
 ### Calibration of the AF gates — train/test halves (item 2)
 
 The AF rule fires on `rr_cv >= rhythm.af_rr_cv_min` and `p_wave_ratio <=
