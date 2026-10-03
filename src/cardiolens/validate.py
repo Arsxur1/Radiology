@@ -12,6 +12,7 @@ import json
 
 from cardiolens.validation import (
     build_ecg_arrhythmia_dataset,
+    build_ludb_dataset,
     build_ptbdb_dataset,
     build_ptbxl_dataset,
     build_synthetic_dataset,
@@ -25,6 +26,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="CardioLens validation")
     ap.add_argument("--ptbxl", help="path to a local PTB-XL checkout")
     ap.add_argument("--ptbdb", help="path to a local PTB Diagnostic DB (fetch_ptbdb)")
+    ap.add_argument("--ludb", help="path to a local LUDB checkout (fetch_ludb): interval MAE against the wave marks")
     ap.add_argument("--max-days", type=int, default=3,
                     help="PTBDB: MI ECGs recorded at most this many days after the infarction are STEMI gold")
     ap.add_argument("--ecg-arrhythmia",
@@ -40,6 +42,9 @@ def main() -> None:
     elif args.ptbdb:
         cases = build_ptbdb_dataset(args.ptbdb, limit=args.limit, max_days=args.max_days)
         source = f"PTBDB ({args.ptbdb}, STEMI gold = MI <= {args.max_days} d)"
+    elif args.ludb:
+        cases = build_ludb_dataset(args.ludb, limit=args.limit)
+        source = f"LUDB ({args.ludb}, intervals from the cardiologists' wave marks)"
     elif args.ecg_arrhythmia:
         cases = build_ecg_arrhythmia_dataset(args.ecg_arrhythmia, limit=args.limit)
         source = f"ecg-arrhythmia ({args.ecg_arrhythmia})"
@@ -54,7 +59,7 @@ def main() -> None:
     print(f"=== CardioLens validation — {source} ===")
     print(f"cases: {report.n_cases}")
     print(f"macro sensitivity: {report.macro_sensitivity}")
-    print(f"PR MAE: {report.pr_mae_ms} ms | QT MAE: {report.qt_mae_ms} ms")
+    print(f"PR MAE: {report.pr_mae_ms} ms | QT MAE: {report.qt_mae_ms} ms | QRS MAE: {report.qrs_mae_ms} ms")
     print("\nper-class (sensitivity / specificity / support):")
     for lbl, m in report.per_class.items():
         print(f"  {lbl:24s} sens={m.sensitivity} spec={m.specificity} n={m.support}")

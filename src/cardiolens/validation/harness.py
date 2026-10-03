@@ -50,6 +50,7 @@ class LabeledCase:
     gold_findings: set[str]
     gold_pr_ms: float | None = None
     gold_qt_ms: float | None = None
+    gold_qrs_ms: float | None = None
     name: str = ""
     meta: dict = field(default_factory=dict)   # dataset-specific extras (PTBDB: days, territory)
 
@@ -75,6 +76,7 @@ class ValidationReport:
     macro_sensitivity: float | None = None
     pr_mae_ms: float | None = None
     qt_mae_ms: float | None = None
+    qrs_mae_ms: float | None = None
     details: dict = field(default_factory=dict)   # name -> {"pred": codes, "st_leads": [...]}
 
     def to_dict(self) -> dict:
@@ -83,6 +85,7 @@ class ValidationReport:
             "macro_sensitivity": self.macro_sensitivity,
             "pr_mae_ms": self.pr_mae_ms,
             "qt_mae_ms": self.qt_mae_ms,
+            "qrs_mae_ms": self.qrs_mae_ms,
             "per_class": {k: v.to_dict() for k, v in self.per_class.items()},
             "families": {k: v.to_dict() for k, v in self.families.items()},
         }
@@ -155,6 +158,7 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
     gold: list[set[str]] = []
     pr_err = IntervalError("PR")
     qt_err = IntervalError("QT")
+    qrs_err = IntervalError("QRS")
 
     details: dict = {}
     for case in cases:
@@ -164,6 +168,7 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
         gold.append(case.gold_findings)
         pr_err.add(result.measurements.intervals.pr_ms, case.gold_pr_ms)
         qt_err.add(result.measurements.intervals.qt_ms, case.gold_qt_ms)
+        qrs_err.add(result.measurements.intervals.qrs_ms, case.gold_qrs_ms)
         st = result.findings.by_code("st_elevation") if "st_elevation" in codes else None
         st_leads = next((e.value.split(",") for e in st.evidence if e.feature == "leads"), []) if st else []
         details[case.name] = {"pred": sorted(codes), "st_leads": st_leads}
@@ -181,6 +186,7 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
         macro_sensitivity=macro_recall(per_class),
         pr_mae_ms=pr_err.mae,
         qt_mae_ms=qt_err.mae,
+        qrs_mae_ms=qrs_err.mae,
         details=details,
     )
 
@@ -465,4 +471,101 @@ def build_ecg_arrhythmia_dataset(root, limit: int = 50) -> list[LabeledCase]:  #
         if sex is not None:
             sig.patient.sex = sex
         cases.append(LabeledCase(sig, gold, name=f"ecgarr_{hea.stem}"))
+    return cases
+
+
+# --------------------------------------------------------------------------- #
+# LUDB — cardiologist-marked wave boundaries on every lead (TZ §16 interval MAE)
+# --------------------------------------------------------------------------- #
+LUDB_LEAD_FILES = ("i", "ii", "iii", "avr", "avl", "avf", "v1", "v2", "v3", "v4", "v5", "v6")
+_LUDB_RHYTHM = {
+    "sinus rhythm": "sinus_rhythm", "sinus bradycardia": "sinus_bradycardia",
+    "sinus tachycardia": "sinus_tachycardia", "sinus arrhythmia": "sinus_rhythm",
+    "atrial fibrillation": "atrial_fibrillation", "atrial flutter": "atrial_flutter",
+}
+_LUDB_DIAG = {
+    "left axis deviation": "left_axis_deviation", "right axis deviation": "right_axis_deviation",
+    "left ventricular hypertrophy": "lvh", "complete right bundle branch block": "rbbb",
+    "complete left bundle branch block": "lbbb", "i degree av block": "first_degree_av_block",
+    "first degree av block": "first_degree_av_block", "wpw": "wpw_preexcitation",
+}
+
+
+def ludb_intervals_from_annotations(root: Path, name: str, fs: float) -> dict[str, float | None]:
+    """Median PR / QRS / QT (ms) over the beats of every annotated lead, then over leads.
+
+    Per lead the annotation stream is ``( p ) ( N ) ( t )`` triplets; a beat's PR
+    is its P onset to its QRS onset, QRS the onset to offset, QT the QRS onset to
+    the T offset (the T belonging to that QRS). Beats without a P (AF) give no PR.
+    """
+    import numpy as np
+    import wfdb
+
+    per_lead: dict[str, list[float]] = {"pr": [], "qrs": [], "qt": []}
+    for lead in LUDB_LEAD_FILES:
+        if not (root / f"{name}.{lead}").exists():
+            continue
+        ann = wfdb.rdann(str(root / name), lead)
+        sym, smp = list(ann.symbol), [int(x) for x in ann.sample]
+        waves = []   # (kind, on, off)
+        i = 0
+        while i + 2 < len(sym):
+            if sym[i] == "(" and sym[i + 2] == ")" and sym[i + 1] in ("p", "N", "t"):
+                waves.append((sym[i + 1], smp[i], smp[i + 2]))
+                i += 3
+            else:
+                i += 1
+        pr, qrs, qt = [], [], []
+        for k, (kind, on, off) in enumerate(waves):
+            if kind != "N":
+                continue
+            qrs.append((off - on) / fs * 1000.0)
+            if k > 0 and waves[k - 1][0] == "p" and on - waves[k - 1][1] < 0.4 * fs:
+                pr.append((on - waves[k - 1][1]) / fs * 1000.0)
+            if k + 1 < len(waves) and waves[k + 1][0] == "t" and waves[k + 1][2] - on < 0.7 * fs:
+                qt.append((waves[k + 1][2] - on) / fs * 1000.0)
+        for key, vals in (("pr", pr), ("qrs", qrs), ("qt", qt)):
+            if vals:
+                per_lead[key].append(float(np.median(vals)))
+    return {key: (float(np.median(vals)) if vals else None) for key, vals in per_lead.items()}
+
+
+def build_ludb_dataset(root: str | Path, limit: int = 5000) -> list[LabeledCase]:  # pragma: no cover
+    """LUDB as the interval-MAE benchmark plus its header diagnoses as gold findings."""
+    import json
+
+    import numpy as np
+    import wfdb
+
+    from cardiolens.contracts.signal import Patient, SignalRepresentation, canonical_lead_name
+
+    root = Path(root)
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    names = sorted((p.stem for p in root.glob("*.hea")), key=lambda x: int(x) if x.isdigit() else x)[:limit]
+    cases = []
+    for name in names:
+        rec = wfdb.rdrecord(str(root / name))
+        fs = float(rec.fs)
+        lead_names = [canonical_lead_name(ln) for ln in rec.sig_name]
+        signal = (rec.p_signal.T * 1000.0).astype(np.float32)   # mV -> µV
+        meta = manifest.get(name) or {}
+        gold: set[str] = set()
+        rhythm = (meta.get("rhythm") or "").lower()
+        for key, code in _LUDB_RHYTHM.items():
+            if key in rhythm:
+                gold.add(code)
+        for diag in [meta.get("axis") or ""] + list(meta.get("diagnoses") or []):
+            d = diag.lower()
+            for key, code in _LUDB_DIAG.items():
+                if key in d:
+                    gold.add(code)
+        ivs = ludb_intervals_from_annotations(root, name, fs)
+        sig = SignalRepresentation(
+            signal=signal, sampling_rate_hz=fs, lead_names=lead_names,
+            duration_s=float(signal.shape[1] / fs), source="wfdb",
+            patient=Patient(age_years=meta.get("age"), sex=meta.get("sex")),
+        )
+        cases.append(LabeledCase(signal=sig, gold_findings=gold, gold_pr_ms=ivs["pr"], gold_qt_ms=ivs["qt"],
+                                 gold_qrs_ms=ivs["qrs"], name=f"ludb_{name}", meta=meta))
     return cases
