@@ -60,12 +60,27 @@ qtc_ms:
   # adult 340 flagged 12 % of 4-8-year-olds as short QT (D44).
   short_lower: 320
 
-# Right-axis deviation is a normal variant in neonates/infants (TZ §6), so the
-# pediatric normal QRS-axis range is intentionally wide to avoid over-calling.
+# Right-axis deviation is a normal variant in neonates/infants (TZ §6). The
+# fallback range (no age) stays wide; the normal range by age band is the
+# 98th percentile of the QRS axis in the pediatric reference tables
+# (Davignon 1979/80, Rijnbeek 2001), rounded to 5°: ≈ +105° from 3 y on, higher
+# in infants and up to ~190° in the first month. On the ecg-arrhythmia pediatric
+# cohort (D53) the children labelled "right axis deviation" measure 88–176°
+# (median 97–110°): with 105° the label scores 15/22 at spec 0.95 (4–8 y) and
+# 6/15 at spec 0.96 (9–15 y) on train and test halves alike; the misses sit at
+# 88–101° — the chart label uses the adult +90° criterion — or are northwest
+# axes (reported as extreme_axis). The 2nd percentiles are near −10…−20° for
+# school ages; the lower bound is kept at the LAD threshold used so far.
 axis_deg:
   qrs_normal: [-30, 180]
   extreme_low: -90
   extreme_high: 210
+axis_deg_by_age:
+  - { age_days_max: 30,  qrs_normal: [30, 190] }
+  - { age_years_max: 1,  qrs_normal: [10, 125] }
+  - { age_years_max: 3,  qrs_normal: [0, 115] }
+  - { age_years_max: 8,  qrs_normal: [-30, 105] }
+  - { age_years_max: 15, qrs_normal: [-30, 105] }
 
 voltage_uv:
   low_voltage_limb: 400
