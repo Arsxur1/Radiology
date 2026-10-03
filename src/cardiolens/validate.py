@@ -18,6 +18,7 @@ from cardiolens.validation import (
     build_synthetic_dataset,
     filter_by_age,
     ptbdb_report_lines,
+    risk_report_lines,
     run_validation,
 )
 
@@ -66,6 +67,9 @@ def main() -> None:
     print("\nfamilies (any-of prediction vs any-of gold):")
     for lbl, m in report.families.items():
         print(f"  {lbl:24s} sens={m.sensitivity} spec={m.specificity} n={m.support}")
+    print("\nerror analysis by clinical risk tier (configs/risk_tiers.yaml):")
+    for line in risk_report_lines(report.risk):
+        print("  " + line)
     if args.ptbdb:
         print("\nPTBDB STEMI report (alert = st_elevation; any = descriptor family):")
         for line in ptbdb_report_lines(cases, report):

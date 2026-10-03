@@ -93,6 +93,11 @@ def load_rule_base() -> RuleBase:
 
 
 @functools.lru_cache(maxsize=2)
+def load_risk_tiers() -> dict[str, Any]:
+    """Clinical risk tiers of finding codes and the protocol's targets (TZ §16)."""
+    return _load_yaml(configs_dir() / "risk_tiers.yaml")
+
+
 def load_norms(group: str) -> dict[str, Any]:
     """Load an age-group norm table ('adult' | 'pediatric')."""
     return _load_yaml(configs_dir() / "norms" / f"{group}.yaml")

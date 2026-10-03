@@ -29,6 +29,7 @@ from cardiolens.validation.metrics import (
     macro_recall,
     score_findings,
 )
+from cardiolens.validation.risk import score_risk_tiers
 
 # Finding labels scored by the harness. Covers the rhythm/conduction/axis/ischemia
 # classes the pipeline emits (layer4_findings + safety) that also appear as gold
@@ -78,6 +79,7 @@ class ValidationReport:
     qt_mae_ms: float | None = None
     qrs_mae_ms: float | None = None
     details: dict = field(default_factory=dict)   # name -> {"pred": codes, "st_leads": [...]}
+    risk: dict = field(default_factory=dict)      # tier -> TierMetrics (error analysis by consequence)
 
     def to_dict(self) -> dict:
         return {
@@ -88,6 +90,7 @@ class ValidationReport:
             "qrs_mae_ms": self.qrs_mae_ms,
             "per_class": {k: v.to_dict() for k, v in self.per_class.items()},
             "families": {k: v.to_dict() for k, v in self.families.items()},
+            "risk": {k: v.to_dict() for k, v in self.risk.items()},
         }
 
 
@@ -188,6 +191,7 @@ def run_validation(cases: list[LabeledCase], *, labels: list[str] | None = None)
         qt_mae_ms=qt_err.mae,
         qrs_mae_ms=qrs_err.mae,
         details=details,
+        risk=score_risk_tiers(preds, gold, labels=labels),
     )
 
 
