@@ -959,7 +959,8 @@ PTB-XL AF **0.537 → 0.667 at spec 0.969 → 0.953** (AF ∪ flutter family 0.5
 specificity 0.779 → 0.797); 664 AF 0.80 → 0.825 at spec 0.733 → 0.724 (family
 0.764 → 0.79 at spec 0.952, unchanged). The new fires on PTB-XL negatives are
 records with an RR CV of 0.5 and above — ectopy, or flutter without the label.
-Pediatric cohort, CPSC and PTBDB follow once their runs complete.
+Pediatric cohort (1591, no AF label): AF specificity 0.962 → 0.963, unchanged; CPSC-2018 (9 AF)
+8/9 at spec 0.986; PTBDB alert numbers unchanged (day 0–1 14/61, controls 3/80).
 
 ### Calibration of the AF gates — train/test halves (item 2)
 
