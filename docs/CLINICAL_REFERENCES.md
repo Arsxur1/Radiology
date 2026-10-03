@@ -1666,6 +1666,38 @@ ECG-Image-Database, Challenge-2024 and every pediatric slug tried return 404. Th
 data; the norm-table entries for them are the references' values and are marked
 so.
 
+**D62 — MIMIC-IV-ECG, first subset (1499 records: 300 per statement class,
+seed 0; gold = the cart's statements, an algorithm's reading without age or
+sex).** Risk tiers: critical caught 366/911 (0.40), false alerts 37/588 (0.063);
+major 450/546 · 211/953; minor 1275/1329 · 118/170. Per class:
+
+| statement class (n) | our code | sens / spec | note |
+|---|---|:-:|---|
+| "*** CONSIDER ACUTE ST ELEVATION MI ***" / "ST ELEVATION, CONSIDER ACUTE INFARCT" (320) | `st_elevation` alert | **0.35 / 0.958** (2 false of 300 normals) | descriptor family `st_elevation_any` 0.63 / 0.68; misses: 91 carry the neutral descriptor, 50 ST depression, 41 RBBB, 27 LBBB, 25 AF; median max J of the misses 123 µV |
+| "PROLONGED QT" (338) | `long_qt` | 0.55 / 0.943 | the cart's label is not a QTc threshold of ours: Fridericia QTc of the labelled records p10 427 ms, p50 459; any single threshold trades fast — Fridericia > 440 gives 257/338 at 371/1161 false, Bazett > 440 256/338 at 496/1161 |
+| "TALL T WAVES — CONSIDER ACUTE ISCHEMIA OR HYPERKALEMIA" (307) | `peaked_t_waves` | 0.046 / 0.998 (14/307, 0/300 normals) | the cart's statement is an amplitude statement (max precordial T p50 1.10 mV, p10 0.82) and its T waves are broad and asymmetric (half-width p50 106 ms, asymmetry p50 1.39): a different concept from the tented hyperkalaemic T. Relaxing to half-width ≤ 150 ms and asymmetry 0.5–2.0 gives 23/307 at 0/300 normals and 1.2 % / 0.7 % prevalence on the 664 set / PTB-XL; with T/QRS ≥ 0.5 71/307 at 3.0 % / 1.4 %. Not adopted: the tented pattern stays the criterion, the cart's label is recorded as semantics |
+| "LEFT BUNDLE BRANCH BLOCK" (343) | `lbbb` | 0.76 / 0.935 | |
+| "ATRIAL FIBRILLATION" (139) | `atrial_fibrillation` | 0.58 / 0.945 | lower than on the other sets (0.67–0.83); hospital population, many wide-QRS and paced records |
+| — | `wpw_preexcitation` | **65 false calls (4.3 %)**, 2 gold statements | 52 by the classic route (PR 100–118 ms, QRS 128–164); 33 carry a bundle-branch statement, 3 are paced |
+
+STEMI operating curve on the same records (two contiguous leads at J ≥ θ with
+persistence, discordant leads excluded under BBB/LVH): θ = 100 µV 116/320 at
+10/300 normals; 80 µV 141/320 at 22/300; 60 µV 160/320 at 52/300; 50 µV 183/320
+at 84/300. The alert's own operating point (112/320 at 2/300) sits at the
+specific end; the cart's acute-MI statements are known to over-call (published
+positive predictive values of 50–70 %), so this curve bounds the trade, it does
+not pick a threshold — that needs the adjudicated set of the protocol.
+
+The false WPW calls were investigated: a gate requiring an organised P in ≥ 70 %
+of beats and a measured PR removes 36 of the 65 on MIMIC but cuts the PTB-XL
+true positives 40 → 17 (sensitivity 0.51 → 0.22) — in genuine pre-excitation the
+P wave abuts the QRS and the P detector misses it, so "organised P" is the wrong
+gate. A tighter PR (< 110 ms) on the classic route costs 40 → 13. Not adopted;
+recorded as the open major-tier false-alert item: the classic route (short PR +
+wide QRS without a delta requirement) has a 50 % positive predictive value on
+PTB-XL (28 true / 28 false) and fires on bundle branch blocks with a PR of
+100–118 ms.
+
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is
 not clinically validated and is not a medical device. Every report carries the
