@@ -488,6 +488,7 @@ _LUDB_DIAG = {
     "left ventricular hypertrophy": "lvh", "complete right bundle branch block": "rbbb",
     "complete left bundle branch block": "lbbb", "i degree av block": "first_degree_av_block",
     "first degree av block": "first_degree_av_block", "wpw": "wpw_preexcitation",
+    "stemi": "st_elevation",   # "STEMI: anterior wall" etc. — the only ST-elevation label in LUDB
 }
 
 
@@ -558,7 +559,9 @@ def build_ludb_dataset(root: str | Path, limit: int = 5000) -> list[LabeledCase]
         for diag in [meta.get("axis") or ""] + list(meta.get("diagnoses") or []):
             d = diag.lower()
             for key, code in _LUDB_DIAG.items():
-                if key in d:
+                # "complete right bundle branch block" is a substring of the
+                # incomplete form: match whole phrases only.
+                if re.search(r"(?<![a-z])" + re.escape(key), d):
                     gold.add(code)
         ivs = ludb_intervals_from_annotations(root, name, fs)
         sig = SignalRepresentation(
