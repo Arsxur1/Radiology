@@ -591,7 +591,11 @@ Validation with the rule inside the full alert (which still needs two
 contiguous leads of one territory, so a single proportional lead does not fire):
 12SL-STEMI (178) alert **0.40 → 0.43** (misses 106 → 101) with 0 false alerts on
 148 normals and the "other" groups unchanged at 0.03–0.04; CPSC STE (220)
-**0.355 → 0.368** at spec 0.990 (unchanged). PTB-XL, 664 and PTBDB follow once their runs complete.
+**0.355 → 0.368** at spec 0.990 (unchanged). ecg-arrhythmia 664 "ST elevation" (58)
+**0.414 → 0.483 at spec 0.979** (unchanged — the Ningbo label includes
+elevation under hypertrophy and block), macro-sensitivity 0.652 → 0.660. PTB-XL
+STE_ (28) 1/28 as before, specificity 0.966 → 0.964 (three more records among
+1664 negatives); LBBB and LVH rows unchanged on every set. PTBDB (549) follows once its run completes.
 
 
 ### WPW by delta wave (open item 4, D51)
