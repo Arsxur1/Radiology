@@ -1203,6 +1203,8 @@ Twenty clean pages, page / record (6 px/mm):
 | + gate per lead set, balanced limb amplitude | 0.83 (0.68) | 0.92 | +15.1 ms | 0.930 | 0.78 | 1 | 2 |
 | + apex fix (D52) | **0.91 (0.80)** | **0.97** | **+9.7 ms** | 0.932 | 0.78 | 1 | 2 |
 | relaxed apex condition (no outer ±3 px margin), rejected | 0.86 (0.67) | 0.93 | +19.5 ms | 0.928 | 0.76 | 3 | 2 |
+| 12 px/mm (≈ 300 dpi), before the apex fix | 0.92 (0.84) | 0.96 | +12.7 ms | 0.969 | 0.77 | 1 | 2 |
+| 12 px/mm, apex fix | **0.94 (0.85)** | **0.97** | +12.3 ms | **0.969** | 0.76 | 1 | 2 |
 
 What remains is the render resolution: a narrow low complex (an S of −2 mm
 lasting 20 ms) is one column at 6 px/mm and loses up to half its depth after
