@@ -111,8 +111,22 @@ def test_page_edits_must_fit_the_rhythm():
     assert unconfirmed in kept2                           # the drop that would open a 2-RR gap is undone
 
 
+def test_a_dropped_beat_stays_dropped_when_a_column_beat_fills_its_gap():
+    """The strip's beat sits 120 ms off the true R (on the P wave); the column
+    detector places the true beat. The gap after the addition is one RR, so the
+    strip's beat is not re-added as a second beat."""
+    from cardiolens.layer3_measure.measure import _fit_page_edits_to_rhythm
+
+    true = np.arange(300, 5000, 400).tolist()
+    confirmed = [r for r in true if r != 2300]
+    rpeaks = np.array(sorted(confirmed + [2300 - 60]))    # 120 ms early at 500 Hz
+    kept2, added2 = _fit_page_edits_to_rhythm(confirmed, list(confirmed), [2300], rpeaks)
+    assert added2 == [2300] and 2240 not in kept2
+
+
 def test_page_edits_pass_when_no_rhythm_is_defined():
     from cardiolens.layer3_measure.measure import _fit_page_edits_to_rhythm
 
-    kept, added = _fit_page_edits_to_rhythm([100, 500], [100, 500], [300], np.array([100, 500, 900]))
-    assert added == [300] and kept == [100, 500]
+    few = [100, 500, 900, 1300]                           # four confirmed beats: no rhythm yet
+    kept, added = _fit_page_edits_to_rhythm(few, few, [300], np.array(few + [1700]))
+    assert added == [300] and kept == few

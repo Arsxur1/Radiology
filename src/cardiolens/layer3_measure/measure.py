@@ -218,16 +218,21 @@ PAGE_BEAT_ADD_FRACTION = 0.6    # a column beat with no single-lead partner is a
 PAGE_BEAT_MIN_AGREEMENT = 0.6   # the columns are trusted when they confirm this share of the judgeable single-lead beats, or when their list is the more regular one
 PAGE_BEAT_ADD_MIN_RR = 0.6      # an added beat needs this fraction of the confirmed median RR to each neighbour (room for a missed beat)
 PAGE_BEAT_DROP_MAX_GAP = 1.6    # dropping a beat may not open a gap longer than this × the confirmed median RR (a true beat the columns missed)
+PAGE_BEAT_GATE_MIN_CONFIRMED = 5  # fewer confirmed beats define no rhythm (three gave a median RR twice the true one)
 
 
 def _fit_page_edits_to_rhythm(confirmed: list, kept: list, added: list, rpeaks: np.ndarray) -> tuple[list, list]:
     """Keep only the column-detector edits that fit the rhythm the confirmed beats
     define (D55). An added beat needs room for itself — PAGE_BEAT_ADD_MIN_RR of
     the confirmed median RR to each kept neighbour; dropping a single-lead beat may
-    not open a gap longer than PAGE_BEAT_DROP_MAX_GAP median RRs, because no rhythm
-    has such a gap and the columns simply missed a true beat there. Fewer than
-    three confirmed beats define no rhythm: the edits pass unchanged."""
-    if len(confirmed) < 3:
+    not open a gap longer than PAGE_BEAT_DROP_MAX_GAP median RRs *after the
+    additions* (a gap the columns fill with their own beat is no gap; a gap nobody
+    fills is a true beat the columns missed). Fewer than
+    PAGE_BEAT_GATE_MIN_CONFIRMED confirmed beats define no rhythm — on a page whose
+    single-lead list sat on the P waves, three confirmed beats gave a median RR
+    twice the true one and the gate rejected the true beats — and the edits pass
+    unchanged, left to the agreement / regularity decision."""
+    if len(confirmed) < PAGE_BEAT_GATE_MIN_CONFIRMED:
         return kept, added
     med_rr = float(np.median(np.diff(np.sort(np.asarray(confirmed, dtype=float)))))
     base = np.sort(np.asarray(kept, dtype=int))
@@ -243,11 +248,12 @@ def _fit_page_edits_to_rhythm(confirmed: list, kept: list, added: list, rpeaks: 
 
     added = [p for p in added if _has_room(p)]
     kept = list(kept)
+    merged = np.sort(np.asarray(kept + added, dtype=int))
     for r in sorted(set(np.asarray(rpeaks).tolist()) - set(kept)):
-        left, right = _neighbours(r, base)
+        left, right = _neighbours(r, merged)
         if left is not None and right is not None and right - left > PAGE_BEAT_DROP_MAX_GAP * med_rr:
             kept.append(r)
-            base = np.sort(np.append(base, r))
+            merged = np.sort(np.append(merged, r))
     return kept, added
 
 
