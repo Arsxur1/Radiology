@@ -215,6 +215,7 @@ PAGE_BEAT_EDGE_END_S = 0.45     # no beat without a T wave window after it
 PAGE_BEAT_RHYTHM_FRACTION = 0.3 # the rhythm lead's own extreme is used when its deflection is this fraction of the column's
 PAGE_BEAT_MATCH_S = 0.10        # a single-lead beat within this of a column beat is the same beat
 PAGE_BEAT_ADD_FRACTION = 0.6    # a column beat with no single-lead partner is added only above this envelope height
+PAGE_BEAT_MIN_AGREEMENT = 0.6   # the columns are trusted when they confirm this share of the judgeable single-lead beats, or when their list is the more regular one
 
 
 def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray,
@@ -354,8 +355,21 @@ def measure(sig: SignalRepresentation) -> Measurements:
             kept = [r for r in rpeaks if (r in confirmed) or (_unjudgeable(r) and s_at(r) >= 0.5 * s_ref)]
             added = [p for p, hgt in zip(page, heights, strict=True)
                      if hgt >= PAGE_BEAT_ADD_FRACTION and (not rpeaks.size or np.min(np.abs(rpeaks - p)) > tol)]
+            # On a badly extracted page (a strong photo) the column envelopes are
+            # noise and would re-write a sound single-lead list: the columns are
+            # trusted only when they confirm most of the judgeable single-lead beats.
+            judged = [r for r in rpeaks if not _unjudgeable(r)]
+            agreement = len([r for r in judged if r in confirmed]) / max(1, len(judged))
             merged = np.unique(np.asarray(kept + added, dtype=int))
-            if len(merged) >= 3:
+
+            def _cv(beats):
+                rr = np.diff(np.sort(np.asarray(beats, dtype=float)))
+                return float(np.std(rr) / (np.mean(rr) + 1e-9)) if len(rr) >= 2 else float("inf")
+            # When the two detectors disagree, the more regular list is the rhythm:
+            # P/T oversenses on the strip and noise peaks on a bad page both make
+            # the offending list more irregular than the true beats.
+            columns_trusted = agreement >= PAGE_BEAT_MIN_AGREEMENT or _cv(merged) < _cv(rpeaks)
+            if len(merged) >= 3 and columns_trusted:
                 n_add, n_drop = len(added), len(rpeaks) - len(kept)
                 rpeaks = merged
                 page_confirmed = True
