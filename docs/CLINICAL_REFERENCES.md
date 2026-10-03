@@ -585,7 +585,14 @@ clinical sense; three are plain LBBB with a very deep S (one with J 2.0 mV over
 an S of 5.0 mV) and one has no statement. The PTBDB "other" fires are later-day
 MI records. The discordant ratio among context records without MI sits at a
 median 0.09–0.11, 98th percentile 0.16–0.28, so 0.25 is at the tail of the
-expected secondary repolarisation. Validation on the five sets follows below.
+expected secondary repolarisation.
+
+Validation with the rule inside the full alert (which still needs two
+contiguous leads of one territory, so a single proportional lead does not fire):
+12SL-STEMI (178) alert **0.40 → 0.43** (misses 106 → 101) with 0 false alerts on
+148 normals and the "other" groups unchanged at 0.03–0.04; CPSC STE (220)
+**0.355 → 0.368** at spec 0.990 (unchanged). PTB-XL, 664 and PTBDB follow once their runs complete.
+
 
 ### WPW by delta wave (open item 4, D51)
 
