@@ -122,6 +122,37 @@ def _reject_non_qrs_detections(
     return rpeaks[keep]
 
 
+DROPPED_BEAT_RR_RANGE = (1.8, 2.2)   # an RR this many medians long is one missed detection
+DROPPED_BEAT_MAX_FRACTION = 0.25     # more such RRs than this is a rhythm, not detector loss
+
+
+def _rr_for_regularity(rr: np.ndarray) -> tuple[np.ndarray, int]:
+    """RR series for the regularity statistic with isolated missed beats healed.
+
+    One undetected R (a small complex on a digitised page, a beat under
+    artefact) leaves a single RR of twice the median; on a 10-s strip that one
+    interval alone drives the RR coefficient of variation past the AF gate. An
+    RR within ``DROPPED_BEAT_RR_RANGE`` of the median is split into two halves
+    for the statistic, as long as such intervals are a minority
+    (``DROPPED_BEAT_MAX_FRACTION``): in 2:1 block the long interval *is* the
+    median and nothing is touched; in AF the intervals do not cluster at 2x.
+    HR and the stored R peaks are left as measured. Returns the series and the
+    number of healed intervals.
+    """
+    if len(rr) < 3:
+        return rr, 0
+    med = float(np.median(rr))
+    lo, hi = DROPPED_BEAT_RR_RANGE
+    long = (rr >= lo * med) & (rr <= hi * med)
+    n = int(long.sum())
+    if n == 0 or n > DROPPED_BEAT_MAX_FRACTION * len(rr):
+        return rr, 0
+    out = []
+    for v, is_long in zip(rr, long):
+        out.extend([v / 2.0, v / 2.0] if is_long else [v])
+    return np.asarray(out), n
+
+
 def _lead_off(sig: SignalRepresentation, lead: str) -> bool:
     """True when ``lead`` carries no signal (Layer-2 lead-off criterion)."""
     return lead in sig.lead_names and is_lead_off(sig.lead(lead))
@@ -203,10 +234,15 @@ def measure(sig: SignalRepresentation) -> Measurements:
         m.heart_rate_bpm = round(60.0 / rr_s_mean, 1)
         m.rr_std_ms = round(float(np.std(rr) * 1000.0), 1)
         m.hrv_sdnn_ms = round(float(np.std(rr) * 1000.0), 1)
-        # Regularity: coefficient of variation of RR < 10% -> regular.
-        cv = float(np.std(rr) / (np.mean(rr) + 1e-9))
+        # Regularity: coefficient of variation of RR < 10% -> regular. An isolated
+        # RR of twice the median is a dropped detection, not irregularity (D52).
+        rr_reg, dropped = _rr_for_regularity(rr)
+        cv = float(np.std(rr_reg) / (np.mean(rr_reg) + 1e-9))
         m.rr_cv = round(cv, 3)
         m.rhythm_regular = bool(cv < 0.10)
+        if dropped:
+            m.notes.append(f"{dropped} RR interval(s) of twice the median: possible missed beat(s), "
+                           "excluded from the regularity statistic")
     else:
         m.notes.append("insufficient R-peaks for rhythm analysis (low confidence)")
 
