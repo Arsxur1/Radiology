@@ -1336,6 +1336,57 @@ usable for rhythm and axis (axis MAE 29° → 14°) but not yet for the finding 
 
 
 
+### Page beats from every lead of the column (D55) and the grid-line snap on strong photos (D57)
+
+**D55.** Of the five residual false-AF pages after D52, two came from the
+single-lead detector on the rhythm strip: a near-isoelectric lead II (0.2 mV,
+S lost to the page) and an LBBB record whose P waves outranked the small R
+(HR 94 → 60, RR CV 0.01 → 0.67). Each time column of the page carries four
+leads; the spatial-velocity envelope over the leads valid in the column,
+normalised by the column's own 90th-percentile peak, peaks on every true QRS.
+Beats are its peaks (≥ 0.35, 240 ms refractory, 300 ms before / 450 ms after
+the page edges) placed on the rhythm lead's positive R when it is clear,
+otherwise on its absolute extreme, otherwise on the column's summed-deflection
+apex. The three diagnostic pages now find every beat (HR within 0.5 bpm of the
+record, RR CV at the record's value). 100 clean pages, D52 → D55:
+
+| | identical sets | codes Jaccard | HR MAE (≤ 3 bpm) | AF added | `sinus_rhythm` lost | QRS bias (mean / median) | `long_qt` added |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| D52 | 51 % | 0.78 | 1.49 (88 %) | 5 | 5 | +6.0 / +4.0 ms | 6 |
+| D55, beats on the column apex | 50 % | — | 1.24 (94 %) | 3 | 1 | +7.7 / +5.5 ms | 9 |
+| D55, beats on the rhythm lead's R (final) | numbers follow once the run completes |
+
+The three remaining AF pages are at the AF gate on the digital record itself
+(RR CV 0.17–0.24). Snapping every beat to the column apex shifted the R
+reference by up to 30 ms against the rhythm lead and widened QRS/QT, hence the
+final placement on the rhythm lead's own R whenever it carries a clear complex.
+
+**D57.** A stage-by-stage diagnostic on two records × six degradations × three
+seeds showed where the strong photo fails: with a rotation of −2.5° and/or a
+vignette, the grid-line snap of D48 chose a Hough line with the right angle but
+crossing the coarse side (a trace, a shadow edge); corners moved 20–30 px and
+the warp skewed the page. The snap now requires both ends of the line inside
+the search band, a span of 60 % of the side and a corner move within one band
+width. A/B on the same cases (r of the digitised page, snap / no snap):
+
+| variant (3.5 %, seeds 1–3, two records) | before D57 | after D57 | coarse quadrilateral only |
+|---|:-:|:-:|:-:|
+| perspective + rotation −2.5° | 0.15 / 0.39 / 0.02 · 0.12 / 0.40 / 0.24 | 0.58 / 0.58 / 0.02 · 0.36 / 0.52 / 0.72 | 0.58 / −0.04 / 0.81 · 0.10 / 0.81 / 0.84 |
+| perspective + vignette 0.6 + rotation | 0.13 / 0.14 / 0.28 · 0.02 / 0.08 / 0.26 | 0.94 / 0.44 / 0.88 · 0.94 / 0.42 / 0.68 | 0.96 / 0.78 / 0.88 · 0.94 / 0.89 / 0.85 |
+| full photo (vignette, texture, salt, JPEG 40, rotation) | 0.43 / 0.03 / 0.05 · 0.38 / 0.02 / 0.75 | 0.43 / 0.03 / 0.02 · 0.38 / 0.02 / 0.75 | 0.43 / 0.03 / 0.46 · 0.38 / 0.02 / 0.75 |
+| pure perspective 2 / 3.5 / 5 / 8 % (reference) | — | 17 of 24 better than coarse, 4 worse by ≤ 0.06, one failure at 2 % (seed 3) | — |
+
+On the rotated and vignetted pages the coarse quadrilateral alone would still
+be better; on pure perspective the snap is what makes 5–8 % readable (0.84–0.95
+against 0.36–0.84), so it stays. An arbiter between the two warps by the grid's
+angle spread was measured and rejected: it picks right in 8 of the 13 diverging
+cases but breaks a 5 % page (0.90 → 0.54), and in the one 2 % failure both warps
+have identical metrics (the failure is downstream of the warp). The full photo at
+3.5 % stays unreadable with or without the snap: the grid texture itself is
+destroyed by grain, salt and JPEG 40, and that is the limit, not the quadrilateral.
+The 100-page degraded table follows once its run completes.
+
+
 ### Paper-page digitisation benchmark (item 5d)
 
 Synthetic 12-lead pages (3×4 layout + lead-II rhythm strip, 6 px/mm, 25 mm/s,
