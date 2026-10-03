@@ -278,15 +278,19 @@ def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray
         key = next(((a, b) for a, b in cols if a <= p < b), None)
         rows, base = col_rows.get(key, ([], None))
         lo, hi = max(0, p - w), min(n, p + w + 1)
-        own = np.abs(rhythm_row[lo:hi] - rhythm_base)
+        own_pos = rhythm_row[lo:hi] - rhythm_base            # the R the single-lead detector marks
+        own = np.abs(own_pos)
         if rows:
             per_lead = np.abs(sig.signal[rows, lo:hi] - base[:, None])
-            if own.max() >= PAGE_BEAT_RHYTHM_FRACTION * per_lead.max(axis=1).mean():
+            level = PAGE_BEAT_RHYTHM_FRACTION * per_lead.max(axis=1).mean()
+            if own_pos.max() >= level:
+                seg = own_pos
+            elif own.max() >= level:
                 seg = own
             else:
                 seg = per_lead.sum(axis=0)
         else:
-            seg = own
+            seg = own_pos if own_pos.max() > 0 else own
         snapped.append(lo + int(np.argmax(seg)))
     return np.unique(np.asarray(snapped, dtype=int))
 
