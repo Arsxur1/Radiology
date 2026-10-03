@@ -1223,7 +1223,25 @@ beats to the rhythm-strip detector (a near-isoelectric lead II of 0.2 mV with a
 1.8–2.2 medians counts as two intervals for the regularity statistic when such
 intervals are at most a quarter of the series; its cost on digital records is one
 PTB-XL AF record (0.545 / 0.969 → 0.537 / 0.969; 664 AF 0.80 / 0.728 → 0.80 /
-0.733). The degraded-page table follows once the degraded-page run completes.
+0.733).
+
+Same 100 records, all four page variants, D47 → D47 + D48 + D52 (the photo rows
+also carry the D48 quadrilateral de-warp, which the D47 run predates):
+
+| Page | fail | mean r | r p10 | HR MAE (≤ 3 bpm) | axis MAE (≤ 15°) | QRS MAE | codes Jaccard | identical |
+|---|--:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| clean | 0 | 0.94 → 0.94 | 0.89 | 2.6 (80 %) → **1.5 (88 %)** | 9° (90 %) → **7° (93 %)** | 12.4 → 12.2 ms | 0.69 → **0.78** | 31 → **51 %** |
+| scan (1°, blur 1 px, JPEG 60) | 0 | 0.92 → 0.92 | 0.87 | 4.0 (77 %) → **1.8 (88 %)** | 13° (84 %) → **7° (93 %)** | 14.1 → 12.6 ms | 0.60 → **0.66** | 21 → **30 %** |
+| photo (2 %, vignette, texture, JPEG 45, 1.5°) | 0 | 0.62 → 0.65 | 0.18 → 0.20 | 9.0 (39 %) → **6.2 (52 %)** | 29° (46 %) → **14° (80 %)** | 29.7 → 24.9 ms | 0.38 → **0.46** | 3 → 10 % |
+| photo strong (3.5 %, −2.5°, salt) | 6 | 0.24 → 0.23 | 0.01 | 13.5 (30 %) → 8.5 (35 %) | 62° (18 %) → 26° (60 %) | 39.1 → 32.6 ms | 0.30 → 0.37 | 4 → 7 % |
+
+The waveform correlation does not move (the trace was already right where it
+was found); what moves is what the measurements make of it — HR within 3 bpm on
+88 % of clean and scanned pages (the per-set oversense gate and the missed-beat
+guard), axis within 15° on 93 % (the six-lead net-deflection axis of D49 is
+robust to a single under-read lead), and the finding sets. The 2 % photo is now
+usable for rhythm and axis (axis MAE 29° → 14°) but not yet for the finding set
+(0.46); the strong photo remains beyond the de-warp.
 
 
 
