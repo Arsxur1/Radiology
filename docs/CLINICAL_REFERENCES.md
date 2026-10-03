@@ -1211,7 +1211,17 @@ lasting 20 ms) is one column at 6 px/mm and loses up to half its depth after
 resampling and the band-pass; the 150-Hz-equivalent page, not the tracker, is
 the limit there. The remaining AF pages were already at the gate on the digital
 record (RR CV 0.17–0.24 with a P/R ratio that the page moves from 0.5 to 0.3).
-The 100-page re-evaluation follows below once it has run.
+**100 clean pages, re-run with all of D52** (same records and script as the D47
+code comparison): finding sets identical on **36 → 51** of 100 pages; QRS bias
+median **+8 → +4 ms** (mean +9 → +6, MAE 12.4 → 12.2); `low_qrs_voltage` added on
+**19 → 5** pages; `lvh` lost 7 → 6; `lbbb` added 4 → 1; AF added 6 → 5. The five
+AF pages: three records are at the AF gate on the digital record itself (RR CV
+0.17–0.24 with a P/R ratio the page lowers from 0.5 to 0.3), two lose several
+beats to the rhythm-strip detector (a near-isoelectric lead II of 0.2 mV with a
+20-ms S, and an LBBB record whose P waves are taken for R) — the one-beat case
+(RR CV 0.07 → 0.28) is healed by the regularity guard. The degraded-page
+table follows once the degraded-page run completes.
+
 
 
 ### Paper-page digitisation benchmark (item 5d)
