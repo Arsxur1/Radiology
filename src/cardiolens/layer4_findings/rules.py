@@ -608,7 +608,11 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
         # Diffuse ST elevation across >=2 coronary territories (and no single
         # reciprocal territory) points to pericarditis, not a focal STEMI — a
         # classic mimic distinction (ecglibrary / 150 ECG Problems).
-        n_terr = sum(1 for _, _, leads, _ in _TERRITORIES if len(set(elevated) & leads) >= 2)
+        # Proportional discordant leads (D54) rescue a focal alert under a block;
+        # they are not evidence of diffuse elevation, so the territory count for
+        # the pericarditis pattern uses the primary (concordant) leads only.
+        primary = set(elevated) - set(proportional)
+        n_terr = sum(1 for _, _, leads, _ in _TERRITORIES if len(primary & leads) >= 2)
         if n_terr >= 2 and len(depressed) == 0:
             fs.findings.append(Finding(
                 code="pericarditis", group="other",
