@@ -510,11 +510,26 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, patient=None) -
     # An RSR' pattern in V1 with a wide QRS is RBBB, not a delta wave.
     wpw = norms.get("wpw", {})
     delta = m.morphology.delta_ms
-    classic = wide and bool(pr_lo) and iv.pr_ms is not None and iv.pr_ms < pr_lo
+    # The classic conjunction alone had a 50 % positive predictive value on
+    # PTB-XL (28 true / 28 false) and fired on 52 bundle branch blocks with a
+    # PR of 100-118 ms in MIMIC-IV-ECG: a short PR with a wide QRS is also a
+    # block in a patient whose PR is short. Pre-excitation slurs the upstroke,
+    # so the classic route needs the delta descriptor too, at a lower bar than
+    # the delta route (D65: true classic calls had delta 53-90 ms, false 21-55).
+    classic_delta = wpw.get("classic_delta_ms")
+    classic = (wide and bool(pr_lo) and iv.pr_ms is not None and iv.pr_ms < pr_lo
+               and (classic_delta is None or delta is None or delta >= float(classic_delta)))
+    # A definite-LBBB width with a PR that is not short is a block whose slow
+    # initial activation looks like a delta wave (D65: 13 such false calls in
+    # MIMIC at QRS 136-200 ms; the trade on PTB-XL is 4 true calls).
+    lbbb_width = ivn.get("qrs_lbbb_definite")
+    block_like = (bool(lbbb_width) and bool(pr_lo) and iv.pr_ms is not None
+                  and iv.pr_ms >= pr_lo and iv.qrs_ms >= float(lbbb_width))
     by_delta = (delta is not None and wpw.get("delta_ms") is not None and delta >= wpw["delta_ms"]
                 and iv.pr_ms is not None and iv.pr_ms <= wpw.get("pr_max", 140)
                 and iv.qrs_ms >= wpw.get("qrs_min", 90)
-                and not (wide and m.qrs_v1_terminal_positive is True))
+                and not (wide and m.qrs_v1_terminal_positive is True)
+                and not block_like)
     if classic or by_delta:
         how = "короткий PR" if classic else f"дельта-волна {delta} мс"
         how_uz = "qisqa PR" if classic else f"delta to'lqin {delta} ms"

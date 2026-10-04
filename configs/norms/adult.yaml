@@ -139,3 +139,7 @@ wpw:
   delta_ms: 45
   pr_max: 140
   qrs_min: 90
+  # The classic route (short PR + wide QRS) also needs a slurred upstroke of at
+  # least this (D65): without it the route fired on bundle branch blocks with a
+  # PR of 100-118 ms (PTB-XL 28 true / 28 false; MIMIC 52 false).
+  classic_delta_ms: 40

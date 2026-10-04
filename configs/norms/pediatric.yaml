@@ -156,3 +156,4 @@ wpw:
   delta_ms: 45
   pr_max: 140
   qrs_min: 90
+  classic_delta_ms: 40   # as in the adult table (D65)
