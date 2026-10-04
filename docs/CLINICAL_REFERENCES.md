@@ -1797,8 +1797,37 @@ The sensitivity against the broad labels halves because those labels include
 the strain / BBB repolarisation depression; it is kept in the family, as
 `st_elevation_any` keeps the broad elevation. The remaining false calls
 (MIMIC 62, PTB-XL 91) are primary depression the cart or the cardiologists did
-not label — AF with rapid response and tachycardia are the next contexts to
-examine.
+not label (D69, below).
+
+**D68 — pediatric ST depression.** The 96 calls in 1580 unlabelled children: 85
+in sinus tachycardia (HR median 138), 65 aged 4–6, leads V1 (66) and III (39),
+the T inverted in the same lead (juvenile pattern in 46), J near zero (median
+−54 µV), J+60 −97, J+80 −140 — the segment descends into the inverted T; it is
+the T wave's limb. Candidates on the cohort rows (approximate call count 36 →):
+exclude the juvenile leads V1–V4 when their T is inverted → 12; exclude any lead
+whose segment descends into its inverted T (J+80 < J+60 − 25 µV) → **9**; judge at
+J+60 only above 120 bpm → 17; require J ≤ −50 → 18. Adopted the second as the
+pediatric table entry `depression_into_inverted_t_margin_uv` (25); the adult
+table has none (depression with T inversion is the ischaemic / strain pattern in
+adults). Measured on the cohort: `st_depression` false calls **91 → 10**, major
+case-level false alerts 5.8 % → **0.7 %**; the one labelled child that was caught
+(III / V3 at 156 bpm, borderline) is lost (0/4); the 64 PTB-XL children: false
+2 → 1, WPW 2/2, no critical false alerts. The remaining 10 are inferior leads at
+≈ 146 bpm — rate-related, left as is.
+
+**D69 — the adult residue: label semantics, rhythm gates rejected.** Of the 61
+remaining MIMIC false calls the depth equals the true calls' (J+60 median −170
+vs −198 µV), the leads are lateral / V3–V6, AF 8, HR > 100 in 14; the cart's own
+wording on those records: "CONSIDER ACUTE ST ELEVATION MI" (15 — reciprocal
+depression of a STEMI, not worded as depression), "TALL T WAVES" (15), "ST-T
+changes may be due to hypertrophy / ischemia" (10 — strain under an LVH our
+criteria did not reach), no ST-T wording at all (24). PTB-XL's 114: AF/flutter
+29, HR > 100 in 33, depth and slope as the true calls (J+60 −137 vs −141, J+80 −
+J+60 −5 vs 0). Gates measured: AF/flutter at > 100 bpm → not primary: MIMIC
+61 → 61, PTB-XL 114 → 99 at 26 → 24 true; above 120 bpm require J ≤ −50: no
+effect; both: the same. Not adopted — 15 false for 2 true on one set and nothing
+on the other is a fit, not a rule. The residue is measured primary depression
+without a "depression" label; only the protocol's adjudicated set can judge it.
 
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is
