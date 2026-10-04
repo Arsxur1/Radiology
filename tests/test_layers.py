@@ -268,3 +268,38 @@ def test_wfdb_header_demographics_are_read(tmp_path):
                 comments=["Age: 8", "Sex: Male"], write_dir=str(tmp_path))
     sig = load_wfdb(tmp_path / "rec")
     assert sig.patient.age_years == 8.0 and sig.patient.sex == "male"
+
+
+def _multilead_spiked_ecg(offset_s, leads="all", scale=0.6):
+    """Synthetic ECG with a small one-sample spike on many leads at (R + offset_s)."""
+    from cardiolens.pipeline import run_pipeline
+    base = generate_synthetic_ecg(heart_rate_bpm=72)
+    r_s = [r / 500.0 for r in run_pipeline(base.model_copy(deep=True), mode="A")
+           .measurements.r_peaks_samples]
+    sig = generate_synthetic_ecg(heart_rate_bpm=72)
+    fs = sig.sampling_rate_hz
+    rows = range(sig.signal.shape[0]) if leads == "all" else [sig.lead_names.index(leads)]
+    for li in rows:
+        d = np.abs(np.diff(sig.signal[li]))
+        amp = float(np.percentile(d, 99)) * 3.0 * scale / 0.6
+        for t in r_s:
+            i = int(round((t + offset_s) * fs))
+            if 0 <= i < sig.signal.shape[1]:
+                sig.signal[li, i] += amp
+    return sig
+
+
+def test_multilead_spike_detects_small_qrs_locked_spikes():
+    """D74: a modest spike on every lead at once, locked to the QRS -> paced; the same
+    spike on one lead only is not a multi-lead spike."""
+    from cardiolens.layer3_measure.measure import pacing_multilead_spike_times, pacing_spike_ratio
+    from cardiolens.pipeline import run_pipeline
+    sig = _multilead_spiked_ecg(-0.04)
+    assert pacing_spike_ratio(sig) < 5.5                     # too small for the single-lead rule
+    assert len(pacing_multilead_spike_times(sig)) >= 5
+    assert "paced_rhythm" in run_pipeline(sig, mode="A").findings.codes()
+    one = _multilead_spiked_ecg(-0.04, leads="II")
+    assert pacing_multilead_spike_times(one) == []
+    assert "paced_rhythm" not in run_pipeline(one, mode="A").findings.codes()
+    late = _multilead_spiked_ecg(+0.40)                     # mid-diastole: not QRS-locked
+    assert "paced_rhythm" not in run_pipeline(late, mode="A").findings.codes()

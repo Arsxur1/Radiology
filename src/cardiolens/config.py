@@ -74,6 +74,10 @@ class PacingConfig(BaseModel):
     also time-locked to the QRS on at least coupling_min of the beats."""
     spike_ratio_min: float = 5.5
     coupling_min: float = 0.2
+    # Multi-lead simultaneous slope outliers (D74).
+    multilead_k: float = 2.0
+    multilead_min_leads: int = 6
+    multilead_coupling_min: float = 0.3
 
 
 class SafetyConfig(BaseModel):

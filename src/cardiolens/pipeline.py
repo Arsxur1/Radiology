@@ -43,6 +43,7 @@ from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer2_preprocess import assess_quality, preprocess
 from cardiolens.layer3_measure import measure
 from cardiolens.layer3_measure.measure import (
+    pacing_multilead_spike_times,
     pacing_spike_coupling,
     pacing_spike_ratio,
     pacing_spike_times,
@@ -99,6 +100,8 @@ def run_pipeline(
     # pacer spike is removed by the Layer-2 bandpass, so measure it before that.
     pacing_ratio = pacing_spike_ratio(sig)
     spike_times = pacing_spike_times(sig) if pacing_ratio >= cfg.pacing.spike_ratio_min else []
+    ml_spike_times = pacing_multilead_spike_times(sig, cfg.pacing.multilead_k,
+                                                  cfg.pacing.multilead_min_leads)
 
     # Layer 2 — preprocess + quality (TZ §5).
     pp = cfg.preprocessing
@@ -172,18 +175,29 @@ def run_pipeline(
     # RAW signal (measured above, before the bandpass that would erase it).
     # The spike must also be time-locked to the QRS: an artifact spike is an
     # equally extreme slope outlier but lands at random (DECISIONS D24).
-    coupling = pacing_spike_coupling(
-        spike_times, [r / sig.sampling_rate_hz for r in (m.r_peaks_samples or [])])
-    if pacing_ratio >= cfg.pacing.spike_ratio_min and coupling >= cfg.pacing.coupling_min:
+    r_times = [r / sig.sampling_rate_hz for r in (m.r_peaks_samples or [])]
+    coupling = pacing_spike_coupling(spike_times, r_times)
+    # D74: a spike seen by many leads at once and locked to the QRS, even when it is
+    # not the single largest slope in any one lead.
+    ml_coupling = pacing_spike_coupling(ml_spike_times, r_times)
+    single = pacing_ratio >= cfg.pacing.spike_ratio_min and coupling >= cfg.pacing.coupling_min
+    if single or ml_coupling >= cfg.pacing.multilead_coupling_min:
+        if single:
+            how_ru = f"спайк ×{pacing_ratio}, связан с QRS в {coupling:.0%} ударов"
+            how_uz = f"spike ×{pacing_ratio}, QRS bilan {coupling:.0%}"
+        else:
+            how_ru = f"спайк в ≥ {cfg.pacing.multilead_min_leads} отведениях, связан с QRS в {ml_coupling:.0%} ударов"
+            how_uz = f"≥ {cfg.pacing.multilead_min_leads} ta tarmoqda spike, QRS bilan {ml_coupling:.0%}"
         findings.findings.append(Finding(
             code="paced_rhythm", group="rhythm",
-            label_ru=f"Ритм электрокардиостимулятора (спайк ×{pacing_ratio}, "
-                     f"связан с QRS в {coupling:.0%} ударов)",
-            label_uz=f"Kardiostimulyator ritmi (spike ×{pacing_ratio}, QRS bilan {coupling:.0%})",
+            label_ru=f"Ритм электрокардиостимулятора ({how_ru})",
+            label_uz=f"Kardiostimulyator ritmi ({how_uz})",
             evidence=[Evidence(feature="pacing_spike_ratio", value=str(pacing_ratio)),
-                      Evidence(feature="spike_qrs_coupling", value=str(coupling))],
+                      Evidence(feature="spike_qrs_coupling", value=str(coupling)),
+                      Evidence(feature="multilead_spike_qrs_coupling", value=str(ml_coupling))],
             confidence=0.8))
-        audit.append(f"[L4] paced rhythm: spike_ratio={pacing_ratio} coupling={coupling}")
+        audit.append(f"[L4] paced rhythm: spike_ratio={pacing_ratio} coupling={coupling} "
+                     f"multilead_coupling={ml_coupling}")
     elif pacing_ratio >= cfg.pacing.spike_ratio_min:
         audit.append(f"[L4] slope outlier ×{pacing_ratio} not QRS-locked "
                      f"(coupling {coupling}) — not called paced")

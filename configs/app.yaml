@@ -68,6 +68,11 @@ pause:
 pacing:
   spike_ratio_min: 5.5
   coupling_min: 0.20
+  # D74: or a spike seen by >= 6 leads at once (|diff| > 2x the lead's p99), QRS-locked on
+  # >= 30% of beats. Development: max coupling on non-paced records 0.22.
+  multilead_k: 2.0
+  multilead_min_leads: 6
+  multilead_coupling_min: 0.30
 
 # Signal-organization quality gate (TZ §5). Beat-template consistency is the
 # median correlation of each QRS to the median beat: high for real ECG (incl.
