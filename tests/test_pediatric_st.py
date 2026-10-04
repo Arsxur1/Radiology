@@ -21,7 +21,8 @@ def _codes(age, st, t=None):
     m = Measurements(heart_rate_bpm=80, rhythm_regular=True, rr_cv=0.02, p_wave_ratio=1.0,
                      intervals=Intervals(pr_ms=140, qrs_ms=85, qt_ms=360, qtc_bazett_ms=390),
                      morphology=Morphology(
-                         st=[STMeasurement(lead=lead, j_point_uv=j, j60_uv=j60, j80_uv=j60, qrs_net_uv=800) for lead, j, j60 in st],
+                         st=[STMeasurement(lead=row[0], j_point_uv=row[1], j60_uv=row[2],
+                                           j80_uv=row[3] if len(row) > 3 else row[2], qrs_net_uv=800) for row in st],
                          t_waves=[TWave(lead=lead, amplitude_uv=a, qrs_ratio=0.5, half_width_ms=90, asymmetry=1.3) for lead, a in (t or [])]))
     return detect_findings(_sig(age), m, norms=norms, la_ra_reversed=False).codes()
 
@@ -45,3 +46,13 @@ def test_early_repolarisation_gate_needs_small_j_next_to_t_and_an_upsloping_st()
     flat = _codes(12, st=[("V2", 260, 240), ("V3", 270, 250)], t=[("V2", 1200), ("V3", 1300)])
     assert "st_elevation" in flat                        # not upsloping: the alert stands
     assert "early_repolarisation" not in _codes(45, st, t=[("V2", 1200), ("V3", 1300)])  # adult table has no gate
+
+
+def test_pediatric_depression_sloping_into_an_inverted_juvenile_t_is_not_depression():
+    """D68: V1/III ST descending into the inverted T of a tachycardic child."""
+    st = [("V1", -40, -120, -200), ("III", -30, -110, -190)]
+    assert "st_depression" not in _codes(5, st, t=[("V1", -300), ("III", -250)])
+    # the same segments with upright T waves are depression (no inverted T to slope into)
+    assert "st_depression" in _codes(5, st, t=[("V1", 300), ("III", 250)])
+    # an adult with the same pattern keeps the depression (no such entry in the adult table)
+    assert "st_depression" in _codes(45, st, t=[("V1", -300), ("III", -250)])

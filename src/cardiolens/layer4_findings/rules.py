@@ -664,6 +664,13 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
             low = min(j60, j80) if j80 is not None else j60
             if low <= -depr and not (j80 is not None and j80 - j60 >= upsloping):
                 dev = -1
+                # Pediatric table (D68): a segment descending into this lead's own
+                # inverted T wave is the juvenile T pattern's limb, not depression.
+                into_t = thr.get("depression_into_inverted_t_margin_uv")
+                ta = t_amp.get(st.lead)
+                if (into_t is not None and ta is not None and ta < -100.0
+                        and j80 is not None and j80 < j60 - float(into_t)):
+                    dev = 0
         elif j is not None and j <= -depr:
             dev = -1
         if dev == 0:

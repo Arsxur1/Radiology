@@ -154,6 +154,12 @@ st_uv:
   proportional_discordant_min_uv: 100
   depression_significant: 100
   depression_upsloping_uv: 50
+  # Juvenile pattern (D68): in children the ST segment slopes down into the
+  # inverted T of V1-V4 (and often III) — 96 false "ST depression" calls in 1580
+  # children, 85 of them in sinus tachycardia, leads V1 (66) and III (39), T
+  # inverted in the same lead. A lead whose T is inverted and whose ST descends
+  # into it (J+80 below J+60 by this margin) is the T wave's limb, not depression.
+  depression_into_inverted_t_margin_uv: 25
 
 # Clinically important pediatric caveat (TZ §7.2):
 # T-wave inversion in V1-V4 is NORMAL in children ("juvenile T-wave pattern").
