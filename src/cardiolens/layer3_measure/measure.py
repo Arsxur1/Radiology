@@ -96,32 +96,6 @@ def pacing_spike_times(sig: SignalRepresentation) -> list[float]:
     return [i / fs for i in merged]
 
 
-def pacing_multilead_spike_times(sig: SignalRepresentation, k: float = 2.0,
-                                 min_leads: int = 6) -> list[float]:
-    """Times (s) where >= ``min_leads`` leads show a slope outlier at once, on the RAW signal (D74).
-
-    A pacer spike is one electrical event seen by every lead; an artifact is usually
-    lead-local. Per lead, |diff| is scaled by its 99th percentile; a candidate is a
-    sample where >= ``min_leads`` leads exceed ``k`` (±1 sample of inter-lead jitter).
-    Candidates < 10 ms apart merge. Finds spikes too small to be the single largest
-    slope in any one lead (PTB-XL development: paced sensitivity 0.68 -> 0.89, no new
-    false calls on 1 536 PTB-XL, 988 Georgia and 999 CPSC non-paced records).
-    """
-    if len(sig.lead_names) < min_leads:
-        return []
-    d = np.abs(np.diff(np.asarray(sig.signal, dtype=np.float64), axis=1))
-    if d.shape[1] < 10:
-        return []
-    p99 = np.percentile(d, 99, axis=1, keepdims=True)
-    p99[p99 <= 0] = np.inf
-    z = d / p99
-    z = np.maximum(z, np.maximum(np.roll(z, 1, axis=1), np.roll(z, -1, axis=1)))
-    idx = np.flatnonzero((z > k).sum(axis=0) >= min_leads)
-    fs = sig.sampling_rate_hz
-    merged = [int(i) for j, i in enumerate(idx) if j == 0 or i - idx[j - 1] > 0.01 * fs]
-    return [i / fs for i in merged]
-
-
 def pacing_spike_coupling(spike_times_s: list[float], r_peak_times_s: list[float],
                           window_s: float = 0.2) -> float:
     """Fraction of beats with a spike candidate 5 ms – ``window_s`` before the R peak.
