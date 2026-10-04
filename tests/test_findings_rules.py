@@ -380,3 +380,29 @@ def test_st_findings_read_the_median_beat_when_available():
                                      "V1", "V2", "V3", "V4", "V5", "V6")}
     m.morphology.st_median_beat = flat
     assert "st_elevation" not in _find(m).codes()
+
+
+def test_peaked_t_reads_the_median_beat_against_the_largest_qrs_deflection():
+    """D65: T > 400 µV and > 0.5 x largest QRS deflection in >= 2 leads on the median beat;
+    the per-beat list is ignored when the median beat exists; tall T alone still fires."""
+    from cardiolens.contracts.features import Morphology
+    leads = ("I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6")
+    t = {l: 300.0 for l in leads}
+    q = {l: 1200.0 for l in leads}
+
+    def codes(t, q, per_beat=()):
+        m = Measurements(heart_rate_bpm=70, rhythm_regular=True,
+                         intervals=Intervals(pr_ms=150, qrs_ms=90, qt_ms=400, qtc_bazett_ms=420),
+                         morphology=Morphology(t_median_beat=t, qrs_extreme_median_beat=q,
+                                               peaked_t_leads=list(per_beat)))
+        return _find(m).codes()
+
+    assert "peaked_t_waves" not in codes(t, q, per_beat=("V2", "V3", "V4"))
+    # 700 µV T beside a 1200 µV QRS: peaked in two leads.
+    assert "peaked_t_waves" in codes({**t, "V2": 700, "V3": 700}, q)
+    # Same T beside a 2000 µV QRS is proportionate, not peaked.
+    assert "peaked_t_waves" not in codes({**t, "V2": 700, "V3": 700}, {**q, "V2": 2000, "V3": 2000})
+    # Tall T (>= 1000 µV in two precordial leads) keeps the finding for the hyperK alert.
+    assert "peaked_t_waves" in codes({**t, "V2": 1100, "V3": 1100}, {**q, "V2": 3000, "V3": 3000})
+    # No median beat: per-beat fallback.
+    assert "peaked_t_waves" in codes({}, {}, per_beat=("V2", "V3"))

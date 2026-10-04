@@ -232,6 +232,26 @@ def global_qrs_amplitudes(signal: np.ndarray, rpeaks, fs: float,
     return {name: round(float(np.ptp(X[i][on:off + 1])), 1) for i, name in enumerate(lead_names)}
 
 
+def global_qrs_extremes(signal: np.ndarray, rpeaks, fs: float,
+                        lead_names: list[str]) -> dict[str, float]:
+    """Largest QRS deflection per lead on the median beat between the global QRS
+    onset and offset, against the PR baseline, µV (D65: peaked T is judged against
+    the largest of R, S and Q, as in GE 12SL)."""
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return {}
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    f = global_fiducials(X, a, fs, rr_s)
+    on, off = int(f["qrs_on"]), int(f["qrs_off"])
+    out: dict[str, float] = {}
+    for i, name in enumerate(lead_names):
+        seg = X[i][on:off + 1] - _pr_baseline(X[i], a, fs)
+        if seg.size:
+            out[name] = round(float(np.abs(seg).max()), 1)
+    return out
+
+
 def global_intervals(signal: np.ndarray, rpeaks, fs: float) -> tuple[float | None, float | None]:
     """(PR ms, QT ms) from the global fiducials, uncorrected; None where not found."""
     X, a = median_beats(signal, rpeaks, fs)

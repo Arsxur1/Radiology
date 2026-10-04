@@ -15,6 +15,7 @@ from typing import Any
 from cardiolens.contracts.features import Measurements
 from cardiolens.contracts.findings import Evidence, Finding, FindingSet
 from cardiolens.contracts.signal import SignalRepresentation
+from cardiolens.safety.critical import tall_t_criterion
 
 # Precordial leads where juvenile T-inversion is a normal variant in children.
 _PEDIATRIC_TINV_OK = {"V1", "V2", "V3", "V4"}
@@ -52,6 +53,8 @@ _DELTA_RATIO_MAX = 0.22
 # Median-beat T-wave criteria (D63).
 _FLAT_T_UV = 100.0
 _INVERTED_T_UV = 100.0
+_PEAKED_T_UV = 400.0
+_PEAKED_T_QRS_RATIO = 0.5
 _UPRIGHT_T_LEADS = ("I", "II", "V3", "V4", "V5", "V6")
 _T_TERRITORIES = (("II", "III", "aVF"), ("I", "aVL", "V5", "V6"), ("V2", "V3", "V4"))
 
@@ -260,12 +263,13 @@ def detect_findings(
     _t_inversion_findings(m, is_pediatric, fs)
 
     # Peaked T-waves feed the hyperkalemia causal chain.
-    if len(m.morphology.peaked_t_leads) >= 2:
+    peaked = _peaked_t_leads(m)
+    if len(peaked) >= 2 or tall_t_criterion(m.morphology.t_median_beat):
         fs.findings.append(Finding(
             code="peaked_t_waves", group="other",
             label_ru="Высокие остроконечные зубцы T",
             label_uz="Baland uchli T to'lqinlar",
-            evidence=_ev(leads=",".join(m.morphology.peaked_t_leads)), confidence=0.7,
+            evidence=_ev(leads=",".join(peaked)), confidence=0.7,
         ))
     flat = _flat_t_leads(m)
     if len(flat) >= 3:
@@ -685,6 +689,19 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
             label_uz=f"ST depressiyasi ({', '.join(depressed)})",
             evidence=_ev(leads=",".join(depressed), threshold_uv=depr), confidence=0.75,
         ))
+
+
+def _peaked_t_leads(m: Measurements) -> list[str]:
+    """Leads with a peaked T on the median beat (D65): T > 400 µV and more than half the
+    largest QRS deflection, both against the PR baseline. The per-beat list (whole-lead
+    median baseline) is used only when the median beat is unavailable. The finding also
+    fires on the D49 tall-T criterion, so the hyperkalaemia alert (which requires the
+    finding) is never lost; this mirrors the default safety thresholds (1000/600 µV)."""
+    t, q = m.morphology.t_median_beat, m.morphology.qrs_extreme_median_beat
+    if not t or not q:
+        return list(m.morphology.peaked_t_leads)
+    return [l for l, v in t.items()
+            if l in q and v > _PEAKED_T_UV and v > _PEAKED_T_QRS_RATIO * q[l]]
 
 
 def _flat_t_leads(m: Measurements) -> list[str]:

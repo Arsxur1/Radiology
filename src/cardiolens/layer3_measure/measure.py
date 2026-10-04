@@ -27,6 +27,7 @@ from cardiolens.layer3_measure.global_beat import (
     global_intervals,
     global_q_waves,
     global_qrs_amplitudes,
+    global_qrs_extremes,
     global_st,
     global_t_amplitude,
 )
@@ -335,6 +336,9 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             # T peak on the median beat (D49) — decides the critical hyperkalaemia tier.
             m.morphology.t_median_beat = global_t_amplitude(sig.signal, rpeaks, fs,
                                                             list(sig.lead_names))
+            # Largest QRS deflection per lead on the median beat (peaked T, D65).
+            m.morphology.qrs_extreme_median_beat = global_qrs_extremes(
+                sig.signal, rpeaks, fs, list(sig.lead_names))
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
