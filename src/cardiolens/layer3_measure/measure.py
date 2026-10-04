@@ -365,8 +365,9 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             qtc_framingham(m.intervals.qt_ms, rr_s_mean), 1
         )
 
-    # --- Frontal QRS axis ---
-    m.axes = Axes(qrs_deg=_qrs_axis(sig, rpeaks, fs))
+    # --- Frontal QRS axis: median-beat net R + S in I and aVF (D69), else per beat ---
+    axis = _qrs_axis_median(rs_median)
+    m.axes = Axes(qrs_deg=axis if axis is not None else _qrs_axis(sig, rpeaks, fs))
 
     # --- Beat-template consistency (signal-organization quality gate, §5) ---
     m.qrs_template_consistency = _qrs_template_consistency(sig, rpeaks, fs)
@@ -456,6 +457,17 @@ def _v1_rs_ratio(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> fl
         S = max(float(-seg.min()), 1e-6)  # deepest negative (S)
         ratios.append(R / S)
     return round(float(np.median(ratios)), 2) if ratios else None
+
+
+def _qrs_axis_median(rs: dict[str, tuple[float, float]]) -> float | None:
+    """Frontal QRS axis from the net deflection (R + S) in I and aVF on the median beat
+    (D69). Against GE 12SL: MAE 6.0 deg (per-beat signed extreme: 8.3 deg)."""
+    if not {"I", "aVF"}.issubset(rs):
+        return None
+    net_i, net_f = sum(rs["I"]), sum(rs["aVF"])
+    if net_i == 0.0 and net_f == 0.0:
+        return None
+    return round(float(np.degrees(np.arctan2(net_f, net_i))), 1)
 
 
 def _qrs_axis(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:
