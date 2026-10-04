@@ -256,6 +256,8 @@ SNOMED_TO_CODE = {
     "111975006": "long_qt",
     # Challenge 2021 scored classes that match emitted findings.
     "10370003": "paced_rhythm",                                  # pacing rhythm
+    # Atrial / ventricular pacing pattern (Challenge 2021 unscored table): also pacing (D76).
+    "251268003": "paced_rhythm", "251266004": "paced_rhythm",
     "59931005": "t_inversion",                                   # T-wave inversion
     "427172004": "ventricular_ectopy", "17338001": "ventricular_ectopy",  # PVC / VPB
     "164884008": "ventricular_ectopy",                           # ventricular ectopics (CPSC PVC)

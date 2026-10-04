@@ -131,6 +131,7 @@ def test_select_ptbxl_rows_filters_official_fold():
 def test_challenge2021_snomed_codes_map_to_matching_findings():
     # Challenge 2021 scored classes that match emitted findings.
     assert SNOMED_TO_CODE["10370003"] == "paced_rhythm"
+    assert SNOMED_TO_CODE["251268003"] == SNOMED_TO_CODE["251266004"] == "paced_rhythm"
     assert SNOMED_TO_CODE["59931005"] == "t_inversion"
     assert SNOMED_TO_CODE["427172004"] == SNOMED_TO_CODE["17338001"] == "ventricular_ectopy"
     # Ambiguous codes stay unmapped rather than being equated with a narrower finding.
