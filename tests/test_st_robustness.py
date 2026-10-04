@@ -76,14 +76,13 @@ def test_upsloping_depression_is_not_called():
 
 def test_discordant_st_in_lvh_is_flagged_secondary():
     lvh = dict(sokolow_lyon_uv=4000)
-    # Tall R in V5/V6 with ST depression = discordant: still reported as depression
-    # (strain pattern) but flagged secondary with lower confidence.
+    # Tall R in V5/V6 with ST depression = discordant: the strain pattern is the
+    # secondary ST-T change, not the ischaemia code (D67).
     m = _base(morphology=_st({"V5": -150, "V6": -150}, qrs_net={"V5": 2000, "V6": 1800}), **lvh)
     sig = generate_synthetic_ecg(age_years=45)
     fs = detect_findings(sig, m, norms=norms_for_patient(45, None))
     codes = fs.codes()
-    assert "lvh" in codes and "secondary_st_t_change" in codes and "st_depression" in codes
-    assert fs.by_code("st_depression").confidence < 0.7
+    assert "lvh" in codes and "secondary_st_t_change" in codes and "st_depression" not in codes
     # Discordant ELEVATION in that context is never a STEMI.
     m2 = _base(morphology=_st({"V1": 200, "V2": 300, "V3": 300}, qrs_net={"V1": -1500, "V2": -1800, "V3": -1200}), **lvh)
     codes2 = _codes(m2)
