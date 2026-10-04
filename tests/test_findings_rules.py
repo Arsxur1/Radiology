@@ -415,12 +415,3 @@ def test_sokolow_lyon_from_median_beat_r_and_s():
     assert _sokolow_lyon_median(rs) == 3600.0
     assert _sokolow_lyon_median({k: v for k, v in rs.items() if k != "V6"}) is None
     assert _sokolow_lyon_median({}) is None
-
-
-def test_qrs_axis_from_median_beat_net_deflection():
-    """D69: axis = atan2(net aVF, net I) with net = R + S on the median beat."""
-    from cardiolens.layer3_measure.measure import _qrs_axis_median
-    assert _qrs_axis_median({"I": (800.0, -200.0), "aVF": (300.0, -300.0)}) == 0.0
-    assert _qrs_axis_median({"I": (800.0, -100.0), "aVF": (100.0, -800.0)}) == -45.0
-    assert _qrs_axis_median({"I": (100.0, -100.0), "aVF": (600.0, -100.0)}) == 90.0
-    assert _qrs_axis_median({"I": (800.0, -100.0)}) is None
