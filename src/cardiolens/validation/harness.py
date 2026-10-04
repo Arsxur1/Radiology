@@ -66,6 +66,9 @@ FAMILIES: dict[str, tuple[set[str], set[str]]] = {
                       {"atrial_fibrillation", "atrial_flutter"}),
     "st_elevation_any": ({"st_elevation", "st_elevation_nonspecific", "st_elevation_any"},
                          {"st_elevation"}),
+    # Datasets label the strain / BBB repolarisation depression as "ST depression"
+    # too; the ischaemia code is primary depression only (D67).
+    "st_depression_any": ({"st_depression", "secondary_st_t_change"}, {"st_depression"}),
 }
 
 

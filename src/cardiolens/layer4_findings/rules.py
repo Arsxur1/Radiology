@@ -708,17 +708,20 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
         else:
             _territorial_st_elevation(elevated, depressed, thr.get("elevation_significant"), fs,
                                       proportional=sorted(set(proportional) & set(elevated)))
-    if len(depressed) >= 2:
+    # Discordant depression under a block / LVH / pre-excitation is the expected
+    # repolarisation of that QRS and goes to `secondary_st_t_change` (below), not
+    # to the ischaemia code: with it inside, `st_depression` had 277 false calls on
+    # MIMIC (188 under a BBB) and 344 on PTB-XL (151 BBB, 43 LVH, 39 WPW) — D67.
+    primary_depressed = [lead for lead in depressed if lead not in discordant]
+    if len(primary_depressed) >= 2:
         disc = sorted(set(depressed) & set(discordant))
         fs.findings.append(Finding(
             code="st_depression", group="ischemia",
-            label_ru=f"Депрессия ST ({', '.join(depressed)})"
-                     + (" — дискордантная (вторичная?)" if disc else ""),
-            label_uz=f"ST depressiyasi ({', '.join(depressed)})"
-                     + (" — diskordant (ikkilamchi?)" if disc else ""),
-            evidence=_ev(leads=",".join(depressed), threshold_uv=thr.get("depression_significant"),
-                         discordant=",".join(disc) or "none"),
-            confidence=0.55 if disc else 0.75,
+            label_ru=f"Депрессия ST ({', '.join(primary_depressed)})",
+            label_uz=f"ST depressiyasi ({', '.join(primary_depressed)})",
+            evidence=_ev(leads=",".join(primary_depressed), threshold_uv=thr.get("depression_significant"),
+                         discordant_leads_excluded=",".join(disc) or "none"),
+            confidence=0.75,
         ))
     # Neutral descriptor: any lead with ST elevation at its threshold (contiguous or
     # not, primary or discordant). Never critical; matches the broad "ST elevation"
