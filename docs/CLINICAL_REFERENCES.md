@@ -1740,6 +1740,66 @@ Without the affine gate the texture fit applied to scans cost 0.922 → 0.850
 estimate is not. The end-to-end 100-page table (HR, axis, QRS, finding sets)
 with the texture de-warp follows in the page-digitisation section above.
 
+### Open items after the review (D65–D67)
+
+**D65 — WPW: the classic route needs a delta wave.** On PTB-XL the classic
+conjunction (PR < 120 ms, wide QRS) had 28 true and 28 false calls with identical
+PR and QRS distributions; the delta descriptor separates them (true 53 / 74 / 90 ms
+at p10 / 50 / 90, false 21 / 32 / 55; MIMIC's 52 false 28 / 38 / 66). Sweep of a
+delta floor for the classic route: ≥ 30 ms keeps 28/28 true, 19/28 false, 36/52
+MIMIC; **≥ 40 keeps 27/28, 6/28, 17/52**; ≥ 50 keeps 26/28, 4/28, 8/52. Adopted 40
+(`wpw.classic_delta_ms`). The delta route excludes a definite-LBBB width (≥ 135 ms)
+with a PR ≥ 120 ms (13 MIMIC false calls at QRS 136–200; 4 PTB-XL true calls
+traded). Measured:
+
+| set | WPW before → after (sens / spec, false calls) | side effects |
+|---|---|---|
+| PTB-XL 1692 (79 WPW) | 0.506 / 0.981, 31 false → **0.443 / 0.995, 8 false** | LBBB 0.835 → 0.847 (false 102 → 114: records no longer taken by WPW) |
+| MIMIC 1499 (2 statements) | 65 false (4.3 %) → **19 (1.3 %)**, spec 0.957 → 0.987 | LBBB 0.761 → 0.805; STEMI alert 0.350 → 0.362 |
+| ecg-arrhythmia 664 (3) | 18 false → 7 | LBBB 0.699 → 0.735 |
+| CPSC-2018 820 (0) | 3 calls → 3 | STEMI alert 81 → 78 of 220 (three records now read as LBBB, whose discordant elevation is suppressed) |
+| pediatric 1591 (6) | 2/6 → 2/6, 0 false | — |
+
+The two gates rejected earlier (organised P, PR < 110) are in D62.
+
+**D66 — pediatric ST-elevation alert.** The 34 false alerts: 28 boys, 21 aged
+12–15, leads V4 (26), V3 (19), V2 (17); J 162 µV median, J+60 253 (upsloping),
+T 660, J/T 0.22; 15 carried the juvenile T pattern — early repolarisation. The
+cohort's J-point percentiles on one hash half (p98 / p99): V2–V3 184 / 221, V4
+167 / 182, inferior 83 / 97, lateral 83 / 108 µV. Pediatric table: 150 µV
+(limb/lateral), 250 (V2–V3), 200 (V4, new `elevation_v4` key) and an
+early-repolarisation gate (J/T ≤ 0.25 with J+60 ≥ J → `early_repolarisation`,
+not the alert). On the other half, false alerts 17 → 5 (thresholds) → 4 (gate),
+true 0/2 either way. Whole cohort: false alerts **34 → 6**, critical case-level
+false-alert rate 2.3 % → **0.6 %**; the neutral descriptor unchanged
+(`st_elevation_any` 3/3 at spec 0.884); the 64 PTB-XL children: 1 alert call,
+WPW 2/2; adults untouched. Open in children: `st_depression` 91 false calls of
+1580 (no BBB/LVH context, so D67 does not reach them) — the next pediatric item.
+
+**D67 — ST depression: primary leads only.** The code included discordant
+depression under BBB / LVH / WPW ("strain", confidence 0.55) and had 277 false
+calls on MIMIC (188 under a BBB, QRS median 146 ms) and 344 on PTB-XL (151 BBB,
+43 LVH, 39 WPW) for 11 and 48 true; the cart's wording on those records is
+"ST-T changes may be due to hypertrophy", not "ST depression". The ischaemia
+code now needs two leads of primary depression; the discordant leads stay in
+`secondary_st_t_change`; the harness family `st_depression_any` scores either
+against the datasets' broad label.
+
+| set (gold) | `st_depression` before → after (sens / spec, false) | family `st_depression_any` | major tier false alerts |
+|---|---|---|---|
+| MIMIC (18) | 0.611 / 0.813, 277 → **0.389 / 0.958, 62** | 0.556 / 0.745 | 21.3 % → 18.6 % |
+| PTB-XL (125) | 0.32 / 0.74, 304 → **0.144 / 0.942, 91** | 0.296 / 0.781 | 23.4 % → 20.0 % |
+| ecg-arrhythmia 664 (85) | 0.494 / 0.82, 104 → **0.20 / 0.95, 29** | 0.518 / 0.772 | 23.8 % → 21.8 % |
+| CPSC-2018 (302) | 0.067 / 0.96, 21 → 0.033 / 0.986, 7 | 0.05 / 0.954 | 4.9 % → 2.7 % |
+| pediatric (4) | 96 → 91 false | — | 6.0 % → 5.8 % |
+
+The sensitivity against the broad labels halves because those labels include
+the strain / BBB repolarisation depression; it is kept in the family, as
+`st_elevation_any` keeps the broad elevation. The remaining false calls
+(MIMIC 62, PTB-XL 91) are primary depression the cart or the cardiologists did
+not label — AF with rapid response and tachycardia are the next contexts to
+examine.
+
 ## Not a medical device
 These criteria support interpretation for a decision-support tool; CardioLens is
 not clinically validated and is not a medical device. Every report carries the
