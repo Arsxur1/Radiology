@@ -27,7 +27,7 @@ from cardiolens.layer3_measure.global_beat import (
     global_intervals,
     global_q_waves,
     global_qrs_amplitudes,
-    global_qrs_extremes,
+    global_qrs_rs,
     global_st,
     global_t_amplitude,
 )
@@ -238,6 +238,7 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
         m.notes.append("insufficient R-peaks for rhythm analysis (low confidence)")
 
     # --- Delineation -> intervals ---
+    rs_median: dict[str, tuple[float, float]] = {}
     if len(rpeaks) >= 3:
         waves = _delineate(cleaned, rpeaks, fs)
         if waves is not None:
@@ -336,9 +337,11 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             # T peak on the median beat (D49) — decides the critical hyperkalaemia tier.
             m.morphology.t_median_beat = global_t_amplitude(sig.signal, rpeaks, fs,
                                                             list(sig.lead_names))
-            # Largest QRS deflection per lead on the median beat (peaked T, D65).
-            m.morphology.qrs_extreme_median_beat = global_qrs_extremes(
-                sig.signal, rpeaks, fs, list(sig.lead_names))
+            # R/S per lead on the median beat: largest deflection (peaked T, D65)
+            # and Sokolow-Lyon (D66, set below).
+            rs_median = global_qrs_rs(sig.signal, rpeaks, fs, list(sig.lead_names))
+            m.morphology.qrs_extreme_median_beat = {k: max(r, -s)
+                                                    for k, (r, s) in rs_median.items()}
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
@@ -369,7 +372,10 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
     m.qrs_template_consistency = _qrs_template_consistency(sig, rpeaks, fs)
 
     # --- Sokolow-Lyon voltage (LVH) ---
-    m.sokolow_lyon_uv = _sokolow_lyon(sig, rpeaks, fs)
+    # Sokolow-Lyon from the median beat when available (D66), else per beat.
+    m.sokolow_lyon_uv = _sokolow_lyon_median(rs_median)
+    if m.sokolow_lyon_uv is None:
+        m.sokolow_lyon_uv = _sokolow_lyon(sig, rpeaks, fs)
 
     # --- V1 terminal QRS sign (RSR' typing for bundle branch block) ---
     m.qrs_v1_terminal_positive = _v1_terminal_positive(sig, rpeaks, fs)
@@ -504,6 +510,13 @@ def _qrs_width_energy(
             hi += 1
         widths.append((hi - lo) / fs * 1000.0)
     return round(float(np.median(widths)), 1) if widths else None
+
+
+def _sokolow_lyon_median(rs: dict[str, tuple[float, float]]) -> float | None:
+    """Sokolow-Lyon |S V1| + max(R V5, R V6) from median-beat R/S amplitudes (D66)."""
+    if not {"V1", "V5", "V6"}.issubset(rs):
+        return None
+    return round(-rs["V1"][1] + max(rs["V5"][0], rs["V6"][0]), 1)
 
 
 def _sokolow_lyon(sig: SignalRepresentation, rpeaks: np.ndarray, fs: float) -> float | None:

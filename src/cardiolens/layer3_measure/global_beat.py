@@ -232,11 +232,13 @@ def global_qrs_amplitudes(signal: np.ndarray, rpeaks, fs: float,
     return {name: round(float(np.ptp(X[i][on:off + 1])), 1) for i, name in enumerate(lead_names)}
 
 
-def global_qrs_extremes(signal: np.ndarray, rpeaks, fs: float,
-                        lead_names: list[str]) -> dict[str, float]:
-    """Largest QRS deflection per lead on the median beat between the global QRS
-    onset and offset, against the PR baseline, µV (D65: peaked T is judged against
-    the largest of R, S and Q, as in GE 12SL)."""
+def global_qrs_rs(signal: np.ndarray, rpeaks, fs: float,
+                  lead_names: list[str]) -> dict[str, tuple[float, float]]:
+    """Tallest positive and deepest negative QRS deflection per lead on the median beat,
+    between the global QRS onset and offset, against the PR baseline, µV:
+    ``{lead: (r_uv >= 0, s_uv <= 0)}``. Peaked T is judged against the larger of the two
+    (D65); Sokolow-Lyon is |S V1| + max(R V5, R V6) (D66; per beat: bias -148 µV
+    against GE 12SL, median beat -96 µV)."""
     X, a = median_beats(signal, rpeaks, fs)
     if X is None:
         return {}
@@ -244,11 +246,11 @@ def global_qrs_extremes(signal: np.ndarray, rpeaks, fs: float,
     rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
     f = global_fiducials(X, a, fs, rr_s)
     on, off = int(f["qrs_on"]), int(f["qrs_off"])
-    out: dict[str, float] = {}
+    out: dict[str, tuple[float, float]] = {}
     for i, name in enumerate(lead_names):
         seg = X[i][on:off + 1] - _pr_baseline(X[i], a, fs)
         if seg.size:
-            out[name] = round(float(np.abs(seg).max()), 1)
+            out[name] = (round(float(max(seg.max(), 0.0)), 1), round(float(min(seg.min(), 0.0)), 1))
     return out
 
 

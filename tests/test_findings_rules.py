@@ -406,3 +406,12 @@ def test_peaked_t_reads_the_median_beat_against_the_largest_qrs_deflection():
     assert "peaked_t_waves" in codes({**t, "V2": 1100, "V3": 1100}, {**q, "V2": 3000, "V3": 3000})
     # No median beat: per-beat fallback.
     assert "peaked_t_waves" in codes({}, {}, per_beat=("V2", "V3"))
+
+
+def test_sokolow_lyon_from_median_beat_r_and_s():
+    """D66: Sokolow-Lyon = |S V1| + max(R V5, R V6) from median-beat R/S; None without V1/V5/V6."""
+    from cardiolens.layer3_measure.measure import _sokolow_lyon_median
+    rs = {"V1": (200.0, -1500.0), "V5": (2100.0, -300.0), "V6": (1800.0, -100.0)}
+    assert _sokolow_lyon_median(rs) == 3600.0
+    assert _sokolow_lyon_median({k: v for k, v in rs.items() if k != "V6"}) is None
+    assert _sokolow_lyon_median({}) is None
