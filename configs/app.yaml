@@ -68,6 +68,12 @@ pause:
 pacing:
   spike_ratio_min: 5.5
   coupling_min: 0.20
+  # D75: or a spike-shaped event seen by >= 6 leads at once (|second difference| > 3x the
+  # lead's p99), QRS-locked on >= 30% of beats. Development: no new false calls on PTB-XL,
+  # Georgia or CPSC non-paced records (the slope version, D74, took narrow-QRS upstrokes).
+  multilead_k: 3.0
+  multilead_min_leads: 6
+  multilead_coupling_min: 0.30
 
 # Signal-organization quality gate (TZ §5). Beat-template consistency is the
 # median correlation of each QRS to the median beat: high for real ECG (incl.

@@ -96,6 +96,35 @@ def pacing_spike_times(sig: SignalRepresentation) -> list[float]:
     return [i / fs for i in merged]
 
 
+def pacing_multilead_spike_times(sig: SignalRepresentation, k: float = 3.0,
+                                 min_leads: int = 6) -> list[float]:
+    """Times (s) of a spike-shaped event seen by >= ``min_leads`` leads at once, RAW signal (D75).
+
+    A pacer spike is one narrow up-and-back event seen by every lead. Per lead, the
+    absolute second difference is scaled by its 99th percentile; a candidate is a
+    sample where >= ``min_leads`` leads exceed ``k`` (±1 sample of inter-lead jitter).
+    The second difference (not the slope) keeps out the steep but smooth upstroke of a
+    narrow QRS, which the slope version (D74) mistook for a spike. Candidates < 10 ms
+    apart merge. Development: PTB-XL paced 180 -> 209 of 266 found, no new false calls
+    on PTB-XL, Georgia (3 samples) or CPSC non-paced records.
+    """
+    if len(sig.lead_names) < min_leads:
+        return []
+    x = np.asarray(sig.signal, dtype=np.float64)
+    if x.shape[1] < 12:
+        return []
+    d2 = np.abs(x[:, 2:] - 2.0 * x[:, 1:-1] + x[:, :-2])
+    d2 = np.pad(d2, ((0, 0), (1, 0)))
+    p99 = np.percentile(d2, 99, axis=1, keepdims=True)
+    p99[p99 <= 0] = np.inf
+    z = d2 / p99
+    z = np.maximum(z, np.maximum(np.roll(z, 1, axis=1), np.roll(z, -1, axis=1)))
+    idx = np.flatnonzero((z > k).sum(axis=0) >= min_leads)
+    fs = sig.sampling_rate_hz
+    merged = [int(i) for j, i in enumerate(idx) if j == 0 or i - idx[j - 1] > 0.01 * fs]
+    return [i / fs for i in merged]
+
+
 def pacing_spike_coupling(spike_times_s: list[float], r_peak_times_s: list[float],
                           window_s: float = 0.2) -> float:
     """Fraction of beats with a spike candidate 5 ms – ``window_s`` before the R peak.
