@@ -120,10 +120,21 @@ voltage_uv:
     - { label: "8-15 y",        age_years_max: 15, r_v1: 1100, s_v1: 2500, r_v6: 2400, s_v6: 400 }
 
 st_uv:
-  # Same J-point/plateau logic as adults; V2-V3 use a single 150 µV threshold.
-  elevation_significant: 100
-  elevation_v2_v3: { male_under_40: 150, male: 150, female: 150 }
+  # Same J-point/plateau logic as adults. STEMI-alert thresholds (D66) sit above
+  # the 98th-99th percentile of the J point in 1591 children aged 4-15 (half A of
+  # a hash split; p98 / p99): V2-V3 184 / 221 µV, V4 167 / 182, inferior 83 / 97,
+  # lateral 83 / 108. The adult 100 µV fired on 34 children (2 %), almost all
+  # adolescent boys with the concave, upsloping early-repolarisation ST of V2-V4
+  # (J 162 µV median, J+60 253, J/T 0.22). Checked on half B: false alerts
+  # 17 -> 5 with these thresholds, -> 4 with the early-repolarisation gate below.
+  elevation_significant: 150
+  elevation_v2_v3: { male_under_40: 250, male: 250, female: 250 }
+  elevation_v4: 200
   elevation_plateau_fraction: 0.8
+  # Early repolarisation (D66): a lead whose elevation is small next to its own T
+  # wave (J / T <= this) and upsloping (J+60 >= J) is a juvenile normal variant,
+  # reported as `early_repolarisation`, not as the alert. Absent in the adult table.
+  early_repolarisation_j_t_ratio_max: 0.25
   # Neutral descriptor st_elevation_any: flat 1 mm in any lead (J and J+60), no
   # sex/age V2-V3 thresholds; under BBB/LVH/WPW a discordant lead counts only from
   # any_elevation_discordant_uv (Sgarbossa-like). Chosen on PTB-XL STE_ (28) and

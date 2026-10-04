@@ -600,6 +600,8 @@ def _st_thresholds(norms, patient, lead: str) -> tuple[float | None, float | Non
     thr = norms.get("st_uv", {})
     elev, depr = thr.get("elevation_significant"), thr.get("depression_significant")
     v23 = thr.get("elevation_v2_v3")
+    if lead == "V4" and thr.get("elevation_v4") and elev:
+        elev = float(thr["elevation_v4"])          # pediatric table: V4 has its own 98th percentile (D66)
     if lead in ("V2", "V3") and isinstance(v23, dict) and elev:
         sex = (getattr(patient, "sex", None) or "male").lower()
         age = getattr(patient, "age_years", None)
@@ -632,7 +634,11 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
     # is discordant to the QRS; only concordant deviations count as primary.
     secondary_ctx = bool(fs.codes() & _SECONDARY_ST_CONTEXT)
     elevation_mimic_ctx = bool(fs.codes() & _ELEVATION_MIMIC_CONTEXT)
-    elevated, depressed, discordant, any_elevated = [], [], [], []
+    # Early repolarisation (D66, pediatric table): elevation that is small next to
+    # the lead's own T wave and upsloping is the juvenile normal variant.
+    er_ratio = thr.get("early_repolarisation_j_t_ratio_max")
+    t_amp = {t.lead: t.amplitude_uv for t in m.morphology.t_waves}
+    elevated, depressed, discordant, any_elevated, early_repol = [], [], [], [], []
     for st in m.morphology.st:
         elev, depr = _st_thresholds(norms, patient, st.lead)
         j, j60, j80 = st.j_point_uv, st.j60_uv, st.j80_uv
@@ -647,6 +653,11 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
         # STEMI is defined by J-POINT elevation that persists into the ST segment.
         if j is not None and j >= elev and (j60 is None or j60 >= plateau * elev):
             dev = 1
+            ta = t_amp.get(st.lead)
+            if (er_ratio is not None and ta is not None and ta > 0 and j / ta <= float(er_ratio)
+                    and j60 is not None and j60 >= j):
+                early_repol.append(st.lead)
+                dev = 0
         # Depression is judged in the ST segment (J+60 / J+80), horizontal or
         # downsloping; an upsloping segment (J+80 rising over J+60) is not called.
         elif j60 is not None:
@@ -718,6 +729,13 @@ def _st_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
             label_ru=f"Элевация ST в отведениях {', '.join(any_elevated)} (описательно)",
             label_uz=f"{', '.join(any_elevated)} tarmoqlarida ST elevatsiyasi (tavsifiy)",
             evidence=_ev(leads=",".join(any_elevated)), confidence=0.5,
+        ))
+    if len(early_repol) >= 2:
+        fs.findings.append(Finding(
+            code="early_repolarisation", group="other",
+            label_ru=f"Ранняя реполяризация — вогнутая восходящая элевация ST, малая рядом с T ({', '.join(early_repol)}); вариант нормы",
+            label_uz=f"Erta repolarizatsiya — T yonida kichik botiq ST elevatsiyasi ({', '.join(early_repol)}); norma varianti",
+            evidence=_ev(leads=",".join(early_repol), j_t_ratio_max=er_ratio), confidence=0.6,
         ))
     if len(discordant) >= 2:
         fs.findings.append(Finding(
