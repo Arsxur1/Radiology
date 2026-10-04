@@ -415,24 +415,3 @@ def test_sokolow_lyon_from_median_beat_r_and_s():
     assert _sokolow_lyon_median(rs) == 3600.0
     assert _sokolow_lyon_median({k: v for k, v in rs.items() if k != "V6"}) is None
     assert _sokolow_lyon_median({}) is None
-
-
-def test_lbbb_needs_full_width_and_deep_s_in_v1_v2():
-    """D70: LBBB needs QRS >= 128 ms and, on the median beat, S <= -1000 µV in V1 or V2;
-    otherwise the wide QRS is nonspecific."""
-    from cardiolens.contracts.features import Morphology
-
-    def codes(qrs, s_v1=None, s_v2=None):
-        rs = {} if s_v1 is None else {"V1": (100.0, s_v1), "V2": (200.0, s_v2)}
-        m = Measurements(heart_rate_bpm=75, rhythm_regular=True, qrs_v1_terminal_positive=False,
-                         intervals=Intervals(pr_ms=160, qrs_ms=qrs, qt_ms=420, qtc_bazett_ms=440),
-                         morphology=Morphology(qrs_rs_median_beat=rs))
-        return _find(m).codes()
-
-    assert "lbbb" in codes(150, -1500.0, -2500.0)
-    assert "lbbb" in codes(150, -600.0, -1200.0)          # deep S in V2 is enough
-    shallow = codes(150, -600.0, -700.0)                   # wide QRS without a QS/rS in V1-V2
-    assert "lbbb" not in shallow and "wide_qrs_nonspecific" in shallow
-    narrow = codes(124, -1500.0, -2500.0)                  # 120-127 ms: not a complete LBBB
-    assert "lbbb" not in narrow and "wide_qrs_nonspecific" in narrow
-    assert "lbbb" in codes(140)                            # no median beat: width only

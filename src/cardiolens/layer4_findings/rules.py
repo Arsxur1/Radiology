@@ -55,11 +55,6 @@ _FLAT_T_UV = 100.0
 _INVERTED_T_UV = 100.0
 _PEAKED_T_UV = 400.0
 _PEAKED_T_QRS_RATIO = 0.5
-# LBBB (D70): a fully widened QRS (true LBBB on GE 12SL: 5th percentile 130 ms) with the
-# deep S of a QS/rS complex in V1-V2 on the median beat. The 120 ms + V1-polarity rule
-# also typed anteroseptal scars, LAFB and nonspecific delay (PTB-XL dev: 107 false / 97 true).
-_LBBB_QRS_MIN_MS = 128.0
-_LBBB_V1V2_S_UV = -1000.0
 _UPRIGHT_T_LEADS = ("I", "II", "V3", "V4", "V5", "V6")
 _T_TERRITORIES = (("II", "III", "aVF"), ("I", "aVL", "V5", "V6"), ("V2", "V3", "V4"))
 
@@ -621,7 +616,7 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, is_pediatric: b
             label_uz=f"O'ng oyoqcha to'liq blokadasi (QRS {iv.qrs_ms} ms, V1 da RSR')",
             evidence=_ev(qrs_ms=iv.qrs_ms, v1_terminal="positive"), confidence=0.72,
         ))
-    elif complete and term is False and _lbbb_morphology(m):
+    elif complete and term is False:
         fs.findings.append(Finding(
             code="lbbb", group="interval",
             label_ru=f"Полная блокада левой ножки (QRS {iv.qrs_ms} мс)",
@@ -635,15 +630,6 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, is_pediatric: b
             label_uz=f"Nospetsifik QRS kengayishi ({iv.qrs_ms} ms)",
             evidence=_ev(qrs_ms=iv.qrs_ms, norm_high=qrs_hi), confidence=0.8,
         ))
-
-
-def _lbbb_morphology(m: Measurements) -> bool:
-    """QRS >= 128 ms and, on the median beat, the deepest S in V1/V2 <= -1000 µV (D70)."""
-    if m.intervals.qrs_ms is None or m.intervals.qrs_ms < _LBBB_QRS_MIN_MS:
-        return False
-    rs = m.morphology.qrs_rs_median_beat
-    s_v = [rs[l][1] for l in ("V1", "V2") if l in rs]
-    return not s_v or min(s_v) <= _LBBB_V1V2_S_UV
 
 
 def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:

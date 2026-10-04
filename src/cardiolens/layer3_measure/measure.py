@@ -342,7 +342,6 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             rs_median = global_qrs_rs(sig.signal, rpeaks, fs, list(sig.lead_names))
             m.morphology.qrs_extreme_median_beat = {k: max(r, -s)
                                                     for k, (r, s) in rs_median.items()}
-            m.morphology.qrs_rs_median_beat = rs_median
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
