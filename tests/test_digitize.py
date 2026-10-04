@@ -180,10 +180,31 @@ def test_digitize_page_finds_layout_and_recovers_rhythm(tmp_path):
     assert float(np.corrcoef(ref, got)[0, 1]) > 0.9
 
 
-def test_digitize_page_refuses_unrecognised_layout(tmp_path):
+def test_digitize_page_without_pulse_reads_rhythm_span_and_flags_it(tmp_path):
+    """D78: a template with no calibration pulse is read from the 10-s rhythm-strip span
+    at the standard gain, and the page is flagged so the report escalates."""
     from cardiolens.layer1_ingestion import digitize_page
 
     path, _ = _render_page(tmp_path, with_pulse=False)
+    page = digitize_page(path)
+    assert abs(page.rhythm.duration_s - 10.0) < 0.5
+    assert any("no usable calibration pulse" in n for n in page.notes)
+    assert any("degraded" in n for n in page.notes)
+    hr = run_pipeline(page.rhythm, mode="A").measurements.heart_rate_bpm
+    assert hr == pytest.approx(72, abs=4)
+
+
+def test_digitize_page_refuses_page_without_pulse_or_full_rhythm_strip(tmp_path):
+    """Without a pulse AND without a 10-s rhythm trace there is no time/gain reference."""
+    import cv2
+
+    from cardiolens.layer1_ingestion import digitize_page
+
+    path, _ = _render_page(tmp_path, with_pulse=False)
+    img = cv2.imread(str(path))
+    h, w = img.shape[:2]
+    img[int(0.75 * h):, int(0.5 * w):] = 255        # erase the second half of the rhythm strip
+    cv2.imwrite(str(path), img)
     with pytest.raises(ValueError, match="layout not recognised"):
         digitize_page(path)
 

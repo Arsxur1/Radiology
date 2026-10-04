@@ -193,6 +193,7 @@ PAGE_LAYOUT_3X4_II = (("I", "aVR", "V1", "V4"), ("II", "aVL", "V2", "V5"),
 # and random-grid-colour renders it read 10.28 mm whenever the scale was right,
 # and 7.3-8.2 mm on degraded pages whose grid scale was wrong (D26).
 _PULSE_MM_TOL = 1.0
+_PULSE_DARK_THRESHOLD = 170    # thin pulse lines on scans read lighter than the trace (D78)
 _ROW_SPACING_CV_MAX = 0.20   # the four baselines are roughly evenly spaced
 # Rhythm-strip span as the time axis (D57): accepted only when it is 10 s within
 # _SPAN_TOL at the grid scale and starts at most _SPAN_START_MAX_MM after a left
@@ -308,6 +309,28 @@ def _grid_px_per_mm(img: np.ndarray) -> float:
     return per if per < 15 else per / 5          # only 5-mm lines visible: 5 mm period
 
 
+def _grid_box(img: np.ndarray, px_per_mm: float) -> tuple[int, int, int, int] | None:
+    """(y0, y1, x0, x1) of the coloured grid area, widened by 3 mm; None without a
+    coloured grid. Ink outside it (QR code, footer text, labels) is not trace (D78)."""
+    mx = img.max(axis=2).astype(np.int16)
+    mn = img.min(axis=2).astype(np.int16)
+    grid = ((mx - mn) > 25) & (mx > 110)
+    if grid.mean() < 0.02:
+        return None
+    out = []
+    for prof in (grid.mean(axis=1), grid.mean(axis=0)):
+        hi = float(np.percentile(prof, 90))
+        idx = np.flatnonzero(prof >= 0.3 * hi)
+        if hi <= 0 or idx.size == 0:
+            return None
+        pad = int(3 * px_per_mm)
+        out += [max(0, int(idx[0]) - pad), min(len(prof), int(idx[-1]) + pad)]
+    y0, y1, x0, x1 = out
+    if (y1 - y0) < 0.3 * img.shape[0] or (x1 - x0) < 0.5 * img.shape[1]:
+        return None
+    return y0, y1, x0, x1
+
+
 def _row_baselines(dark: np.ndarray, px_per_mm: float, n_rows: int) -> list[int]:
     """Baselines = strongest peaks of the trace-pixel row profile (the isoelectric
     line dominates each row), at least 15 mm apart."""
@@ -343,7 +366,10 @@ def _calibration_pulse(dark: np.ndarray, px_per_mm: float,
         if ys.size == 0:
             continue
         for run in np.split(ys, np.flatnonzero(np.diff(ys) > 2) + 1):
-            if baselines and min(abs(int(run[-1]) - b) for b in baselines) > 2 * px_per_mm:
+            # Bottom on a row baseline, or up to 10 mm above it: some templates draw
+            # the pulse raised above the trace's isoelectric line (D78).
+            if baselines and not any(-10 * px_per_mm <= int(run[-1]) - b <= 2 * px_per_mm
+                                     for b in baselines):
                 continue
             if 7 * px_per_mm <= len(run) <= 13 * px_per_mm:
                 xs.append(x)
@@ -446,26 +472,63 @@ def digitize_page(
     h, w = img.shape[:2]
     dark = img.max(axis=2) < dark_threshold
     px = _grid_px_per_mm(img)
+    # The calibration pulse is drawn with a thin line that a scanner renders lighter
+    # than the trace: look for it with a softer threshold (D78).
+    pulse_dark = img.max(axis=2) < max(dark_threshold, _PULSE_DARK_THRESHOLD)
+    box = _grid_box(img, px)
+    if box is not None:                           # ignore ink outside the grid (D78)
+        y0, y1, x0, x1 = box
+        keep = np.zeros_like(dark)
+        keep[y0:y1, x0:x1] = True
+        dark &= keep
+        pulse_dark &= keep
     base = _row_baselines(dark, px, len(layout))
     rows_ok = base if len(base) == len(layout) else None
     expected_mm = 10.0 * mm_per_mv / 10.0
     row_mm = 10.0 * mm_per_s                      # a row spans 10 s
-    pulse = _calibration_pulse(dark, px, rows_ok)
-    side = "left"
-    if (pulse is None or abs(pulse[1] - expected_mm) > _PULSE_MM_TOL) and rows_ok:
-        right = _calibration_pulse(dark, px, rows_ok, side="right")
-        if right is not None and abs(right[1] - expected_mm) <= _PULSE_MM_TOL:
-            pulse, side = right, "right"
+    def _find_pulse(mask: np.ndarray) -> tuple[tuple[int, float] | None, str]:
+        found = _calibration_pulse(mask, px, rows_ok)
+        if (found is None or abs(found[1] - expected_mm) > _PULSE_MM_TOL) and rows_ok:
+            right = _calibration_pulse(mask, px, rows_ok, side="right")
+            if right is not None and abs(right[1] - expected_mm) <= _PULSE_MM_TOL:
+                return right, "right"
+        return found, "left"
+
+    pulse, side = _find_pulse(dark)
+    if pulse is None or abs(pulse[1] - expected_mm) > _PULSE_MM_TOL:
+        # Only then the softer threshold: where the pulse reads at the trace
+        # threshold, the softer one shifts its edge (synthetic pages, D78).
+        soft, soft_side = _find_pulse(pulse_dark)
+        if soft is not None and abs(soft[1] - expected_mm) <= _PULSE_MM_TOL:
+            pulse, side = soft, soft_side
+    rhythm_row = next((r for r, names in enumerate(layout) if len(names) == 1), None)
+    pulse_err = None
+    x0, pulse_mm = 0, float("nan")
     if pulse is None:
-        raise ValueError("page layout not recognised: no calibration pulse found")
-    x0, pulse_mm = pulse
-    if side == "right":                           # the row ends where the pulse starts
-        x0 = int(round(x0 - row_mm * px))
-        if x0 < 0:
-            raise ValueError("page layout not recognised: rows run past the page edge")
-    if abs(pulse_mm - expected_mm) > _PULSE_MM_TOL:
-        raise ValueError(f"page layout not recognised: calibration pulse {pulse_mm:.1f} mm "
-                         f"at the detected scale (expected {expected_mm:.0f} mm)")
+        pulse_err = "no calibration pulse found"
+    else:
+        x0, pulse_mm = pulse
+        if side == "right":                       # the row ends where the pulse starts
+            x0 = int(round(x0 - row_mm * px))
+            if x0 < 0:
+                pulse_err = "rows run past the page edge"
+        if pulse_err is None and abs(pulse_mm - expected_mm) > _PULSE_MM_TOL:
+            pulse_err = (f"calibration pulse {pulse_mm:.1f} mm at the detected scale "
+                         f"(expected {expected_mm:.0f} mm)")
+    # No usable pulse (some templates print none): fall back to the rhythm strip,
+    # whose trace spans exactly 10 s, and the standard gain — flagged, so the
+    # report escalates (D78). Without a 10-s rhythm trace the page is refused.
+    no_pulse_span = None
+    if pulse_err is not None:
+        if rows_ok and rhythm_row is not None:
+            sp = _trace_span(dark, base[rhythm_row], px, -1, "left")
+            if sp is not None and abs((sp[1] - sp[0]) / px - row_mm) <= _SPAN_TOL * row_mm:
+                no_pulse_span = sp
+        if no_pulse_span is None:
+            raise ValueError(f"page layout not recognised: {pulse_err}")
+        x0, side, pulse_mm = no_pulse_span[0], "left", float("nan")
+        corrections.append(f"no usable calibration pulse ({pulse_err}): standard "
+                           f"{mm_per_mv:.0f} mm/mV assumed, time axis from the rhythm strip")
     if len(base) != len(layout):
         raise ValueError(f"page layout not recognised: {len(base)} rows found, "
                          f"{len(layout)} expected")
@@ -479,9 +542,9 @@ def digitize_page(
     # photo's horizontal scale can differ from the grid estimate by ~1%; both
     # shifted every lead box (D57).
     px_t = px
-    rhythm_row = next((r for r, names in enumerate(layout) if len(names) == 1), None)
     if rhythm_row is not None:
-        span = _trace_span(dark, base[rhythm_row], px, x0, side)
+        span = (no_pulse_span if no_pulse_span is not None
+                else _trace_span(dark, base[rhythm_row], px, x0, side))
         if (span is not None and abs((span[1] - span[0]) / px - row_mm) <= _SPAN_TOL * row_mm
                 and (side == "right" or 0 <= (span[0] - x0) / px <= _SPAN_START_MAX_MM)):
             x0, px_t = span[0], (span[1] - span[0]) / row_mm
@@ -522,7 +585,9 @@ def digitize_page(
                                          px_per_mm=px, lead_name=name)
     if rhythm is None:
         raise ValueError("page layout has no rhythm strip")
-    notes = [f"grid {px:.2f} px/mm, calibration pulse {pulse_mm:.1f} mm ({side}), rows at {base}"]
+    pulse_txt = (f"calibration pulse {pulse_mm:.1f} mm ({side})" if no_pulse_span is None
+                 else "no calibration pulse")
+    notes = [f"grid {px:.2f} px/mm, {pulse_txt}, rows at {base}"]
     if notes_span:
         notes.append(notes_span)
     if corrections:
