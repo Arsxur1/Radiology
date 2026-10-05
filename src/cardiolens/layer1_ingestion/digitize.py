@@ -219,8 +219,6 @@ PAGE_LAYOUT_3X4_II = (("I", "aVR", "V1", "V4"), ("II", "aVL", "V2", "V5"),
 _PULSE_MM_TOL = 1.0
 _PULSE_DARK_THRESHOLD = 170    # thin pulse lines on scans read lighter than the trace (D78)
 _ROW_SPACING_CV_MAX = 0.20   # the four baselines are roughly evenly spaced
-_ROW_MIN_GAP_MM = 8.0        # rows at least this far apart (D81; was 15)
-_ROW_MIN_COVER = 0.35        # a trace row has ink within ±3 mm across >= 35% of the width (D81)
 # Rhythm-strip span as the time axis (D57): accepted only when it is 10 s within
 # _SPAN_TOL at the grid scale and starts at most _SPAN_START_MAX_MM after a left
 # pulse — on noisy renders a looser gate let noise stretch the span.
@@ -359,26 +357,17 @@ def _grid_box(img: np.ndarray, px_per_mm: float) -> tuple[int, int, int, int] | 
 
 def _row_baselines(dark: np.ndarray, px_per_mm: float, n_rows: int) -> list[int]:
     """Baselines = strongest peaks of the trace-pixel row profile (the isoelectric
-    line dominates each row), at least 8 mm apart, among peaks whose ±3 mm band has
-    ink across most of the width: a trace row is a near-continuous line, a text line
-    (footer, legend) is not. Some templates put the rhythm strip only 12 mm below the
-    third row, which the former 15-mm spacing could not resolve (D81)."""
+    line dominates each row), at least 15 mm apart."""
     from scipy.ndimage import uniform_filter1d
     from scipy.signal import find_peaks
 
-    h, w = dark.shape
-    x_lo, x_hi = int(0.10 * w), int(0.95 * w)
-    prof = dark[:, x_lo:x_hi].sum(axis=1).astype(float)
+    w = dark.shape[1]
+    prof = dark[:, int(0.10 * w):int(0.95 * w)].sum(axis=1).astype(float)
     prof = uniform_filter1d(prof, max(3, int(px_per_mm)))
-    pk, props = find_peaks(prof, distance=int(_ROW_MIN_GAP_MM * px_per_mm),
-                           prominence=prof.max() * 0.05)
-    b = max(1, int(3 * px_per_mm))
-    cover = np.array([dark[max(0, y - b):min(h, y + b), x_lo:x_hi].any(axis=0).mean() for y in pk])
-    keep = cover >= _ROW_MIN_COVER
-    pk, prom = pk[keep], props["prominences"][keep]
+    pk, props = find_peaks(prof, distance=int(15 * px_per_mm), prominence=prof.max() * 0.05)
     if len(pk) < n_rows:
         return sorted(int(y) for y in pk)
-    top = pk[np.argsort(prom)[::-1][:n_rows]]
+    top = pk[np.argsort(props["prominences"])[::-1][:n_rows]]
     return sorted(int(y) for y in top)
 
 
@@ -568,18 +557,9 @@ def digitize_page(
         raise ValueError(f"page layout not recognised: {len(base)} rows found, "
                          f"{len(layout)} expected")
     gaps = np.diff(base)
-    # The lead rows are evenly spaced; a rhythm strip may sit closer (some templates
-    # 12 mm below the third row) or farther, within 0.4-1.6 lead-row gaps (D81).
-    lead_rows = [r for r, names in enumerate(layout) if len(names) > 1]
-    lead_gaps = np.diff([base[r] for r in lead_rows]) if len(lead_rows) >= 3 else gaps
-    other = [g for g in gaps if g not in lead_gaps] if len(lead_rows) >= 3 else []
-    ref_gap = float(np.median(lead_gaps))
-    if (lead_gaps.std() / lead_gaps.mean() > _ROW_SPACING_CV_MAX
-            or any(not 0.4 * ref_gap <= g <= 1.6 * ref_gap for g in other)):
+    if gaps.std() / gaps.mean() > _ROW_SPACING_CV_MAX:
         raise ValueError("page layout not recognised: rows are not evenly spaced")
-    # Band half-height from the lead-row spacing: a close rhythm strip must not clip
-    # tall QRS of every row; foreign traces in the band are left to the tracker (D81).
-    half = int(ref_gap / 2)
+    half = int(gaps.min() / 2)
     n_cols = max(len(r) for r in layout)
     # Time axis from the rhythm strip itself: its trace spans exactly one row
     # (10 s). Some printers leave a gap between the pulse and the trace, and a
