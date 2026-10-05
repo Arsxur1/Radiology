@@ -94,25 +94,49 @@ def _adaptive_dark_mask(img: np.ndarray, px_per_mm: float) -> np.ndarray:
     return smooth.astype(np.float32) < _ADAPTIVE_RATIO * background
 
 
-def _track_trace(dark: np.ndarray) -> np.ndarray:
+def _track_trace(dark: np.ndarray, mu: float = 1.0, max_runs: int = 12) -> np.ndarray:
     """Row position of one continuous trace per column (NaN where none).
 
-    Starts from the image centre; in each column picks the run of dark pixels
-    containing, or nearest to, the previous position and takes its mean row.
-    On ecg-image-kit renders this lifted median SNR from 9.1 to 12.7 dB
-    versus per-column averaging of all dark pixels (DECISIONS D15y).
+    Each column's dark pixels split into runs; the trace is the sequence of runs
+    with the least total cost — vertical gap between consecutive runs (0 when they
+    touch) plus ``mu`` × the run's distance from the crop centre (the lead's
+    baseline band) — found by dynamic programming over the whole crop (D79). The
+    earlier greedy tracker (nearest run to the previous column, D15y) jumped onto a
+    neighbouring row's large QRS entering the band and stayed there: on clean scans
+    of PM-ECG-ID the rhythm strip read at correlation 0.28.
     """
     height, width = dark.shape
     trace = np.full(width, np.nan)
-    prev = height / 2.0
+    center = height / 2.0
+    xs: list[int] = []
+    cols: list[np.ndarray] = []                    # per visited column: (top, bottom, mean)
     for x in range(width):
         rows = np.flatnonzero(dark[:, x])
         if rows.size == 0:
             continue
         runs = np.split(rows, np.flatnonzero(np.diff(rows) > 1) + 1)
-        dist = [0.0 if r[0] <= prev <= r[-1] else min(abs(r[0] - prev), abs(r[-1] - prev))
-                for r in runs]
-        prev = trace[x] = float(runs[int(np.argmin(dist))].mean())
+        if len(runs) > max_runs:
+            runs = sorted(runs, key=len, reverse=True)[:max_runs]
+        xs.append(x)
+        cols.append(np.array([(r[0], r[-1], r.mean()) for r in runs], dtype=float))
+    if not xs:
+        return trace
+    cost = mu * np.abs(cols[0][:, 2] - center) / height
+    back: list[np.ndarray] = []
+    for i in range(1, len(xs)):
+        p, c = cols[i - 1], cols[i]
+        gap_cols = max(1.0, float(xs[i] - xs[i - 1]))
+        # Vertical gap between run intervals [top, bottom]; 0 if they overlap or touch.
+        gap = np.maximum(c[None, :, 0] - p[:, None, 1], p[:, None, 0] - c[None, :, 1])
+        gap[gap <= 1] = 0.0
+        tot = cost[:, None] + gap / gap_cols / height * 10.0
+        back.append(np.argmin(tot, axis=0))
+        cost = tot.min(axis=0) + mu * np.abs(c[:, 2] - center) / height
+    j = int(np.argmin(cost))
+    for i in range(len(xs) - 1, -1, -1):
+        trace[xs[i]] = cols[i][j, 2]
+        if i > 0:
+            j = int(back[i - 1][j])
     return trace
 
 
