@@ -48,6 +48,8 @@ def result_to_dict(result: PipelineResult) -> dict[str, Any]:
             },
             "next_step": {"ru": r.next_step_ru, "uz": r.next_step_uz},
             "reasoning_trace": r.reasoning_trace,
+            "provider": r.provider,
+            "provider_model": r.provider_model,
             "disclaimer": {"ru": r.disclaimer_ru, "uz": r.disclaimer_uz},
         },
         "audit_log": result.audit_log,

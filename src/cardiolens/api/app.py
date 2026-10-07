@@ -2,7 +2,7 @@
 
 Endpoints:
   GET  /                         -> web UI
-  GET  /health                   -> liveness
+  GET  /health                   -> liveness + which LLM provider is active
   GET  /api/cases                -> available synthetic demo cases
   POST /api/analyze              -> run pipeline (synthetic case or file upload)
   GET  /api/analysis/{id}/report.pdf
@@ -10,8 +10,8 @@ Endpoints:
   GET  /api/analysis/{id}/graph.png
   GET  /api/analysis/{id}/conclusion?lang=ru|uz
 
-Core layers (1-5) run locally; only the optional Layer-6 Claude narrative
-touches the cloud (TZ §12).
+Core layers (1-5) run locally; the Layer-6 narrative comes from a local
+OpenAI-compatible model, from Claude, or from the deterministic stub (TZ §12).
 """
 
 from __future__ import annotations
@@ -27,7 +27,9 @@ from starlette.background import BackgroundTask
 
 from cardiolens.api import service
 from cardiolens.calibration import TemperatureScaler, expected_calibration_error
+from cardiolens.config import load_app_config
 from cardiolens.feedback import DEFAULT_FEEDBACK_PATH, Feedback, FeedbackStore
+from cardiolens.layer6_interpret import provider_status
 from cardiolens.outputs import (
     format_conclusion,
     render_causal_graph,
@@ -57,7 +59,11 @@ def index() -> str:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "cardiolens", "version": "0.1.0"}
+    """Liveness plus the Layer-6 narrative source the next analysis will use (TZ §12)."""
+    return {
+        "status": "ok", "service": "cardiolens", "version": "0.1.0",
+        "llm": provider_status(load_app_config().llm),
+    }
 
 
 @app.get("/api/cases")

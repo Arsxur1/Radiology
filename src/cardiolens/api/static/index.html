@@ -21,6 +21,13 @@
     padding: 16px 20px; display:flex; align-items:baseline; gap:12px; }
   header h1 { margin:0; font-size: 20px; }
   header .sub { color: var(--muted); font-size: 13px; }
+  header .llm { margin-left:auto; font-size:12px; padding:3px 10px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+  header .llm.local { color:var(--ok); border-color:var(--ok); }
+  header .llm.claude { color:var(--brand2); border-color:var(--brand2); }
+  details { margin-top:10px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  .trace li { font-family: ui-monospace, Menlo, monospace; font-size:12px; margin:2px 0; }
   .wrap { max-width: 1100px; margin: 20px auto; padding: 0 16px;
     display:grid; grid-template-columns: 320px 1fr; gap:16px; }
   @media (max-width: 820px) { .wrap { grid-template-columns: 1fr; } }
@@ -62,6 +69,7 @@
 <header>
   <h1>CardioLens</h1>
   <span class="sub">интерпретация ЭКГ · поддержка решений врача</span>
+  <span class="llm" id="llm" title="Источник нарратива Слоя 6 (/health)">LLM: …</span>
 </header>
 
 <div class="wrap">
@@ -119,6 +127,12 @@
       <h2>Xulosa (UZ)</h2>
       <pre id="concl_uz"></pre>
 
+      <div class="muted" id="narr_src"></div>
+      <details>
+        <summary>Трасса рассуждений (reasoning trace, ТЗ §9)</summary>
+        <ol class="trace" id="trace"></ol>
+      </details>
+
       <a class="btn" id="pdf" download><button class="primary">Скачать PDF-заключение</button></a>
       <div class="disclaimer" id="disc"></div>
     </div>
@@ -133,6 +147,23 @@ async function loadCases() {
   $('case').innerHTML = '<option value="">—</option>' +
     d.cases.map(c => `<option value="${c}">${c}</option>`).join('');
   $('case').value = 'hyperk';
+}
+
+const PROVIDER_RU = { local: 'локальная модель', claude: 'Claude (облако)', stub: 'заглушка (офлайн, без LLM)' };
+
+function providerLabel(name, model) {
+  return (PROVIDER_RU[name] || name) + (model ? ' · ' + model : '');
+}
+
+async function loadHealth() {
+  try {
+    const r = await fetch('/health'); const d = await r.json(); const l = d.llm || {};
+    const el = $('llm'); el.className = 'llm ' + (l.active || 'stub');
+    el.textContent = 'LLM: ' + providerLabel(l.active, l.model);
+    el.title = `настроено: ${l.configured} · локальный сервер ${l.local_base_url}: ` +
+      (l.local_server_up ? 'отвечает' : 'не отвечает') +
+      (l.claude_available ? ' · ключ Claude есть' : '');
+  } catch (e) { $('llm').textContent = 'LLM: ?'; }
 }
 
 $('run').addEventListener('click', async () => {
@@ -188,11 +219,18 @@ function render(d) {
   $('graph').src = `/api/analysis/${d.analysis_id}/graph.png`;
   $('concl_ru').textContent = d.conclusion_ru;
   $('concl_uz').textContent = d.conclusion_uz;
+  const it = d.interpretation;
+  $('narr_src').textContent = 'Нарратив: ' + providerLabel(it.provider, it.provider_model) +
+    ' · все утверждения проверены заземлением (ungrounded — отброшены)';
+  $('trace').innerHTML = (it.reasoning_trace || []).map(t => `<li>${esc(t)}</li>`).join('');
   $('pdf').href = `/api/analysis/${d.analysis_id}/report.pdf`;
-  $('disc').textContent = d.interpretation.disclaimer.ru;
+  $('disc').textContent = it.disclaimer.ru;
 }
 
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
 loadCases();
+loadHealth();
 </script>
 </body>
 </html>

@@ -72,10 +72,11 @@ class LocalOpenAIProvider(ClaudeProvider):
         try:
             text = self._request(prompt)
             report = report_from_json(json.loads(_extract_json(text)), data)
+            report.provider, report.provider_model = self.name, self.model
             report.reasoning_trace.insert(0, f"narrative by local model {self.model} at {self.base_url}")
             return report
         except (urllib.error.URLError, OSError, ValueError, KeyError, TypeError) as e:
-            report = StubProvider().generate(data)
+            report = StubProvider().generate(data)   # provider stays "stub": the UI must not claim a model
             report.reasoning_trace.insert(
                 0, f"local LLM unavailable ({type(e).__name__}) -> deterministic offline narrative")
             return report

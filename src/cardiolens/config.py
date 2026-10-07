@@ -8,6 +8,7 @@ are reference tables); the rule base is validated against ``RuleBase``.
 from __future__ import annotations
 
 import functools
+import os
 from pathlib import Path
 from typing import Any
 
@@ -82,9 +83,30 @@ class AppConfig(BaseModel):
     versions: Versions
 
 
+# Environment overrides for the deployment-specific LLM entries of app.yaml, so a
+# container or a shell can point Layer 6 at its own server without editing the
+# repo (docker-compose: CARDIOLENS_LLM_BASE_URL=http://ollama:11434/v1).
+_LLM_ENV = {
+    "CARDIOLENS_LLM_PROVIDER": "provider",
+    "CARDIOLENS_LLM_BASE_URL": "local_base_url",
+    "CARDIOLENS_LLM_MODEL": "local_model",
+    "CARDIOLENS_LLM_TIMEOUT_S": "timeout_s",
+}
+
+
+def _apply_llm_env(raw: dict[str, Any]) -> dict[str, Any]:
+    llm = dict(raw.get("llm") or {})
+    for var, key in _LLM_ENV.items():
+        value = os.environ.get(var)
+        if value:
+            llm[key] = value
+    raw["llm"] = llm
+    return raw
+
+
 @functools.lru_cache(maxsize=1)
 def load_app_config() -> AppConfig:
-    return AppConfig(**_load_yaml(configs_dir() / "app.yaml"))
+    return AppConfig(**_apply_llm_env(_load_yaml(configs_dir() / "app.yaml")))
 
 
 @functools.lru_cache(maxsize=1)

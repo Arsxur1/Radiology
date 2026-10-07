@@ -88,7 +88,36 @@ python -m cardiolens.demo --case normal
 
 Если сервер недоступен или вернул мусор, отчёт всё равно будет — на
 детерминированной заглушке, с пометкой в трассе рассуждений. Ключ Claude не
-нужен; наружу не уходит ничего.
+нужен; наружу не уходит ничего. Кто написал нарратив, видно в JSON
+(`interpretation.provider` = `local` / `claude` / `stub`, `provider_model`),
+в трассе рассуждений и в шапке веб-интерфейса.
+
+Переменные окружения перекрывают блок `llm` в `configs/app.yaml` без правки
+репозитория: `CARDIOLENS_LLM_PROVIDER`, `CARDIOLENS_LLM_BASE_URL`,
+`CARDIOLENS_LLM_MODEL`, `CARDIOLENS_LLM_TIMEOUT_S`.
+
+### Локальная LLM + веб-интерфейс одной командой
+
+```bash
+scripts/run_local.sh                    # venv → ollama serve → ollama pull → http://127.0.0.1:8000
+scripts/run_local.sh --no-llm           # только веб-интерфейс, нарратив — заглушка
+CARDIOLENS_LLM_MODEL=qwen2.5:7b scripts/run_local.sh
+```
+
+Скрипт ставит пакет в `.venv`, поднимает Ollama (если установлена; иначе
+печатает, как установить, и запускает сервис на заглушке), один раз скачивает
+модель и стартует `uvicorn`. Через Docker — то же самое без установки чего-либо,
+кроме Docker:
+
+```bash
+docker compose up                       # ollama + cardiolens → http://localhost:8000
+```
+
+`docker-compose.yml` поднимает контейнер Ollama (веса — в томе `ollama`),
+одноразово скачивает модель и запускает сервис, указав ему
+`CARDIOLENS_LLM_BASE_URL=http://ollama:11434/v1`. Первый запуск скачивает
+≈ 5 ГБ весов; дальше всё офлайн. Проверка: `curl localhost:8000/health` → поле
+`llm.active` должно быть `local`.
 
 ### Оцифровка бумажной ЭКГ: страница 3×4 (ТЗ §4, §17)
 
@@ -212,11 +241,14 @@ python -m cardiolens.ml.train --train data/ecg-arrhythmia-train data/ecg-arrhyth
 
 Движок обёрнут в HTTP-сервис с одностраничным интерфейсом: выбор демо-случая
 или загрузка файла (WFDB/EDF/CSV) → анализ → заключение RU/UZ, находки,
-кривая, каузальный граф, скачивание PDF.
+кривая, каузальный граф, скачивание PDF. В шапке — бейдж активного источника
+нарратива (локальная модель / Claude / заглушка, из `/health`); под заключением —
+кто его написал и раскрывающаяся трасса рассуждений (ТЗ §9).
 
 ```bash
 pip install -e ".[dev]"
 uvicorn cardiolens.api.app:app --reload      # → http://127.0.0.1:8000
+# или с локальной LLM за одну команду: scripts/run_local.sh / docker compose up
 ```
 
 Эндпоинты:
@@ -224,7 +256,7 @@ uvicorn cardiolens.api.app:app --reload      # → http://127.0.0.1:8000
 | Метод | Путь | Назначение |
 |-------|------|-----------|
 | GET | `/` | Веб-интерфейс |
-| GET | `/health` | Проверка живости |
+| GET | `/health` | Проверка живости + блок `llm`: настроенный и активный провайдер, модель, отвечает ли локальный сервер |
 | GET | `/api/cases` | Список демо-случаев |
 | POST | `/api/analyze` | Анализ: форма с `case` (синтетика) или `files` (загрузка) + `mode`, контекст пациента → JSON (§11) |
 | GET | `/api/analysis/{id}/report.pdf` | PDF-заключение |
@@ -241,9 +273,9 @@ curl -s -F files=@data/samples/sample_ecg.csv -F sampling_rate_hz=500 -F unit=uv
      http://127.0.0.1:8000/api/analyze | jq '.measurements.heart_rate_bpm'
 ```
 
-> Ядро (Слои 1–5) работает офлайн; в облако уходит только опциональный
-> LLM-нарратив Слоя 6 (TZ §12). In-memory хранилище анализов — для MVP; в
-> production заменить на БД/объектное хранилище.
+> Ядро (Слои 1–5) работает офлайн; нарратив Слоя 6 — локальная модель, Claude
+> или заглушка (TZ §12); с локальной моделью наружу не уходит ничего. In-memory
+> хранилище анализов — для MVP; в production заменить на БД/объектное хранилище.
 
 ## Валидация и метрики (§16)
 
@@ -558,7 +590,7 @@ SCP/SNOMED-адаптеры (`build_ptbxl_dataset`, `build_ecg_arrhythmia_datase
 ## Тесты
 
 ```bash
-pytest -q          # 270 тестов (ruff clean; CI: Python 3.11/3.12)
+pytest -q          # 274 тестов (ruff clean; CI: Python 3.11/3.12)
 ```
 
 ## Архитектура

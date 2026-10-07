@@ -85,7 +85,9 @@ class ClaudeProvider(LLMProvider):
             messages=[{"role": "user", "content": prompt}],
         )
         text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-        return report_from_json(json.loads(_extract_json(text)), data)
+        report = report_from_json(json.loads(_extract_json(text)), data)
+        report.provider, report.provider_model = self.name, self.model
+        return report
 
 
 PROMPT_INSTRUCTIONS = (

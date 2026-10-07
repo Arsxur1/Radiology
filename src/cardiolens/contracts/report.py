@@ -49,6 +49,9 @@ class InterpretationReport(BaseModel):
     next_step_uz: str = ""
     # Reasoning trace is mandatory and user-visible (TZ §9).
     reasoning_trace: list[str] = Field(default_factory=list)
+    # Who wrote the narrative: "stub" | "claude" | "local" (TZ §12 — visible in the UI/JSON).
+    provider: str = "stub"
+    provider_model: str | None = None
     escalation_reason: str | None = None       # set when mode == "escalate"
     disclaimer_ru: str = ""
     disclaimer_uz: str = ""
