@@ -32,7 +32,23 @@ def interpret(
     min_component: float | None = None,
 ) -> InterpretationReport:
     provider = provider or default_provider()
-    report = provider.generate(data)
+    fallback_note = None
+    try:
+        report = provider.generate(data)
+    except Exception as exc:  # any cloud failure falls back to the local narrative
+        if isinstance(provider, StubProvider):
+            raise
+        # The cloud narrative is optional (TZ §12): on a refusal, network or API
+        # error the deterministic local narrative is used instead (D91).
+        fallback_note = f"LLM provider {getattr(provider, 'name', '?')} failed " \
+                        f"({type(exc).__name__}) -> local stub narrative"
+        report = StubProvider().generate(data)
+    redactions = getattr(provider, "redactions", 0)
+    if redactions:
+        report.reasoning_trace.append(f"PHI: {redactions} identifier-shaped item(s) "
+                                      f"removed before the cloud call (§12)")
+    if fallback_note:
+        report.reasoning_trace.append(fallback_note)
 
     validate_grounding(report, data)
 

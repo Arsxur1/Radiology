@@ -312,6 +312,11 @@ _PACED_EXCLUDES = ("lbbb", "rbbb", "incomplete_rbbb", "wide_qrs_nonspecific", "l
 
 
 def _apply_rhythm_hierarchy(findings, m, audit: list[str]) -> None:
+    # LBBB lifts ST in V1-V3 discordantly; the Brugada pattern is defined only once LBBB
+    # is excluded (D91: the one LBBB co-call on CPSC and on Brugada-HUCA was not Brugada).
+    if findings.by_code("lbbb") is not None and findings.by_code("brugada_pattern") is not None:
+        findings.findings = [f for f in findings.findings if f.code != "brugada_pattern"]
+        audit.append("[L4] hierarchy: LBBB present, withheld ['brugada_pattern']")
     if findings.by_code("paced_rhythm") is not None:
         dropped = [f.code for f in findings.findings if f.code in _PACED_EXCLUDES]
         findings.findings = [f for f in findings.findings if f.code not in _PACED_EXCLUDES]

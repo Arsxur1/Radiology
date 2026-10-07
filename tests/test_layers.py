@@ -303,3 +303,21 @@ def test_multilead_spike_detects_small_qrs_locked_spikes():
     assert "paced_rhythm" not in run_pipeline(one, mode="A").findings.codes()
     late = _multilead_spiked_ecg(+0.40)                     # mid-diastole: not QRS-locked
     assert "paced_rhythm" not in run_pipeline(late, mode="A").findings.codes()
+
+
+def test_lbbb_withholds_brugada_pattern():
+    # D91: discordant ST elevation in V1-V3 under LBBB is not a Brugada pattern.
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.contracts.findings import Finding, FindingSet
+    from cardiolens.pipeline import _apply_rhythm_hierarchy
+
+    def fs(*codes):
+        return FindingSet(findings=[Finding(code=c, label_ru=c, label_uz=c, confidence=0.5)
+                                    for c in codes])
+    audit: list[str] = []
+    f = fs("lbbb", "brugada_pattern")
+    _apply_rhythm_hierarchy(f, Measurements(), audit)
+    assert f.codes() == {"lbbb"} and audit
+    f = fs("rbbb", "brugada_pattern")
+    _apply_rhythm_hierarchy(f, Measurements(), [])
+    assert "brugada_pattern" in f.codes()
