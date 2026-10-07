@@ -1,0 +1,17 @@
+# Telegram collector agent (TZ §13 feedback, §15 data, §16 real-photo benchmark).
+#
+# Reads ECG photographs posted in the groups below through the user's OWN account
+# (Telethon client session; nothing is added to the groups and nothing is ever
+# written there), runs the CardioLens pipeline on every photo, sends each result
+# to the review chat (Saved Messages by default) and records the reviewer's
+# verdicts as labels. api_id / api_hash come from the environment:
+#   TELEGRAM_API_ID, TELEGRAM_API_HASH   (https://my.telegram.org -> API development tools)
+groups: []                 # usernames, t.me links or numeric ids; empty = nothing is read
+review_chat: "me"          # "me" = Saved Messages; or a username / id of a private chat
+store_dir: "data/telegram" # photos (EXIF stripped), digitised signals, dataset.jsonl — git-ignored
+session: "data/telegram/session"   # Telethon session file; log in once, keep private
+backfill_limit: 0          # on start also scan this many recent messages per group
+min_grid_pitch_px: 3.0     # a photo counts as an ECG when a grid period >= this many px is found
+mode: "A"                  # pipeline mode for the cards (A: decision support)
+narrative: false           # true -> Layer-6 narrative per configs/app.yaml (local LLM / Claude); false -> stub
+feedback_path: "data/feedback/feedback.jsonl"   # verdicts also feed the confidence calibrator (TZ §13)

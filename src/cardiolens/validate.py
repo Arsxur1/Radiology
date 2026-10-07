@@ -36,6 +36,8 @@ def main() -> None:
     ap.add_argument("--mimic", help="path to a local MIMIC-IV-ECG subset (fetch_mimic): gold = cart statements")
     ap.add_argument("--ecg-images",
                     help="folder of ECG photographs paired with their WFDB records: digitise and compare")
+    ap.add_argument("--telegram",
+                    help="Telegram collector store (data/telegram): gold = the reviewer's verdicts")
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--age-min", type=float, help="keep patients at least this old (years)")
     ap.add_argument("--age-max", type=float, help="keep patients at most this old (years)")
@@ -67,6 +69,11 @@ def main() -> None:
     elif args.mimic:
         cases = build_mimic_dataset(args.mimic, limit=args.limit)
         source = f"MIMIC-IV-ECG ({args.mimic}, gold = the cart's statements)"
+    elif args.telegram:
+        from cardiolens.telegram.export import build_telegram_dataset
+
+        cases = build_telegram_dataset(args.telegram, limit=args.limit)
+        source = f"Telegram photos ({args.telegram}, gold = reviewer verdicts)"
     else:
         cases = build_synthetic_dataset()
         source = "synthetic (offline)"

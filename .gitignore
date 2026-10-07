@@ -32,5 +32,7 @@ data/ptbxl-toddlers/
 data/ludb/
 data/mimic-iv-ecg/
 data/georgia/
+# Telegram collector: photos, signals, session file, dataset (never committed)
+data/telegram/
 # scripts/run_local.sh: background Ollama log
 .ollama-serve.log

@@ -27,6 +27,7 @@ dependencies = [
 llm = ["anthropic"]
 validation = ["pandas"]
 digitize = ["opencv-python-headless"]
+telegram = ["telethon", "opencv-python-headless"]
 dev = ["pytest", "ruff", "httpx", "opencv-python-headless"]
 
 [tool.setuptools.packages.find]
