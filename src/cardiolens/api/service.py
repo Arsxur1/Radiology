@@ -15,6 +15,7 @@ from pathlib import Path
 from cardiolens.layer1_ingestion import (
     generate_synthetic_ecg,
     load_csv,
+    load_dicom,
     load_edf,
     load_wfdb,
 )
@@ -55,7 +56,7 @@ def signal_from_uploads(
 ):
     """Persist uploaded files to a temp dir and dispatch to a parser.
 
-    Supports WFDB (.hea + .dat), EDF (.edf/.bdf), and CSV (.csv/.txt).
+    Supports WFDB (.hea + .dat), EDF (.edf/.bdf), DICOM-ECG (.dcm) and CSV (.csv/.txt).
     """
     if not files:
         raise ValueError("no files uploaded")
@@ -77,12 +78,15 @@ def signal_from_uploads(
         edf = next((p for p in saved if p.suffix.lower() in (".edf", ".bdf")), None)
         if edf is not None:
             return load_edf(edf)
+        dcm = next((p for p in saved if p.suffix.lower() == ".dcm"), None)
+        if dcm is not None:
+            return load_dicom(dcm)
         csv = next((p for p in saved if p.suffix.lower() in (".csv", ".txt")), None)
         if csv is not None:
             if sampling_rate_hz is None:
                 raise ValueError("sampling_rate_hz is required for CSV input")
             return load_csv(csv, sampling_rate_hz=sampling_rate_hz, unit=unit)
-        raise ValueError("unsupported upload; expected WFDB(.hea+.dat), EDF, or CSV")
+        raise ValueError("unsupported upload; expected WFDB(.hea+.dat), EDF, DICOM-ECG (.dcm) or CSV")
     finally:
         # Parsers read the raw signal into memory, so the temp files are no
         # longer needed once parsing returns (or raises) — never leak them.

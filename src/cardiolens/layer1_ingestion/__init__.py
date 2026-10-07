@@ -9,6 +9,7 @@ from cardiolens.layer1_ingestion.digitize import (
 from cardiolens.layer1_ingestion.parsers import (
     load,
     load_csv,
+    load_dicom,
     load_edf,
     load_from_image,
     load_wfdb,
@@ -23,6 +24,7 @@ __all__ = [
     "generate_synthetic_ecg",
     "load",
     "load_csv",
+    "load_dicom",
     "load_edf",
     "load_from_image",
     "load_ptbxl_record",

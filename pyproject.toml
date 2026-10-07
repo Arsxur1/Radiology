@@ -27,7 +27,8 @@ dependencies = [
 llm = ["anthropic"]
 validation = ["pandas"]
 digitize = ["opencv-python-headless"]
-dev = ["pytest", "pytest-cov", "ruff", "httpx", "opencv-python-headless"]
+dicom = ["pydicom>=3"]
+dev = ["pytest", "pytest-cov", "ruff", "httpx", "opencv-python-headless", "pydicom>=3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

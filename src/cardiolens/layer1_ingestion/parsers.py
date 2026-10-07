@@ -1,9 +1,9 @@
 """Layer 1 — file parsers to the unified representation (TZ §4).
 
-Working parsers for WFDB, EDF/EDF+ and CSV (the clean-digital MVP path,
-TZ §17). DICOM-ECG / SCP-ECG / GE-MUSE / Philips / HL7-aECG are declared as
-interfaces with explicit ``NotImplementedError`` + TODO — we never fabricate a
-result (TZ §0). All outputs are in microvolts.
+Working parsers for WFDB, EDF/EDF+, CSV and DICOM-ECG waveforms (D93). SCP-ECG /
+GE-MUSE / Philips / HL7-aECG are declared as interfaces with explicit
+``NotImplementedError`` + TODO — we never fabricate a result (TZ §0). All outputs
+are in microvolts.
 """
 
 from __future__ import annotations
@@ -150,9 +150,88 @@ def load_csv(
     )
 
 
+# SCP-ECG lead codes (DICOM CID 3001, scheme SCPECG) for sources whose code meaning
+# does not spell the lead out.
+_SCP_LEADS = {"5.6.3-9-1": "I", "5.6.3-9-2": "II", "5.6.3-9-61": "III", "5.6.3-9-62": "aVR",
+              "5.6.3-9-63": "aVL", "5.6.3-9-64": "aVF", "5.6.3-9-3": "V1", "5.6.3-9-4": "V2",
+              "5.6.3-9-5": "V3", "5.6.3-9-6": "V4", "5.6.3-9-7": "V5", "5.6.3-9-8": "V6"}
+_LEAD_MEANING_RE = re.compile(r"\blead\s+(i{1,3}|a?v[rlf]|v[1-6])\b", re.IGNORECASE)
+_UNIT_TO_UV = {"uv": 1.0, "mv": 1000.0, "v": 1e6}
+_DICOM_AGE_RE = re.compile(r"^(\d{3})([DWMY])$")
+
+
+def _dicom_lead_name(channel) -> str:
+    src = channel.ChannelSourceSequence[0] if "ChannelSourceSequence" in channel else None
+    meaning = str(getattr(src, "CodeMeaning", "") or "") if src is not None else ""
+    m = _LEAD_MEANING_RE.search(meaning)
+    if m:
+        return m.group(1)
+    code = str(getattr(src, "CodeValue", "") or "") if src is not None else ""
+    if code in _SCP_LEADS:
+        return _SCP_LEADS[code]
+    return str(getattr(channel, "ChannelLabel", "") or meaning or "ch")
+
+
+def _dicom_patient(ds) -> Patient:
+    """Age and sex only: name, ID and birth date are never read (TZ §12)."""
+    age_years = age_days = None
+    m = _DICOM_AGE_RE.match(str(ds.get("PatientAge", "") or "").strip())
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        days = {"D": 1, "W": 7, "M": 30.44, "Y": 365.25}[unit] * n
+        if unit == "Y":
+            age_years = float(n)
+        else:
+            age_days, age_years = round(days, 1), round(days / 365.25, 3)
+    sex = {"F": "female", "M": "male"}.get(str(ds.get("PatientSex", "") or "").strip().upper())
+    return Patient(age_years=age_years, age_days=age_days, sex=sex)
+
+
+def load_dicom(path: str | Path) -> SignalRepresentation:
+    """Parse a DICOM ECG waveform object — 12-lead / General ECG Waveform Storage (D93).
+
+    Takes the rhythm multiplex group (by label, else the longest). Sample values are
+    scaled by channel sensitivity, correction factor and baseline (pydicom), then
+    converted from the declared unit (µV / mV / V) to µV.
+    """
+    import pydicom
+
+    ds = pydicom.dcmread(str(path))
+    groups = list(ds.get("WaveformSequence", []) or [])
+    if not groups:
+        raise ValueError("DICOM object has no WaveformSequence (not an ECG waveform)")
+
+    def duration(g) -> float:
+        return float(g.NumberOfWaveformSamples) / float(g.SamplingFrequency)
+
+    labelled = [i for i, g in enumerate(groups)
+                if "RHYTHM" in str(g.get("MultiplexGroupLabel", "") or "").upper()]
+    idx = labelled[0] if labelled else max(range(len(groups)), key=lambda i: duration(groups[i]))
+    g = groups[idx]
+    raw = np.asarray(ds.waveform_array(idx), dtype=np.float64)  # samples x channels
+    channels = list(g.ChannelDefinitionSequence)
+    rows = []
+    for k, ch in enumerate(channels):
+        unit = "uv"
+        if "ChannelSensitivityUnitsSequence" in ch:
+            unit = str(ch.ChannelSensitivityUnitsSequence[0].CodeValue or "uV").lower()
+        if unit not in _UNIT_TO_UV:
+            raise ValueError(f"unsupported channel unit {unit!r}")
+        rows.append(raw[:, k] * _UNIT_TO_UV[unit])
+    sig = np.vstack(rows).astype(np.float32)
+    fs = float(g.SamplingFrequency)
+    return SignalRepresentation(
+        signal=sig,
+        sampling_rate_hz=fs,
+        lead_names=canonicalize_lead_names([_dicom_lead_name(ch) for ch in channels]),
+        duration_s=float(sig.shape[1] / fs),
+        source="dicom",
+        patient=_dicom_patient(ds),
+        provenance=Provenance(digitized=False, confidence=1.0),
+    )
+
+
 # --- Interfaces declared but not implemented in this increment (TZ §0, §17) ---
-def load_dicom(path: str | Path) -> SignalRepresentation:  # pragma: no cover
-    raise NotImplementedError("TODO(v2): DICOM-ECG Waveform parsing (TZ §4).")
 
 
 def load_scp(path: str | Path) -> SignalRepresentation:  # pragma: no cover
