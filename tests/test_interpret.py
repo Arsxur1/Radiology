@@ -82,3 +82,26 @@ def test_mode_A_always_decision_support():
                     min_overall=cfg.confidence.autonomous_min_overall, quality_ok=True)
     assert rep.mode == "A"  # stays A even with a critical finding
     assert rep.red_flags     # but red flags are shown
+
+
+def test_mode_B_escalates_on_weak_component():
+    # D85: a confident mean must not carry one weak finding into autonomous output.
+    from cardiolens.contracts.causal import CausalGraph
+    from cardiolens.contracts.findings import Finding, FindingSet
+    from cardiolens.layer6_interpret.policy import decide_mode
+    from cardiolens.safety.critical import SafetyResult
+
+    fs = FindingSet(findings=[
+        Finding(code="sinus_rhythm", label_ru="с", label_uz="s", confidence=0.95),
+        Finding(code="incomplete_rbbb", label_ru="н", label_uz="n", confidence=0.6),
+    ])
+    g = CausalGraph(confidence=0.9)
+    cfg = load_app_config()
+    gates = dict(min_overall=cfg.confidence.autonomous_min_overall, quality_ok=True)
+    assert decide_mode("B", g, SafetyResult(), **gates).mode == "B"
+    d = decide_mode("B", g, SafetyResult(), **gates, findings=fs,
+                    min_component=cfg.confidence.autonomous_min_component)
+    assert d.mode == "escalate" and "incomplete_rbbb" in d.reason
+    fs.findings[1].confidence = 0.8
+    assert decide_mode("B", g, SafetyResult(), **gates, findings=fs,
+                       min_component=cfg.confidence.autonomous_min_component).mode == "B"

@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cardiolens.contracts.causal import CausalGraph
+from cardiolens.contracts.findings import FindingSet
 from cardiolens.safety.critical import SafetyResult
 
 
@@ -27,6 +28,8 @@ def decide_mode(
     *,
     min_overall: float,
     quality_ok: bool,
+    findings: FindingSet | None = None,
+    min_component: float | None = None,
 ) -> ModeDecision:
     """Apply the §2 gating logic."""
     if requested_mode != "B":
@@ -54,4 +57,14 @@ def decide_mode(
             mode="escalate",
             reason=f"общая уверенность {causal_graph.confidence} < порога {min_overall} (§2)",
         )
+    # Per-finding floor (D85): one weak finding must not ride on a confident mean
+    # (sinus rhythm 0.85 + a 0.60 finding still averages near the overall gate).
+    if findings is not None and min_component is not None:
+        weak = [f for f in findings.findings if f.confidence < min_component]
+        if weak:
+            listed = ", ".join(f"{f.code} {f.confidence}" for f in weak)
+            return ModeDecision(
+                mode="escalate",
+                reason=f"уверенность находки ниже порога {min_component}: {listed} (§2)",
+            )
     return ModeDecision(mode="B")
