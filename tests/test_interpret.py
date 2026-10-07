@@ -115,6 +115,8 @@ def test_finding_caps_lower_confidence_and_escalate_mode_B():
     cfg = load_app_config()
     cap = cfg.confidence.finding_caps["first_degree_av_block"]
     assert cap < cfg.confidence.autonomous_min_component
+    # D86: long QT (PPV 0.26 on Georgia) likewise; its >= 500 ms alert is separate.
+    assert cfg.confidence.finding_caps["long_qt"] < cfg.confidence.autonomous_min_component
     r = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=72, pr_ms=280), mode="B",
                      provider=StubProvider())
     f = r.findings.by_code("first_degree_av_block")

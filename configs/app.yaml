@@ -124,6 +124,11 @@ confidence:
     rvh: 0.30                     # 0.10 / 0.22 (0.60-0.75)
     st_depression: 0.30           # 0.13 / 0.02 (0.75)
     st_elevation: 0.30            # 0.00 / 0.08 (0.80); a STEMI-pattern alert escalates anyway
+    # D86: not scored on PTB-XL — same rule on Georgia 988 alone (held-out Georgia d62 passed).
+    long_qt: 0.30                 # PPV 0.26 (0.85); QTc >= 500 ms stays a critical alert
+    low_qrs_voltage: 0.43         # 0.43 (0.60)
+    right_axis_deviation: 0.30    # 0.14 (0.70)
+    t_inversion: 0.30             # 0.16 (0.65)
 
 # Disclaimers surfaced in every report (TZ §2, §10).
 disclaimers:
