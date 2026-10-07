@@ -110,8 +110,20 @@ safety:
 confidence:
   # Autonomous report is emitted only if overall confidence >= this.
   autonomous_min_overall: 0.85
-  # Per-finding confidence floor for autonomous mode.
+  # Per-finding confidence floor for autonomous mode (enforced since D85).
   autonomous_min_component: 0.70
+  # D85: a finding never reports more confidence than its PPV earned on development
+  # data — the higher of PTB-XL fold 9 and Georgia 988 (benefit of the doubt across
+  # label conventions), where the declared value exceeded it by > 0.10; floor 0.30.
+  # Each cap is below the component floor, so these findings escalate mode B.
+  finding_caps:
+    atrial_fibrillation: 0.51     # dev PPV 0.51 / 0.39 (declared 0.6-0.8)
+    first_degree_av_block: 0.41   # 0.27 / 0.41 (declared 0.85)
+    incomplete_rbbb: 0.44         # 0.44 / 0.26 (0.60)
+    lbbb: 0.61                    # 0.50 / 0.61 (0.72)
+    rvh: 0.30                     # 0.10 / 0.22 (0.60-0.75)
+    st_depression: 0.30           # 0.13 / 0.02 (0.75)
+    st_elevation: 0.30            # 0.00 / 0.08 (0.80); a STEMI-pattern alert escalates anyway
 
 # Disclaimers surfaced in every report (TZ §2, §10).
 disclaimers:

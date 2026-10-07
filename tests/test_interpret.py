@@ -105,3 +105,18 @@ def test_mode_B_escalates_on_weak_component():
     fs.findings[1].confidence = 0.8
     assert decide_mode("B", g, SafetyResult(), **gates, findings=fs,
                        min_component=cfg.confidence.autonomous_min_component).mode == "B"
+
+
+def test_finding_caps_lower_confidence_and_escalate_mode_B():
+    # D85: 1AVB is right on ~27-41% of calls on development data, so it is capped
+    # below the component floor and an ECG carrying it is not reported autonomously.
+    from cardiolens.pipeline import run_pipeline
+
+    cfg = load_app_config()
+    cap = cfg.confidence.finding_caps["first_degree_av_block"]
+    assert cap < cfg.confidence.autonomous_min_component
+    r = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=72, pr_ms=280), mode="B",
+                     provider=StubProvider())
+    f = r.findings.by_code("first_degree_av_block")
+    assert f is not None and f.confidence <= cap
+    assert r.report.mode == "escalate"

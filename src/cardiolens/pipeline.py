@@ -222,8 +222,12 @@ def run_pipeline(
         audit.append(f"[L2] signal disorganized (beat consistency {tc}) — "
                      f"R-peak findings withheld")
     # Apply confidence calibration to each finding (TZ §13).
+    caps = cfg.confidence.finding_caps
     for f in findings.findings:
         f.confidence = round(calibrator.apply(f.confidence), 3)
+        # Never report more confidence than the finding earned on dev data (D85).
+        if f.code in caps:
+            f.confidence = min(f.confidence, caps[f.code])
     audit.append(
         f"[L4] findings={[f.code for f in findings.findings]} "
         f"(calibrated T={calibrator.temperature})"

@@ -39,6 +39,9 @@ class Disclaimers(BaseModel):
 class ConfidenceGates(BaseModel):
     autonomous_min_overall: float
     autonomous_min_component: float
+    # Upper bound on a finding's reported confidence, from its observed PPV on
+    # development data (D85). Applied after the temperature scaler.
+    finding_caps: dict[str, float] = Field(default_factory=dict)
 
 
 class Preprocessing(BaseModel):
