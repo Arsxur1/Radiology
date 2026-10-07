@@ -1,6 +1,7 @@
 """CLI of the Telegram collector.
 
-    python -m cardiolens.telegram run        # log in (first time), listen, send cards, record verdicts
+    python -m cardiolens.telegram chats      # log in (first time) and list your groups with their ids
+    python -m cardiolens.telegram run        # listen, send cards, record verdicts
     python -m cardiolens.telegram backfill   # one pass over recent group history, then exit
     python -m cardiolens.telegram stats      # counters and reviewer agreement, offline
     python -m cardiolens.telegram export     # harness report on the verified records, offline
@@ -20,12 +21,20 @@ from cardiolens.telegram.store import DatasetStore
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="CardioLens Telegram collector")
-    ap.add_argument("command", choices=["run", "backfill", "stats", "export", "analyse"])
+    ap.add_argument("command", choices=["chats", "run", "backfill", "stats", "export", "analyse"])
     ap.add_argument("path", nargs="?", help="photo for `analyse`")
     ap.add_argument("--config", help="alternative telegram.yaml")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = load_telegram_config(args.config)
+
+    if args.command == "chats":
+        from cardiolens.telegram.agent import list_chats
+
+        lines = asyncio.run(list_chats(cfg))
+        print(f"{'id':>16}  kind     title  @username   -> paste ids or @usernames into configs/telegram.yaml `groups`")
+        print("\n".join(lines) if lines else "(no groups or channels on this account)")
+        return
 
     if args.command in ("run", "backfill"):
         from cardiolens.telegram.agent import run_agent

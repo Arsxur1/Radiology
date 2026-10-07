@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import logging
 import time
+from pathlib import Path
 
 from cardiolens.config import load_app_config
 from cardiolens.feedback import FeedbackStore
@@ -146,20 +147,51 @@ class Collector:
         return reply
 
 
-async def run_agent(cfg: TelegramConfig, *, backfill_only: bool = False) -> None:
-    from telethon import TelegramClient, events
+async def _login(cfg: TelegramConfig):
+    """Telethon client on the user's account; the first run asks for the phone and the login code."""
+    from telethon import TelegramClient
 
     if not cfg.api_id or not cfg.api_hash:
         raise SystemExit("TELEGRAM_API_ID / TELEGRAM_API_HASH are not set (https://my.telegram.org)")
+    Path(cfg.session).parent.mkdir(parents=True, exist_ok=True)
+    client = TelegramClient(cfg.session, cfg.api_id, cfg.api_hash)
+    await client.start()
+    me = await client.get_me()
+    log.info("logged in as %s", me.username or me.id)
+    return client
+
+
+def dialog_lines(dialogs) -> list[str]:
+    """One line per group/channel: the id to paste into configs/telegram.yaml, the kind, the title."""
+    lines = []
+    for d in dialogs:
+        if not (getattr(d, "is_group", False) or getattr(d, "is_channel", False)):
+            continue
+        kind = "group" if getattr(d, "is_group", False) else "channel"
+        username = getattr(getattr(d, "entity", None), "username", None)
+        handle = f"@{username}" if username else ""
+        lines.append(f"{d.id:>16}  {kind:7s}  {d.title}  {handle}".rstrip())
+    return lines
+
+
+async def list_chats(cfg: TelegramConfig) -> list[str]:
+    """``python -m cardiolens.telegram chats``: every group and channel the account is in."""
+    client = await _login(cfg)
+    dialogs = [d async for d in client.iter_dialogs()]
+    await client.disconnect()
+    return dialog_lines(dialogs)
+
+
+async def run_agent(cfg: TelegramConfig, *, backfill_only: bool = False) -> None:
+    from telethon import events
+
     if not cfg.groups:
-        raise SystemExit("configs/telegram.yaml: `groups` is empty — nothing to read")
+        raise SystemExit("configs/telegram.yaml: `groups` is empty — run `python -m cardiolens.telegram chats` "
+                         "to list your groups and paste the ids or @usernames there")
 
     store = DatasetStore(cfg.store_dir)
     store.root.mkdir(parents=True, exist_ok=True)
-    client = TelegramClient(cfg.session, cfg.api_id, cfg.api_hash)
-    await client.start()          # first run: phone number + login code in the terminal
-    me = await client.get_me()
-    log.info("logged in as %s", me.username or me.id)
+    client = await _login(cfg)
     groups = [await client.get_entity(g) for g in cfg.groups]
     review = "me" if cfg.review_chat == "me" else await client.get_entity(cfg.review_chat)
     collector = Collector(client, cfg, store, review)

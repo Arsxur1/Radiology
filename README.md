@@ -606,8 +606,9 @@ SCP/SNOMED-адаптеры (`build_ptbxl_dataset`, `build_ecg_arrhythmia_datase
 ```bash
 pip install -e ".[telegram]"
 export TELEGRAM_API_ID=... TELEGRAM_API_HASH=...      # https://my.telegram.org
-# configs/telegram.yaml -> groups: ["@ecg_group", -1001234567890]
-python -m cardiolens.telegram run            # первый запуск спросит телефон и код
+python -m cardiolens.telegram chats          # первый запуск спросит телефон и код; выведет ваши группы с id
+# configs/telegram.yaml -> groups: ["@ecg_group", -1001234567890]   (из списка выше)
+python -m cardiolens.telegram run            # слушать группы, слать карточки в «Избранное»
 python -m cardiolens.telegram backfill       # один проход по истории групп (backfill_limit)
 python -m cardiolens.telegram stats          # офлайн: счётчики и согласие с проверкой
 python -m cardiolens.telegram export         # офлайн: харнесс на проверенных фото
@@ -631,7 +632,7 @@ python -m cardiolens.telegram analyse photo.jpg   # одно фото тем ж�
 ## Тесты
 
 ```bash
-pytest -q          # 283 тестов (ruff clean; CI: Python 3.11/3.12)
+pytest -q          # 284 тестов (ruff clean; CI: Python 3.11/3.12)
 ```
 
 ## Архитектура

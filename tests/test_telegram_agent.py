@@ -180,6 +180,22 @@ class _FakeClient:
         return msgs
 
 
+def test_dialog_lines_keep_groups_and_channels_only():
+    from cardiolens.telegram.agent import dialog_lines
+
+    dialogs = [
+        SimpleNamespace(id=-1001234567890, is_group=True, is_channel=False, title="ЭКГ разбор",
+                        entity=SimpleNamespace(username="ecg_group")),
+        SimpleNamespace(id=-1009876543210, is_group=False, is_channel=True, title="Кардио канал",
+                        entity=SimpleNamespace(username=None)),
+        SimpleNamespace(id=42, is_group=False, is_channel=False, title="Иван", entity=SimpleNamespace(username="ivan")),
+    ]
+    lines = dialog_lines(dialogs)
+    assert len(lines) == 2
+    assert lines[0].lstrip().startswith("-1001234567890  group") and lines[0].endswith("ЭКГ разбор  @ecg_group")
+    assert "channel  Кардио канал" in lines[1] and "@" not in lines[1]
+
+
 def test_collector_end_to_end_with_a_fake_client(page, tmp_path, monkeypatch):
     from cardiolens.telegram.agent import Collector
 
