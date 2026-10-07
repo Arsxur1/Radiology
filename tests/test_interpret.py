@@ -140,3 +140,17 @@ def test_calibrator_cannot_lift_a_capped_finding_over_its_cap():
     r = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=72, pr_ms=280), mode="A",
                      provider=StubProvider(), calibrator=cold)
     assert r.findings.by_code("first_degree_av_block").confidence <= cap
+
+
+def test_mode_B_escalates_on_j_point_stemi_criterion_without_finding():
+    # D92: J-point elevation meeting UDMI with no J+60 ST finding -> no autonomous report.
+    from cardiolens.contracts.causal import CausalGraph
+    from cardiolens.layer6_interpret.policy import decide_mode
+    from cardiolens.safety.critical import SafetyResult
+
+    g = CausalGraph(confidence=0.95)
+    assert decide_mode("B", g, SafetyResult(), min_overall=0.85, quality_ok=True,
+                       stemi_j_criterion=False).mode == "B"
+    d = decide_mode("B", g, SafetyResult(), min_overall=0.85, quality_ok=True,
+                    stemi_j_criterion=True)
+    assert d.mode == "escalate" and "STEMI" in d.reason

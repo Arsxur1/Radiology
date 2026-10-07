@@ -31,4 +31,4 @@ jobs:
         run: ruff check src tests
 
       - name: Run tests (pytest)
-        run: pytest -q
+        run: pytest -q --cov=cardiolens --cov-report=term

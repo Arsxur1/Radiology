@@ -27,7 +27,7 @@ dependencies = [
 llm = ["anthropic"]
 validation = ["pandas"]
 digitize = ["opencv-python-headless"]
-dev = ["pytest", "ruff", "httpx", "opencv-python-headless"]
+dev = ["pytest", "pytest-cov", "ruff", "httpx", "opencv-python-headless"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -54,3 +54,13 @@ ignore = ["C408", "BLE001", "B008", "SIM103", "RUF046"]
 # Pin cardiolens as first-party so isort grouping never depends on whether the
 # package happens to be pip-installed in the runner (fixes CI I001 drift).
 known-first-party = ["cardiolens"]
+
+# Coverage of the core (§16 "покрытие тестами ядра — задать порог", D92):
+# `pytest --cov=cardiolens` fails below the threshold. CLI entry points that only
+# drive offline datasets are left out.
+[tool.coverage.run]
+omit = ["*/cardiolens/demo.py", "*/cardiolens/train_beats.py", "*/cardiolens/validate.py"]
+
+[tool.coverage.report]
+fail_under = 85
+

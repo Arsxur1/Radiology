@@ -30,6 +30,7 @@ def interpret(
     min_overall: float,
     quality_ok: bool,
     min_component: float | None = None,
+    stemi_j_criterion: bool | None = None,
 ) -> InterpretationReport:
     provider = provider or default_provider()
     fallback_note = None
@@ -56,6 +57,7 @@ def interpret(
         data.mode, data.causal_graph, safety,
         min_overall=min_overall, quality_ok=quality_ok,
         findings=data.findings, min_component=min_component,
+        stemi_j_criterion=stemi_j_criterion,
     )
     report.mode = decision.mode
     if decision.mode == "escalate":

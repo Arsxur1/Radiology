@@ -30,6 +30,7 @@ def decide_mode(
     quality_ok: bool,
     findings: FindingSet | None = None,
     min_component: float | None = None,
+    stemi_j_criterion: bool | None = None,
 ) -> ModeDecision:
     """Apply the §2 gating logic."""
     if requested_mode != "B":
@@ -46,6 +47,15 @@ def decide_mode(
             mode="escalate",
             reason="физиологически неправдоподобные находки — возможен артефакт/"
                    "перестановка электродов (§8.3)",
+        )
+    # The ST-elevation finding reads J+60; the guideline (UDMI) STEMI criterion reads the
+    # J point. A J-point elevation that meets it without the finding (fast ST descent,
+    # e.g. early repolarisation) raises no alert, but must not be reported autonomously
+    # either (D92: 2 of 4 autonomous ST-elevation-labelled ECGs on fresh Georgia).
+    if stemi_j_criterion:
+        return ModeDecision(
+            mode="escalate",
+            reason="подъём точки J соответствует критерию STEMI (UDMI) — нужен просмотр врача (§10)",
         )
     if not quality_ok:
         return ModeDecision(

@@ -54,7 +54,7 @@ from cardiolens.layer5_causal import analyze
 from cardiolens.layer6_interpret import InterpretationInput, interpret
 from cardiolens.layer6_interpret.provider import LLMProvider
 from cardiolens.safety import SafetyResult, scan_critical
-from cardiolens.safety.critical import CriticalAlert
+from cardiolens.safety.critical import CriticalAlert, stemi_j_point_criterion
 from cardiolens.serial import SerialComparison, compare
 
 
@@ -282,6 +282,9 @@ def run_pipeline(
         data, safety, provider=provider,
         min_overall=cfg.confidence.autonomous_min_overall, quality_ok=quality_ok,
         min_component=cfg.confidence.autonomous_min_component,
+        stemi_j_criterion=stemi_j_point_criterion(
+            m.morphology.st_median_beat, getattr(sig.patient, "sex", None),
+            getattr(sig.patient, "age_years", None)),
     )
     audit.append(f"[L6] provider={report.mode} escalation={report.escalation_reason}")
 
