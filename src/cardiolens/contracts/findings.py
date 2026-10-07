@@ -28,6 +28,9 @@ class Finding(BaseModel):
     label_uz: str
     evidence: list[Evidence] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
+    # Confidence before the feedback-fitted calibrator (after the D85 caps): the value
+    # the calibrator is fitted on and applied to (D87). None until the pipeline sets it.
+    confidence_base: float | None = Field(default=None, ge=0.0, le=1.0)
     # Group per TZ §7: rhythm | ischemia | interval | hypertrophy | other
     group: str = "other"
     critical: bool = False  # set by safety layer (TZ §10)

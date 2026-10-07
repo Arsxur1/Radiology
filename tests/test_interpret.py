@@ -122,3 +122,21 @@ def test_finding_caps_lower_confidence_and_escalate_mode_B():
     f = r.findings.by_code("first_degree_av_block")
     assert f is not None and f.confidence <= cap
     assert r.report.mode == "escalate"
+
+
+def test_calibrator_cannot_lift_a_capped_finding_over_its_cap():
+    # D87: the D85/D86 cap bounds the calibrator's output as well as its input.
+    from cardiolens.calibration import TemperatureScaler
+    from cardiolens.pipeline import run_pipeline
+
+    cfg = load_app_config()
+    cap = cfg.confidence.finding_caps["first_degree_av_block"]
+    hot = TemperatureScaler(temperature=0.2, fitted=True)  # sharpens: 0.41 -> ~0.15, 0.85 -> ~1
+    sig = generate_synthetic_ecg(heart_rate_bpm=72, pr_ms=280)
+    r = run_pipeline(sig, mode="A", provider=StubProvider(), calibrator=hot)
+    f = r.findings.by_code("first_degree_av_block")
+    assert f.confidence_base == cap and f.confidence <= cap
+    cold = TemperatureScaler(temperature=5.0, fitted=True)  # flattens toward 0.5
+    r = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=72, pr_ms=280), mode="A",
+                     provider=StubProvider(), calibrator=cold)
+    assert r.findings.by_code("first_degree_av_block").confidence <= cap

@@ -8,6 +8,7 @@ are reference tables); the rule base is validated against ``RuleBase``.
 from __future__ import annotations
 
 import functools
+import os
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,11 @@ def _repo_root() -> Path:
 
 def configs_dir() -> Path:
     return _repo_root() / "configs"
+
+
+def calibrator_path() -> Path:
+    """Where the feedback-fitted confidence calibrator lives (TZ §13, D87)."""
+    return Path(os.environ.get("CARDIOLENS_CALIBRATOR_PATH", configs_dir() / "calibrator.json"))
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

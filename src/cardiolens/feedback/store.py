@@ -16,13 +16,18 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Verdict = Literal["confirmed", "corrected", "rejected"]
+# "missed": the physician adds a finding the system did not report (a false negative;
+# tracked for sensitivity, not used for confidence calibration).
+Verdict = Literal["confirmed", "corrected", "rejected", "missed"]
 
 
 class FindingFeedback(BaseModel):
     code: str
     verdict: Verdict
-    confidence: float = Field(ge=0.0, le=1.0)   # model confidence at review time
+    # Confidence the calibrator is fitted on: the finding's confidence_base, filled in
+    # by the server from the stored analysis when it is known (D87).
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    confidence_shown: float | None = Field(default=None, ge=0.0, le=1.0)
     corrected_code: str | None = None            # set when verdict == "corrected"
     comment: str | None = None
 
@@ -76,6 +81,29 @@ class FeedbackStore:
             if line:
                 out.append(Feedback(**json.loads(line)))
         return out
+
+    def summary(self) -> dict[str, dict]:
+        """Per-finding verdict counts and observed precision (TZ §13, D87).
+
+        precision = confirmed / (confirmed + corrected + rejected): how often the
+        physician kept the finding as reported — the local counterpart of the PPV the
+        D85/D86 confidence caps were set from.
+        """
+        out: dict[str, dict] = {}
+        for fb in self.all():
+            for f in fb.findings:
+                row = out.setdefault(f.code, {"confirmed": 0, "corrected": 0, "rejected": 0,
+                                              "missed": 0, "_conf": []})
+                row[f.verdict] += 1
+                if f.verdict != "missed":
+                    shown = f.confidence_shown if f.confidence_shown is not None else f.confidence
+                    row["_conf"].append(shown)
+        for row in out.values():
+            conf = row.pop("_conf")
+            reported = row["confirmed"] + row["corrected"] + row["rejected"]
+            row["precision"] = round(row["confirmed"] / reported, 3) if reported else None
+            row["mean_confidence_shown"] = round(sum(conf) / len(conf), 3) if conf else None
+        return dict(sorted(out.items()))
 
     def calibration_dataset(self) -> list[tuple[float, int]]:
         """Aggregate all feedback into calibrator training samples (TZ §13)."""

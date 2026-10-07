@@ -56,6 +56,15 @@
   table { width:100%; border-collapse:collapse; font-size:13px; }
   td { padding:4px 8px; border-bottom:1px solid var(--line); }
   td:first-child { color:var(--muted); }
+  .frow { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center;
+    padding:6px 0; border-bottom:1px solid var(--line); }
+  .frow .conf { color:var(--muted); font-size:12px; white-space:nowrap; }
+  .verdict { display:flex; gap:4px; }
+  .verdict button { width:auto; padding:4px 9px; font-size:12px; cursor:pointer; }
+  .verdict button.on.confirmed { background:var(--ok); color:#fff; border-color:var(--ok); }
+  .verdict button.on.rejected { background:var(--crit); color:#fff; border-color:var(--crit); }
+  .fbbar { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  @media (max-width:700px){ .fbbar { grid-template-columns:1fr; } .frow { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -109,6 +118,17 @@
       <h2 style="margin-top:16px">Находки</h2>
       <div id="findings"></div>
 
+      <h2 style="margin-top:16px">Оценка врача</h2>
+      <p class="muted">Отметьте каждую находку: «верно» или «неверно». Оценки накапливаются и используются
+        для калибровки уверенности (§13); пропущенную находку можно указать кодом ниже.</p>
+      <div class="fbbar">
+        <div><label>Врач</label><input id="reviewer" placeholder="ФИО или ID"></div>
+        <div><label>Пропущенная находка (код, необязательно)</label><input id="missed" placeholder="напр. atrial_flutter"></div>
+      </div>
+      <label>Комментарий</label><input id="fbcomment" placeholder="—">
+      <button class="primary" id="sendfb">Отправить оценку</button>
+      <div class="muted" id="fbstatus"></div>
+
       <div class="grid2" style="margin-top:14px">
         <div><h2>Кривая ЭКГ</h2><img id="wave" alt="ЭКГ"></div>
         <div><h2>Каузальный граф</h2><img id="graph" alt="граф"></div>
@@ -127,6 +147,31 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let current = null, verdicts = {};
+
+$('sendfb').addEventListener('click', async () => {
+  if (!current) return;
+  const findings = Object.entries(verdicts).filter(([, v]) => v)
+    .map(([code, verdict]) => ({ code, verdict }));
+  const missed = $('missed').value.trim();
+  if (missed) findings.push({ code: missed, verdict: 'missed' });
+  if (!findings.length) { $('fbstatus').textContent = 'Отметьте хотя бы одну находку.'; return; }
+  const body = {
+    analysis_id: current.analysis_id,
+    reviewer: $('reviewer').value.trim() || null,
+    findings,
+    overall_agreement: findings.every(f => f.verdict === 'confirmed'),
+  };
+  if ($('fbcomment').value.trim()) findings[0].comment = $('fbcomment').value.trim();
+  try {
+    const r = await fetch(`/api/analysis/${current.analysis_id}/feedback`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    const j = await r.json();
+    $('fbstatus').textContent = `Оценка сохранена (${j.n_findings} находок).`;
+  } catch (e) { $('fbstatus').textContent = 'Ошибка: ' + e.message; }
+});
 
 async function loadCases() {
   const r = await fetch('/api/cases'); const d = await r.json();
@@ -181,8 +226,24 @@ function render(d) {
     <tr><td>Ось QRS</td><td>${m.axes.qrs_deg ?? '—'}°</td>
         <td>Уверенность</td><td>${d.interpretation.confidence.value} (${d.interpretation.confidence.word_ru})</td></tr>`;
 
-  $('findings').innerHTML = (d.findings || [])
-    .map(f => `<span class="chip ${f.critical?'crit':''}">${f.label_ru}</span>`).join('') || '<span class="muted">—</span>';
+  current = d; verdicts = {};
+  $('fbstatus').textContent = '';
+  $('findings').innerHTML = (d.findings || []).map(f => `
+    <div class="frow">
+      <span class="chip ${f.critical?'crit':''}">${esc(f.label_ru)}</span>
+      <span class="conf">уверенность ${f.confidence}</span>
+      <span class="verdict" data-code="${esc(f.code)}">
+        <button type="button" data-v="confirmed">✓ верно</button>
+        <button type="button" data-v="rejected">✗ неверно</button>
+      </span>
+    </div>`).join('') || '<span class="muted">—</span>';
+  document.querySelectorAll('.verdict').forEach(el => el.addEventListener('click', ev => {
+    const v = ev.target.dataset.v; if (!v) return;
+    const code = el.dataset.code;
+    verdicts[code] = verdicts[code] === v ? undefined : v;
+    el.querySelectorAll('button').forEach(btn =>
+      btn.className = verdicts[code] === btn.dataset.v ? 'on ' + btn.dataset.v : '');
+  }));
 
   $('wave').src = `/api/analysis/${d.analysis_id}/waveform.svg`;
   $('graph').src = `/api/analysis/${d.analysis_id}/graph.png`;

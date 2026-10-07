@@ -9,6 +9,9 @@ Endpoints:
   GET  /api/analysis/{id}/waveform.svg
   GET  /api/analysis/{id}/graph.png
   GET  /api/analysis/{id}/conclusion?lang=ru|uz
+  POST /api/analysis/{id}/feedback   -> physician review (TZ §13)
+  GET  /api/feedback/summary         -> per-finding verdicts vs shown confidence
+  POST /api/calibration/fit?save=    -> fit (and optionally save) the calibrator
 
 Core layers (1-5) run locally; only the optional Layer-6 Claude narrative
 touches the cloud (TZ §12).
@@ -27,6 +30,7 @@ from starlette.background import BackgroundTask
 
 from cardiolens.api import service
 from cardiolens.calibration import TemperatureScaler, expected_calibration_error
+from cardiolens.config import calibrator_path
 from cardiolens.feedback import DEFAULT_FEEDBACK_PATH, Feedback, FeedbackStore
 from cardiolens.outputs import (
     format_conclusion,
@@ -155,24 +159,50 @@ def submit_feedback(analysis_id: str, fb: Feedback) -> dict:
     """Capture physician corrections for future fine-tuning/calibration (TZ §13)."""
     fb.analysis_id = analysis_id
     result = service.get_analysis(analysis_id)
-    if result is not None and fb.mode is None:
-        fb.mode = result.report.mode
+    if result is not None:
+        if fb.mode is None:
+            fb.mode = result.report.mode
+        # The confidences come from the stored analysis, not the client (D87): the
+        # calibrator is fitted on confidence_base, the value it is later applied to.
+        by_code = {f.code: f for f in result.findings.findings}
+        for ff in fb.findings:
+            f = by_code.get(ff.code)
+            if f is not None:
+                ff.confidence_shown = f.confidence
+                ff.confidence = f.confidence_base if f.confidence_base is not None else f.confidence
     _feedback_store().append(fb)
     return {"status": "recorded", "analysis_id": analysis_id,
             "n_findings": len(fb.findings)}
 
 
+@app.get("/api/feedback/summary")
+def feedback_summary() -> dict:
+    """Per-finding physician verdicts vs the confidence shown (TZ §13, D87)."""
+    return {"findings": _feedback_store().summary()}
+
+
 @app.post("/api/calibration/fit")
-def fit_calibration() -> dict:
-    """Fit the confidence calibrator from accumulated feedback (TZ §13, §16)."""
+def fit_calibration(save: bool = False) -> dict:
+    """Fit the confidence calibrator from accumulated feedback (TZ §13, §16).
+
+    With ``save=true`` a fitted scaler that lowers the calibration error is written
+    where the pipeline loads it; the D85/D86 caps stay a ceiling either way (D87).
+    """
     samples = _feedback_store().calibration_dataset()
     scaler = TemperatureScaler().fit(samples)
     ece_before = expected_calibration_error(samples)
     ece_after = expected_calibration_error([(scaler.apply(c), y) for c, y in samples])
+    saved = False
+    if save and scaler.fitted and ece_after < ece_before:
+        path = calibrator_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        scaler.save(path)
+        saved = True
     return {
         "n_samples": len(samples),
         "fitted": scaler.fitted,
         "temperature": round(scaler.temperature, 4),
         "ece_before": ece_before,
         "ece_after": ece_after,
+        "saved": saved,
     }

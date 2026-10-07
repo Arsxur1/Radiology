@@ -30,7 +30,7 @@ from cardiolens.arrhythmia.atrial import (
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
     AppConfig,
-    configs_dir,
+    calibrator_path,
     load_app_config,
     load_rule_base,
     norms_for_patient,
@@ -85,7 +85,7 @@ def run_pipeline(
     rule_base = load_rule_base()
     # Confidence calibration (TZ §13): identity until a scaler is fitted/saved.
     if calibrator is None:
-        calibrator = TemperatureScaler.load(configs_dir() / "calibrator.json")
+        calibrator = TemperatureScaler.load(calibrator_path())
     audit: list[str] = []
 
     # Resting-ECG interpreter: a long recording is analysed on its leading window.
@@ -222,12 +222,14 @@ def run_pipeline(
         audit.append(f"[L2] signal disorganized (beat consistency {tc}) — "
                      f"R-peak findings withheld")
     # Apply confidence calibration to each finding (TZ §13).
+    # Never report more confidence than the finding earned on dev data (D85): the cap
+    # bounds both the calibrator's input and its output, so a scaler fitted on physician
+    # feedback can lower a capped finding but not lift it back over the cap (D87).
     caps = cfg.confidence.finding_caps
     for f in findings.findings:
-        f.confidence = round(calibrator.apply(f.confidence), 3)
-        # Never report more confidence than the finding earned on dev data (D85).
-        if f.code in caps:
-            f.confidence = min(f.confidence, caps[f.code])
+        cap = caps.get(f.code, 1.0)
+        f.confidence_base = round(min(f.confidence, cap), 3)
+        f.confidence = round(min(calibrator.apply(f.confidence_base), cap), 3)
     audit.append(
         f"[L4] findings={[f.code for f in findings.findings]} "
         f"(calibrated T={calibrator.temperature})"
