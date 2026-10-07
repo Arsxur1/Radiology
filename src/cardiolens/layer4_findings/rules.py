@@ -265,6 +265,7 @@ def detect_findings(
     # Ischemia — ST / T (TZ §7.2)
     # ------------------------------------------------------------------ #
     _st_findings(m, norms, fs)
+    _brugada_pattern(m, fs)
     _t_inversion_findings(m, is_pediatric, fs)
 
     # Peaked T-waves feed the hyperkalemia causal chain.
@@ -703,6 +704,38 @@ def _st_findings(m: Measurements, norms, fs: FindingSet) -> None:
             label_uz=f"ST depressiyasi ({', '.join(depressed)})",
             evidence=_ev(leads=",".join(depressed), threshold_uv=depr), confidence=0.75,
         ))
+
+
+# Brugada type-1 pattern (D89), guideline definition with its own constants (not tuned):
+# in V1 or V2 a J point >= 2 mm, a coved ST that falls steadily (J+40 < J, J+80 < J+40)
+# and a negative T. On Brugada-HUCA development patients it marks 34% of Brugada and 6%
+# of the non-Brugada. On natural ECGs the J point in V1 lands on the R' of a right bundle
+# branch block (0.8% of held-out Georgia ECGs, D89); a deep terminal S in I or V6 marks a
+# true RBBB and withholds the finding (D90). A shallow S stays: Brugada often comes with
+# an RBBB-like pattern, and every development Brugada hit kept its S above -302 µV.
+_BRUGADA_J_UV = 200.0
+_BRUGADA_T_UV = -50.0
+_BRUGADA_RBBB_S_UV = -320.0
+
+
+def _brugada_pattern(m: Measurements, fs: FindingSet) -> None:
+    prof = m.morphology.right_precordial_st
+    leads = [ld for ld, (j, j40, j80, t_min) in prof.items()
+             if j >= _BRUGADA_J_UV and j40 < j and j80 < j40 and t_min <= _BRUGADA_T_UV]
+    if not leads:
+        return
+    if any(s <= _BRUGADA_RBBB_S_UV for s in m.morphology.terminal_s_lateral.values()):
+        return
+    fs.findings.append(Finding(
+        code="brugada_pattern", group="other",
+        label_ru=f"Паттерн Бругада 1 типа? ({', '.join(leads)}: куполообразный подъём ST ≥ 2 мм с "
+                 f"отрицательным T) — исключить БПНПГ и высокую установку электродов, консультация кардиолога",
+        label_uz=f"Brugada 1-tur patterni? ({', '.join(leads)}: gumbazsimon ST ko'tarilishi ≥ 2 mm, manfiy T) — "
+                 f"O'TBB va elektrodlarning baland o'rnatilishini istisno qiling, kardiolog maslahati",
+        evidence=_ev(**{f"{ld}_j_j40_j80_tmin_uv": "/".join(str(v) for v in prof[ld]) for ld in leads}),
+        # Natural-population PPV is unknown and low (the pattern is rare): lowest confidence.
+        confidence=0.3,
+    ))
 
 
 def _peaked_t_leads(m: Measurements) -> list[str]:

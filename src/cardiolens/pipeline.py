@@ -308,7 +308,7 @@ _AF_EXCLUDES = ("sinus_rhythm", "sinus_tachycardia", "first_degree_av_block",
 # pathological_q_waves: paced QRS are QS-like in V1-V4, Q criteria do not apply (D36).
 _PACED_EXCLUDES = ("lbbb", "rbbb", "incomplete_rbbb", "wide_qrs_nonspecific", "lvh", "first_degree_av_block",
                    "sinus_rhythm", "left_axis_deviation", "st_depression", "t_inversion",
-                   "pathological_q_waves")
+                   "pathological_q_waves", "brugada_pattern")
 
 
 def _apply_rhythm_hierarchy(findings, m, audit: list[str]) -> None:

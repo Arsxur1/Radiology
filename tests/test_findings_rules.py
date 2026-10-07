@@ -445,3 +445,28 @@ def test_lbbb_needs_full_width_and_deep_s_in_v1_v2():
     narrow = codes(124, -1500.0, -2500.0)                  # 120-127 ms: not a complete LBBB
     assert "lbbb" not in narrow and "wide_qrs_nonspecific" in narrow
     assert "lbbb" in codes(140)                            # no median beat: width only
+
+
+def _brugada_m(v1=(450.0, 300.0, 150.0, -250.0), s_i=-150.0, s_v6=-200.0):
+    m = Measurements(intervals=Intervals(qrs_ms=110))
+    m.morphology.right_precordial_st = {"V1": v1, "V2": (120.0, 100.0, 80.0, -60.0)}
+    m.morphology.terminal_s_lateral = {"I": s_i, "V6": s_v6}
+    return m
+
+
+def test_brugada_type1_coved_pattern():
+    # D89/D90: J >= 2 mm, coved (falling) ST and a negative T in V1.
+    f = _find(_brugada_m()).by_code("brugada_pattern")
+    assert f is not None and "V1" in f.label_ru and f.confidence == 0.3
+
+
+def test_brugada_needs_coved_st_and_negative_t():
+    assert "brugada_pattern" not in _find(_brugada_m(v1=(450.0, 480.0, 500.0, -250.0))).codes()  # saddleback
+    assert "brugada_pattern" not in _find(_brugada_m(v1=(450.0, 300.0, 150.0, 80.0))).codes()    # upright T
+    assert "brugada_pattern" not in _find(_brugada_m(v1=(180.0, 120.0, 60.0, -250.0))).codes()   # J < 2 mm
+
+
+def test_brugada_withheld_for_true_rbbb_terminal_s():
+    # D90: a deep terminal S in I or V6 is a true right bundle branch block.
+    assert "brugada_pattern" not in _find(_brugada_m(s_v6=-400.0)).codes()
+    assert "brugada_pattern" in _find(_brugada_m(s_v6=-300.0)).codes()

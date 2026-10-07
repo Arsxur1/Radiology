@@ -60,6 +60,11 @@ class Morphology(BaseModel):
     qrs_extreme_median_beat: dict[str, float] = Field(default_factory=dict)
     # QRS R (>= 0) and S (<= 0) per lead on the median beat, µV (D66, D70).
     qrs_rs_median_beat: dict[str, tuple[float, float]] = Field(default_factory=dict)
+    # Right precordial ST profile on the median beat (Brugada, D89):
+    # lead -> (J, J+40, J+80, most negative T after J+60), µV against the PR baseline.
+    right_precordial_st: dict[str, tuple[float, float, float, float]] = Field(default_factory=dict)
+    # Deepest point of the last 40 ms of the QRS in I and V6, µV (terminal S of RBBB, D90).
+    terminal_s_lateral: dict[str, float] = Field(default_factory=dict)
 
 
 class Measurements(BaseModel):

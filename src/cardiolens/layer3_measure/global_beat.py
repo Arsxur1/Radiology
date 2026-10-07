@@ -174,6 +174,53 @@ def global_st(signal: np.ndarray, rpeaks, fs: float,
     return out
 
 
+def global_right_precordial_st(signal: np.ndarray, rpeaks, fs: float, lead_names: list[str],
+                               leads: tuple[str, ...] = ("V1", "V2"),
+                               ) -> dict[str, tuple[float, float, float, float]]:
+    """ST shape in the right precordial leads for the Brugada type-1 pattern (D89):
+    ``{lead: (J, J+40, J+80, T min)}`` in µV against the PR baseline, J at the global QRS
+    offset, T min the most negative value from J+60 ms to the global T end."""
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return {}
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    fid = global_fiducials(X, a, fs, rr_s)
+    off, te = int(fid["qrs_off"]), fid["t_end"]
+    end = int(te) if te else off + int(0.35 * fs)
+    n = X.shape[1]
+    out: dict[str, tuple[float, float, float, float]] = {}
+    for name in leads:
+        if name not in lead_names:
+            continue
+        x = X[lead_names.index(name)] - _pr_baseline(X[lead_names.index(name)], a, fs)
+        at = [float(x[min(n - 1, off + int(round(ms / 1000.0 * fs)))]) for ms in (0, 40, 80)]
+        tw = x[off + int(0.06 * fs):max(off + int(0.06 * fs) + 1, end)]
+        t_min = float(tw.min()) if tw.size else 0.0
+        out[name] = (round(at[0], 1), round(at[1], 1), round(at[2], 1), round(t_min, 1))
+    return out
+
+
+def global_terminal_s(signal: np.ndarray, rpeaks, fs: float, lead_names: list[str],
+                      leads: tuple[str, ...] = ("I", "V6")) -> dict[str, float]:
+    """Deepest point of the last 40 ms of the QRS against the PR baseline (D90): the wide
+    terminal S of a right bundle branch block in the lateral leads."""
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return {}
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    off = int(global_fiducials(X, a, fs, rr_s)["qrs_off"])
+    out: dict[str, float] = {}
+    for name in leads:
+        if name in lead_names:
+            x = X[lead_names.index(name)]
+            seg = x[max(0, off - int(0.04 * fs)):off + 1] - _pr_baseline(x, a, fs)
+            if seg.size:
+                out[name] = round(float(seg.min()), 1)
+    return out
+
+
 def global_t_amplitude(signal: np.ndarray, rpeaks, fs: float,
                        lead_names: list[str]) -> dict[str, float]:
     """Signed T-wave peak per lead on the median beat, from J+60 ms to the global

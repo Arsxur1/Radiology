@@ -28,8 +28,10 @@ from cardiolens.layer3_measure.global_beat import (
     global_q_waves,
     global_qrs_amplitudes,
     global_qrs_rs,
+    global_right_precordial_st,
     global_st,
     global_t_amplitude,
+    global_terminal_s,
 )
 from cardiolens.layer3_measure.intervals import (
     qtc_bazett,
@@ -372,6 +374,11 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             m.morphology.qrs_extreme_median_beat = {k: max(r, -s)
                                                     for k, (r, s) in rs_median.items()}
             m.morphology.qrs_rs_median_beat = rs_median
+            # Right precordial ST shape (Brugada type 1, D89).
+            m.morphology.right_precordial_st = global_right_precordial_st(
+                sig.signal, rpeaks, fs, list(sig.lead_names))
+            m.morphology.terminal_s_lateral = global_terminal_s(
+                sig.signal, rpeaks, fs, list(sig.lead_names))
             # Fraction of beats with a detected P wave (low -> suspect AF, §7.1).
             p_valid = int(np.sum(np.isfinite(p_on)))
             m.p_wave_ratio = round(p_valid / max(1, len(rpeaks)), 2)
