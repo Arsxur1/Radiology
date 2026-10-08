@@ -157,6 +157,17 @@ def detect_findings(
                     evidence=_ev(heart_rate_bpm=hr, svt_rate_min=svt_min,
                                  qrs_ms=qrs, regular="yes"), confidence=0.7,
                 ))
+            elif is_pediatric and narrow and m.rhythm_regular is not False and \
+                    _pediatric_svt(norms, sig.patient, hr, m.p_wave_ratio):
+                p_ratio = m.p_wave_ratio
+                fs.findings.append(Finding(
+                    code="supraventricular_tachycardia", group="rhythm",
+                    label_ru=f"Суправентрикулярная тахикардия? (ЧСС {hr}/мин, узкие QRS; зубец P "
+                             f"перед {round(100 * (p_ratio or 0))}% комплексов) — исключить синусовую",
+                    label_uz=f"Supraventrikulyar taxikardiya? (YUT {hr}/daq, tor QRS) — sinusni istisno qilish",
+                    evidence=_ev(heart_rate_bpm=hr, qrs_ms=qrs, p_wave_ratio=p_ratio,
+                                 pediatric="yes", regular="yes"), confidence=0.6,
+                ))
             else:
                 fs.findings.append(Finding(
                     code="sinus_tachycardia", group="rhythm",
@@ -736,6 +747,20 @@ def _brugada_pattern(m: Measurements, fs: FindingSet) -> None:
         # Natural-population PPV is unknown and low (the pattern is rare): lowest confidence.
         confidence=0.3,
     ))
+
+
+def _pediatric_svt(norms, patient, hr: float, p_ratio: float | None) -> bool:
+    """Pediatric regular narrow tachycardia that is SVT rather than sinus (D95): P waves
+    missing before part of the beats, or a rate at the PALS SVT threshold."""
+    pals = norms.get("svt_rate_pals") or {}
+    p_max = norms.get("svt_p_ratio_max")
+    age_y = getattr(patient, "age_years", None)
+    age_d = getattr(patient, "age_days", None)
+    infant = (age_y is not None and age_y < 1) or (age_y is None and age_d is not None and age_d < 365)
+    rate_min = pals.get("infant" if infant else "child")
+    if rate_min and hr >= rate_min:
+        return True
+    return p_max is not None and p_ratio is not None and p_ratio < p_max
 
 
 def _peaked_t_leads(m: Measurements) -> list[str]:

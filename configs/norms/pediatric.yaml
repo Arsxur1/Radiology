@@ -13,6 +13,15 @@ heart_rate_bpm_by_age:
   - { age_years_max: 8, range: [70, 120] }
   - { age_years_max: 15, range: [60, 110] }
 
+# Pediatric SVT (D95). Children reach high sinus rates, so the adult svt_rate_min rule
+# does not apply. A regular narrow tachycardia above the age norm is called SVT when P
+# waves are missing before part of the beats (P ratio below svt_p_ratio_max; dev:
+# Leipzig EP children, SVT 0.70 median vs sinus >= 0.88), or at the PALS rates.
+svt_p_ratio_max: 0.85
+svt_rate_pals:
+  infant: 220     # under 1 year
+  child: 180      # from 1 year
+
 intervals_ms:
   pr: [90, 170]        # shorter than adult
   qrs: [50, 90]

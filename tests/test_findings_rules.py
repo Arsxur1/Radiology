@@ -470,3 +470,21 @@ def test_brugada_withheld_for_true_rbbb_terminal_s():
     # D90: a deep terminal S in I or V6 is a true right bundle branch block.
     assert "brugada_pattern" not in _find(_brugada_m(s_v6=-400.0)).codes()
     assert "brugada_pattern" in _find(_brugada_m(s_v6=-300.0)).codes()
+
+
+def _peds_tachy(hr, p_ratio, age=10.0, regular=True, qrs=80):
+    m = Measurements(intervals=Intervals(qrs_ms=qrs))
+    m.heart_rate_bpm, m.p_wave_ratio, m.rhythm_regular = hr, p_ratio, regular
+    sig = _sig(age_years=age)
+    return detect_findings(sig, m, norms=load_norms("pediatric"), la_ra_reversed=False).codes()
+
+
+def test_pediatric_svt_from_missing_p_waves_or_pals_rate():
+    # D95: regular narrow tachycardia in a child — SVT when P waves are missing before
+    # part of the beats, or at the PALS rate; sinus tachycardia otherwise.
+    assert "supraventricular_tachycardia" in _peds_tachy(160, 0.6)
+    assert "sinus_tachycardia" in _peds_tachy(160, 1.0)
+    assert "supraventricular_tachycardia" in _peds_tachy(185, 1.0)            # >= 180 from 1 year
+    assert "sinus_tachycardia" in _peds_tachy(200, 1.0, age=0.5)              # infant: PALS 220
+    assert "supraventricular_tachycardia" in _peds_tachy(225, 1.0, age=0.5)
+    assert "supraventricular_tachycardia" not in _peds_tachy(160, 0.6, regular=False)
