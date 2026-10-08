@@ -102,3 +102,21 @@ def test_pericarditis_causal_rule_activates():
 def test_normal_ecg_clean_of_new_findings():
     codes = run_pipeline(generate_synthetic_ecg(heart_rate_bpm=72), mode="A").findings.codes()
     assert not ({"pericarditis", "left_atrial_enlargement", "right_atrial_enlargement"} & codes)
+
+
+def test_long_qt_alert_tier_uses_fridericia_above_90_bpm():
+    # D96: at 150/min a QT of 330 ms is QTc 520 (Bazett) but 446 (Fridericia): the
+    # long-QT finding stays (Bazett), the §10 alert does not fire.
+    from cardiolens.contracts.features import Intervals, Measurements
+    from cardiolens.contracts.findings import Finding, FindingSet
+    from cardiolens.safety.critical import scan_critical
+
+    def scan(hr, qtcb, qtcf):
+        m = Measurements(intervals=Intervals(qtc_bazett_ms=qtcb, qtc_fridericia_ms=qtcf))
+        m.heart_rate_bpm = hr
+        fs = FindingSet(findings=[Finding(code="long_qt", label_ru="x", label_uz="x", confidence=0.85)])
+        return [a.code for a in scan_critical(fs, m).alerts]
+
+    assert "long_qt" not in scan(150, 520, 446)
+    assert "long_qt" in scan(150, 560, 505)
+    assert "long_qt" in scan(70, 520, 505)      # at <= 90/min Bazett decides as before

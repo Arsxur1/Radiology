@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from cardiolens.contracts.features import Measurements
 from cardiolens.contracts.findings import FindingSet
+from cardiolens.layer3_measure.intervals import qtc_for_rules
 
 # Codes considered critical when present (mapped from Layer-4 findings).
 # TZ §10 must-not-miss list; recall is prioritised over specificity.
@@ -138,7 +139,7 @@ def scan_critical(findings: FindingSet, m: Measurements, *,
             add("peaked_t_waves", "Паттерн гиперкалиемии (остроконечные T)",
                 "Giperkaliyemiya patterni (uchli T)", reason=reason)
 
-    qtc = m.intervals.qtc_bazett_ms
+    qtc, _ = qtc_for_rules(m.intervals, m.heart_rate_bpm)
     if "long_qt" in findings.codes() and qtc is not None and qtc >= long_qt_critical_ms:
         add("long_qt", "Выраженное удлинение QT — риск TdP", "Keskin QT uzayishi — TdP xavfi",
             reason=f"QTc {qtc} ms >= {long_qt_critical_ms:.0f} ms")

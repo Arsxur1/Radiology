@@ -415,8 +415,14 @@ _Q_WALLS = [("нижняя", "pastki", {"II", "III", "aVF"}),
             ("боковая", "yon", {"I", "aVL", "V5", "V6"})]
 
 
+_QTC_RU = {"bazett": "Базетт", "fridericia": "Фридерисия — ЧСС > 90"}
+
+
 def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
-    qtc = iv.qtc_bazett_ms
+    # The finding keeps Bazett at every rate: Fridericia above 90/min cost long-QT
+    # sensitivity on development data (Georgia 0.87 -> 0.76, D96), and this finding must
+    # not lose sensitivity (D28). Only the §10 alert tier is rate-corrected.
+    qtc, formula = iv.qtc_bazett_ms, "bazett"
     if qtc is None:
         return
     qtc_norms = norms.get("qtc_ms", {})
@@ -433,16 +439,16 @@ def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
     if upper and qtc > upper:
         fs.findings.append(Finding(
             code="long_qt", group="interval",
-            label_ru=f"Удлинение QT (QTc {qtc} мс)",
-            label_uz=f"QT uzayishi (QTc {qtc} ms)",
-            evidence=_ev(qtc_bazett_ms=qtc, upper=upper), confidence=0.85,
+            label_ru=f"Удлинение QT (QTc {qtc} мс, {_QTC_RU[formula]})",
+            label_uz=f"QT uzayishi (QTc {qtc} ms, {formula})",
+            evidence=_ev(**{f"qtc_{formula}_ms": qtc}, upper=upper), confidence=0.85,
         ))
     elif short_lower and qtc < short_lower:
         fs.findings.append(Finding(
             code="short_qt", group="interval",
-            label_ru=f"Укорочение QT (QTc {qtc} мс)",
-            label_uz=f"QT qisqarishi (QTc {qtc} ms)",
-            evidence=_ev(qtc_bazett_ms=qtc, lower=short_lower), confidence=0.7,
+            label_ru=f"Укорочение QT (QTc {qtc} мс, {_QTC_RU[formula]})",
+            label_uz=f"QT qisqarishi (QTc {qtc} ms, {formula})",
+            evidence=_ev(**{f"qtc_{formula}_ms": qtc}, lower=short_lower), confidence=0.7,
         ))
 
 
