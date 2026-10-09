@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from cardiolens.config import load_rule_base, norms_for_patient
+from cardiolens.config import load_app_config, load_rule_base, norms_for_patient
 from cardiolens.layer1_ingestion import generate_synthetic_ecg
 from cardiolens.layer2_preprocess import assess_quality, detect_la_ra_reversal, preprocess
 from cardiolens.layer3_measure import measure
@@ -340,3 +340,47 @@ def test_pediatric_af_with_recurring_p_becomes_sinus_arrhythmia(monkeypatch):
 
     assert run(True) == {"sinus_arrhythmia"}
     assert run(False) == {"atrial_fibrillation"}      # adults keep the hedged AF call (D51)
+
+
+def test_single_lead_pediatric_af_needs_only_that_lead(monkeypatch):
+    # D101: a bedside single-lead strip measures P consistency in one lead only; in children
+    # that is enough. A 12-lead child ECG still needs both II and V1, adults always do.
+    from types import SimpleNamespace
+
+    import cardiolens.pipeline as pl
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.contracts.findings import Finding, FindingSet
+
+    monkeypatch.setattr(pl, "pre_qrs_consistency", lambda *a, **k: (0.9, {"II": 0.9}))
+    monkeypatch.setattr(pl, "_flutter_hedge", lambda *a, **k: None)
+
+    def run(leads, pediatric):
+        fs = FindingSet(findings=[Finding(code="atrial_fibrillation", label_ru="ФП", label_uz="AF",
+                                          confidence=0.6)])
+        pl._af_atrial_evidence(fs, SimpleNamespace(lead_names=leads), Measurements(), [],
+                               pediatric=pediatric)
+        return fs.codes()
+
+    assert run(["II"], True) == {"sinus_arrhythmia"}
+    assert run(["I", "II", "III", "V1"], True) == {"atrial_fibrillation"}
+    assert run(["II"], False) == {"atrial_fibrillation"}
+
+
+def test_infant_bradycardia_episode_in_a_normal_rate_strip():
+    # D101: under 1 year the slowest instantaneous rate (longest RR) below the age norm is
+    # named even when the median rate is normal; it keeps the strip out of autonomous mode B.
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.contracts.findings import FindingSet
+    from cardiolens.contracts.signal import Patient
+    from cardiolens.layer4_findings.rules import _bradycardia_episode
+
+    norms = norms_for_patient(0.05, 20)
+    m = Measurements(heart_rate_bpm=140, max_rr_ms=800)          # slowest 75/min
+    fs = FindingSet()
+    assert _bradycardia_episode(m, norms, Patient(age_years=0.05, age_days=20), 90, fs)
+    f = fs.by_code("bradycardia_episode")
+    assert f.confidence < load_app_config().confidence.autonomous_min_component
+    assert not _bradycardia_episode(Measurements(heart_rate_bpm=140, max_rr_ms=600), norms,
+                                    Patient(age_years=0.05), 90, FindingSet())   # 100/min
+    assert not _bradycardia_episode(m, norms_for_patient(5, None), Patient(age_years=5), 90,
+                                    FindingSet())                                  # child

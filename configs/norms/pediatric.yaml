@@ -13,6 +13,11 @@ heart_rate_bpm_by_age:
   - { age_years_max: 8, range: [70, 120] }
   - { age_years_max: 15, range: [60, 110] }
 
+# Bradycardia episodes (D101): under this age, a slowest instantaneous rate (longest RR)
+# below the age norm is reported even when the strip's median rate is normal
+# (preterm/newborn apnoea-bradycardia; dev: picsdb infants 1-5).
+bradycardia_episode_max_age_years: 1
+
 # Pediatric SVT (D95). Children reach high sinus rates, so the adult svt_rate_min rule
 # does not apply. A regular narrow tachycardia above the age norm is called SVT when P
 # waves are missing before part of the beats (P ratio below svt_p_ratio_max; dev:

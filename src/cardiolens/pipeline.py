@@ -398,7 +398,11 @@ def _af_atrial_evidence(findings, sig, m, audit: list[str], pediatric: bool = Fa
     value, per_lead = pre_qrs_consistency(sig, m.r_peaks_samples or [], m.intervals.qt_ms)
     for lead, v in per_lead.items():
         af.evidence.append(Evidence(feature=f"p_consistency_{lead}", value=str(v)))
-    if value is None or len(per_lead) < 2 or value < AF_HEDGE_MIN:
+    # A single-lead strip (bedside monitor) has only one of II/V1 to measure; in children
+    # that one lead is enough (D101). Adults keep the two-lead requirement (D51).
+    leads = set(getattr(sig, "lead_names", None) or [])
+    needed = 1 if pediatric and not {"II", "V1"} <= leads else 2
+    if value is None or len(per_lead) < needed or value < AF_HEDGE_MIN:
         return
     if pediatric:
         # Children (< 16 y): respiratory sinus arrhythmia is physiologic and AF rare. With
@@ -408,7 +412,7 @@ def _af_atrial_evidence(findings, sig, m, audit: list[str], pediatric: bool = Fa
         findings.findings.append(Finding(
             code="sinus_arrhythmia", group="rhythm",
             label_ru=f"Синусовая аритмия (вариант нормы у детей; зубец P перед QRS повторяется, "
-                     f"II/V1 ≥ {value}; ЧСС {m.heart_rate_bpm}/мин)",
+                     f"{'/'.join(per_lead)} ≥ {value}; ЧСС {m.heart_rate_bpm}/мин)",
             label_uz=f"Sinus aritmiyasi (bolalarda norma varianti; YUT {m.heart_rate_bpm}/daq)",
             evidence=[Evidence(feature=f"p_consistency_{k}", value=str(v)) for k, v in per_lead.items()]
                      + [Evidence(feature="rr_std_ms", value=str(m.rr_std_ms))],

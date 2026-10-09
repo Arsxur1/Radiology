@@ -121,7 +121,9 @@ def detect_findings(
                 label_uz=f"Bradikardiya (YUT {hr}/daq)",
                 evidence=_ev(heart_rate_bpm=hr, norm_low=lo), confidence=0.9,
             ))
-        elif hr > hi:
+        else:
+            _bradycardia_episode(m, norms, sig.patient, lo, fs)
+        if hr > hi:
             # A regular narrow-complex tachycardia at/above svt_rate_min is SVT
             # (or atrial tachycardia / flutter with 2:1), NOT sinus tachycardia —
             # resting sinus tachy rarely exceeds ~140/min (§7.1). The narrow gate
@@ -416,6 +418,31 @@ _Q_WALLS = [("нижняя", "pastki", {"II", "III", "aVF"}),
 
 
 _QTC_RU = {"bazett": "Базетт", "fridericia": "Фридерисия — ЧСС > 90"}
+
+
+def _bradycardia_episode(m: Measurements, norms, patient, lo: float, fs: FindingSet) -> bool:
+    """Infants: a transient slowing below the age norm inside a normal-rate strip (D101).
+
+    Preterm and newborn infants have bradycardia episodes (apnoea-bradycardia) that a
+    median heart rate hides. The longest RR gives the slowest instantaneous rate; it
+    matched verified R peaks to 0.05/min on development infants (picsdb). The finding
+    sits below the mode-B component floor, so such a strip is not reported autonomously.
+    """
+    max_age = norms.get("bradycardia_episode_max_age_years")
+    age = patient.age_years
+    if max_age is None or age is None or age >= max_age or not m.max_rr_ms:
+        return False
+    slowest = round(60000.0 / m.max_rr_ms, 1)
+    if slowest >= lo:
+        return False
+    fs.findings.append(Finding(
+        code="bradycardia_episode", group="rhythm",
+        label_ru=f"Эпизод брадикардии (мгновенная ЧСС до {slowest}/мин при норме ≥ {lo:.0f})",
+        label_uz=f"Bradikardiya epizodi (oniy YUT {slowest}/daq gacha, norma ≥ {lo:.0f})",
+        evidence=_ev(max_rr_ms=m.max_rr_ms, slowest_rate_bpm=slowest, norm_low=lo),
+        confidence=0.6,
+    ))
+    return True
 
 
 def _qt_findings(iv, norms, is_pediatric, sig, fs: FindingSet) -> None:
