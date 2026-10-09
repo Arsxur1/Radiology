@@ -321,3 +321,22 @@ def test_lbbb_withholds_brugada_pattern():
     f = fs("rbbb", "brugada_pattern")
     _apply_rhythm_hierarchy(f, Measurements(), [])
     assert "brugada_pattern" in f.codes()
+
+
+def test_pediatric_af_with_recurring_p_becomes_sinus_arrhythmia(monkeypatch):
+    # D98: children only — AF call with a recurring pre-QRS P in II and V1 is replaced.
+    import cardiolens.pipeline as pl
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.contracts.findings import Finding, FindingSet
+
+    monkeypatch.setattr(pl, "pre_qrs_consistency", lambda *a, **k: (0.9, {"II": 0.95, "V1": 0.9}))
+    monkeypatch.setattr(pl, "_flutter_hedge", lambda *a, **k: None)
+
+    def run(pediatric):
+        fs = FindingSet(findings=[Finding(code="atrial_fibrillation", label_ru="ФП", label_uz="AF",
+                                          confidence=0.6)])
+        pl._af_atrial_evidence(fs, None, Measurements(), [], pediatric=pediatric)
+        return fs.codes()
+
+    assert run(True) == {"sinus_arrhythmia"}
+    assert run(False) == {"atrial_fibrillation"}      # adults keep the hedged AF call (D51)

@@ -203,7 +203,7 @@ def run_pipeline(
                      f"(coupling {coupling}) — not called paced")
     _apply_rhythm_hierarchy(findings, m, audit)
     _check_sinus_p_waves(findings, sig, m, audit)
-    _af_atrial_evidence(findings, sig, m, audit)
+    _af_atrial_evidence(findings, sig, m, audit, pediatric=norms.get("age_group") == "pediatric")
     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
     # are unreliable, so withhold every R-peak-derived finding and report the poor
@@ -384,7 +384,7 @@ def _check_sinus_p_waves(findings, sig, m, audit: list[str]) -> None:
                  f"{amplitude}) — sinus label withheld")
 
 
-def _af_atrial_evidence(findings, sig, m, audit: list[str]) -> None:
+def _af_atrial_evidence(findings, sig, m, audit: list[str], pediatric: bool = False) -> None:
     """Pre-QRS consistency as evidence on an AF call, hedged when P waves recur (D51).
 
     The AF call itself is never withdrawn here: withholding it on this feature cost
@@ -399,6 +399,22 @@ def _af_atrial_evidence(findings, sig, m, audit: list[str]) -> None:
     for lead, v in per_lead.items():
         af.evidence.append(Evidence(feature=f"p_consistency_{lead}", value=str(v)))
     if value is None or len(per_lead) < 2 or value < AF_HEDGE_MIN:
+        return
+    if pediatric:
+        # Children (< 16 y): respiratory sinus arrhythmia is physiologic and AF rare. With
+        # a P wave recurring before the QRS in II and V1 the AF call is replaced
+        # (product decision 2026-10-09, D98; adults keep the hedged AF call, D51).
+        findings.findings.remove(af)
+        findings.findings.append(Finding(
+            code="sinus_arrhythmia", group="rhythm",
+            label_ru=f"Синусовая аритмия (вариант нормы у детей; зубец P перед QRS повторяется, "
+                     f"II/V1 ≥ {value}; ЧСС {m.heart_rate_bpm}/мин)",
+            label_uz=f"Sinus aritmiyasi (bolalarda norma varianti; YUT {m.heart_rate_bpm}/daq)",
+            evidence=[Evidence(feature=f"p_consistency_{k}", value=str(v)) for k, v in per_lead.items()]
+                     + [Evidence(feature="rr_std_ms", value=str(m.rr_std_ms))],
+            confidence=0.6))
+        audit.append(f"[L4] pediatric: irregular rhythm with recurring P {per_lead} — "
+                     f"sinus arrhythmia, AF call replaced (D98)")
         return
     af.label_ru = (f"{af.label_ru}; перед QRS повторяется зубец P (II/V1 ≥ {value}) — "
                    f"исключить синусовый ритм с экстрасистолией")
