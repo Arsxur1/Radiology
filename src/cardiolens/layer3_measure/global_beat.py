@@ -68,7 +68,8 @@ def global_fiducials(X: np.ndarray, a: int, fs: float, rr_s: float | None,
         off += 1
     noise = float(np.median(rms[lo:hi])) if hi > lo else 0.0
 
-    out: dict[str, int | None] = {"p_on": None, "qrs_on": on, "qrs_off": off, "t_end": None}
+    out: dict[str, int | None] = {"p_on": None, "qrs_on": on, "qrs_off": off, "t_end": None,
+                                  "t_end_found": None}
     t0, t1 = off + int(0.06 * fs), min(n - 1, off + int(0.55 * fs))
     if rr_s:
         t1 = max(min(t1, a + int((rr_s - 0.10) * fs)), t0 + int(0.10 * fs))
@@ -89,6 +90,9 @@ def global_fiducials(X: np.ndarray, a: int, fs: float, rr_s: float | None,
             # search limit at fast rates): never past the 5% crossing.
             te = min(max(tan, tp), late)
         out["t_end"] = te
+        # The RMS never fell back to 5% of the T peak inside the window: the end sits on
+        # the search limit (drift, U wave or the next P), not on the T wave (D102).
+        out["t_end_found"] = bool(late < t1)
     p0, p1 = on - int(0.30 * fs), on - int(0.04 * fs)
     if rr_s:
         p0 = max(p0, a - int(0.45 * rr_s * fs))
@@ -303,16 +307,23 @@ def global_qrs_rs(signal: np.ndarray, rpeaks, fs: float,
 
 def global_intervals(signal: np.ndarray, rpeaks, fs: float) -> tuple[float | None, float | None]:
     """(PR ms, QT ms) from the global fiducials, uncorrected; None where not found."""
+    pr, qt, _ = global_intervals_ex(signal, rpeaks, fs)
+    return pr, qt
+
+
+def global_intervals_ex(signal: np.ndarray, rpeaks, fs: float) -> tuple[float | None, float | None, bool | None]:
+    """(PR ms, QT ms, T end found) — QT is None when the T end was not found (D102)."""
     X, a = median_beats(signal, rpeaks, fs)
     if X is None:
-        return None, None
+        return None, None, None
     rp = np.asarray(rpeaks, dtype=float)
     rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
     f = global_fiducials(X, a, fs, rr_s)
-    qt = (f["t_end"] - f["qrs_on"]) / fs * 1000.0 if f["t_end"] is not None else None
+    found = f["t_end_found"]
+    qt = (f["t_end"] - f["qrs_on"]) / fs * 1000.0 if f["t_end"] is not None and found else None
     pr = (f["qrs_on"] - f["p_on"]) / fs * 1000.0 if f["p_on"] is not None else None
     if qt is not None and not 200.0 <= qt <= 900.0:
         qt = None
     if pr is not None and not 60.0 <= pr <= 600.0:
         pr = None
-    return pr, qt
+    return pr, qt, found

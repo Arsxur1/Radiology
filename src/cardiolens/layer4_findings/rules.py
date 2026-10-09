@@ -226,6 +226,14 @@ def detect_findings(
 
     _conduction_findings(m, norms, fs, is_pediatric)
     _qt_findings(iv, norms, is_pediatric, sig, fs)
+    if m.qt_unmeasurable:
+        # D102: low confidence on purpose — an unmeasured QT keeps the ECG out of mode B.
+        fs.findings.append(Finding(
+            code="qt_not_measurable", group="interval",
+            label_ru="QT не измерен: конец зубца T не определён (шум, волна U или наложение P) — оценить вручную",
+            label_uz="QT o'lchanmadi: T to'lqinining oxiri aniqlanmadi — qo'lda baholash",
+            evidence=_ev(qt_ms_single_lead=m.qt_ms_fiducial), confidence=0.3,
+        ))
     _q_wave_findings(m, norms, fs)
 
     # Atrial fibrillation: irregularly-irregular rhythm (§7.1). Absent/chaotic P
