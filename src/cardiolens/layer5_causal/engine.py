@@ -132,7 +132,7 @@ def _standalone_codes() -> set[str]:
         "right_axis_deviation", "extreme_axis", "low_qrs_voltage",
         "left_atrial_enlargement", "right_atrial_enlargement", "pathological_q_waves",
         "wide_complex_tachycardia", "rhythm_without_p_waves", "brugada_pattern",
-        "bradycardia_episode", "qt_not_measurable",
+        "bradycardia_episode",
     }
 
 

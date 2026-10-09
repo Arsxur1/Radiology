@@ -488,14 +488,3 @@ def test_pediatric_svt_from_missing_p_waves_or_pals_rate():
     assert "sinus_tachycardia" in _peds_tachy(200, 1.0, age=0.5)              # infant: PALS 220
     assert "supraventricular_tachycardia" in _peds_tachy(225, 1.0, age=0.5)
     assert "supraventricular_tachycardia" not in _peds_tachy(160, 0.6, regular=False)
-
-
-def test_unmeasurable_qt_is_reported_and_blocks_long_qt():
-    # D102: on a fast strip whose T end ran onto the next beat's limit QT is left unmeasured;
-    # the ECG carries a low-confidence note instead of a long-QT call read off that limit.
-    m = Measurements(heart_rate_bpm=150, intervals=Intervals(qrs_ms=70, qt_ms=None),
-                     qt_unmeasurable=True, qt_ms_fiducial=420)
-    fs = _find(m)
-    f = fs.by_code("qt_not_measurable")
-    assert f is not None and f.confidence < 0.7
-    assert "long_qt" not in fs.codes()

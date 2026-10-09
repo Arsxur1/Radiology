@@ -88,8 +88,6 @@ class Measurements(BaseModel):
     # Rhythm-lead (fiducial) PR, kept when the global PR is reported (D30).
     pr_ms_fiducial: float | None = None
     pr_global: bool = False
-    # The global T end was not found inside its search window; QT is left unmeasured (D102).
-    qt_unmeasurable: bool = False
     p_wave_ratio: float | None = None         # fraction of beats with a detected P
     qrs_v1_terminal_positive: bool | None = None  # RSR' sign for BBB typing
     qrs_v1_rs_ratio: float | None = None          # R/S in V1 (dominant R -> RVH, §7.5)

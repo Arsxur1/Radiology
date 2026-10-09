@@ -24,7 +24,7 @@ from cardiolens.contracts.features import (
 from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer3_measure.global_beat import (
     global_initial_qrs_ratio,
-    global_intervals_ex,
+    global_intervals,
     global_q_waves,
     global_qrs_amplitudes,
     global_qrs_rs,
@@ -318,7 +318,7 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             m.intervals = Intervals(pr_ms=pr_ms, qrs_ms=qrs_ms, qt_ms=qt_ms)
             # Global PR and QT from the 12-lead median beat (D30) replace the noisy
             # rhythm-lead values when they can be measured; the per-lead values are kept.
-            g_pr, g_qt, t_found = global_intervals_ex(sig.signal, rpeaks, fs)
+            g_pr, g_qt = global_intervals(sig.signal, rpeaks, fs)
             if g_pr is not None:
                 m.pr_ms_fiducial = pr_ms
                 gp_off = getattr(correction, "global_pr_ms", 0.0) if correction is not None else 0.0
@@ -328,13 +328,6 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
                 m.qt_ms_fiducial = qt_ms
                 g_off = getattr(correction, "global_qt_ms", 0.0) if correction is not None else 0.0
                 m.intervals.qt_ms = round(g_qt + g_off, 1)
-            elif t_found is False:
-                # Above 100/min the T end ran onto the next beat's limit: a QT read there is
-                # the limit, not the T wave (infants, qtdb). The single-lead value in those
-                # windows was off by up to +390 ms, so QT stays unmeasured (D102).
-                m.qt_ms_fiducial = qt_ms
-                m.intervals.qt_ms = None
-                m.qt_unmeasurable = True
             # Multi-lead PR (§7.3): a single lead under-measures PR, so first-degree
             # AV block is called on agreement across leads (layer 4). Reuse the
             # already-detected R-peaks; only PR is recomputed per lead.
