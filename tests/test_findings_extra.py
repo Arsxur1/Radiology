@@ -176,3 +176,15 @@ def test_hyperkalaemia_alert_tier_tall_t_or_known_potassium():
     assert "peaked_t_waves" not in alerts(normal)
     assert "peaked_t_waves" in alerts(normal, potassium=6.1)
     assert "peaked_t_waves" in alerts({})
+
+
+def test_severe_bradycardia_alert_uses_the_pals_limit_under_one_year():
+    # D101 option (c): median rate < 60/min is critical under 1 year; < 40/min otherwise.
+    from cardiolens.contracts.signal import Patient
+
+    m = Measurements(heart_rate_bpm=55)
+    infant = [a.code for a in scan_critical(FindingSet(), m, patient=Patient(age_years=0.3)).alerts]
+    adult = [a.code for a in scan_critical(FindingSet(), m, patient=Patient(age_years=40)).alerts]
+    unknown = [a.code for a in scan_critical(FindingSet(), m).alerts]
+    assert "severe_bradycardia" in infant
+    assert "severe_bradycardia" not in adult and "severe_bradycardia" not in unknown

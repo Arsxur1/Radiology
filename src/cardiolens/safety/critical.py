@@ -88,7 +88,9 @@ def tall_t_criterion(t_median_beat: dict, precordial_uv: float = 1000.0,
 def scan_critical(findings: FindingSet, m: Measurements, *,
                   long_qt_critical_ms: float = 500.0, patient=None, context=None,
                   tall_t_precordial_uv: float = 1000.0, tall_t_limb_uv: float = 600.0,
-                  hyperkalaemia_potassium_mmol: float = 5.5) -> SafetyResult:
+                  hyperkalaemia_potassium_mmol: float = 5.5,
+                  severe_bradycardia_bpm: float = 40.0,
+                  severe_bradycardia_infant_bpm: float = 60.0) -> SafetyResult:
     """Detect critical findings from findings + raw measurements (TZ §10).
 
     ST elevation (D48) and long QT (D44) are tiered. Long QT: the finding is reported above the sex-specific limit
@@ -146,9 +148,12 @@ def scan_critical(findings: FindingSet, m: Measurements, *,
 
     # Measurement-derived critical patterns (may exist without a Layer-4 finding).
     hr = m.heart_rate_bpm
-    if hr is not None and hr < 40:
+    age = getattr(patient, "age_years", None)
+    brady_limit = (severe_bradycardia_infant_bpm if age is not None and age < 1
+                   else severe_bradycardia_bpm)
+    if hr is not None and hr < brady_limit:
         add("severe_bradycardia", "Тяжёлая брадикардия", "Og'ir bradikardiya",
-            reason=f"HR {hr} bpm < 40")
+            reason=f"HR {hr} bpm < {brady_limit:.0f}")
     # A regular narrow tachy >=140 is called SVT (Layer 4); a WIDE one at the
     # same rate is VT-until-proven-otherwise (§10). Use the same 140 threshold so
     # the narrow->SVT / wide->VT-suspect split is consistent and nothing in the

@@ -105,6 +105,11 @@ safety:
   tall_t_precordial_uv: 1000
   tall_t_limb_uv: 600
   hyperkalaemia_potassium_mmol: 5.5
+  # Severe bradycardia: median rate below 40/min; under 1 year below 60/min (PALS, D101 —
+  # option (c), chosen under the owner's standing delegation). Transient episodes in
+  # infants are a finding that escalates mode B, not an alert.
+  severe_bradycardia_bpm: 40
+  severe_bradycardia_infant_bpm: 60
 
 # Confidence gating for autonomous mode B (TZ §2, §16).
 confidence:

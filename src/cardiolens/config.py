@@ -98,6 +98,9 @@ class SafetyConfig(BaseModel):
     tall_t_precordial_uv: float = 1000.0
     tall_t_limb_uv: float = 600.0
     hyperkalaemia_potassium_mmol: float = 5.5
+    # Severe bradycardia alert on the median rate; under 1 year the PALS limit (D101).
+    severe_bradycardia_bpm: float = 40.0
+    severe_bradycardia_infant_bpm: float = 60.0
 
 
 class QualityConfig(BaseModel):

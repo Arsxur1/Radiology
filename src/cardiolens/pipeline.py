@@ -249,7 +249,9 @@ def run_pipeline(
                            patient=sig.patient, context=sig.context,
                            tall_t_precordial_uv=cfg.safety.tall_t_precordial_uv,
                            tall_t_limb_uv=cfg.safety.tall_t_limb_uv,
-                           hyperkalaemia_potassium_mmol=cfg.safety.hyperkalaemia_potassium_mmol)
+                           hyperkalaemia_potassium_mmol=cfg.safety.hyperkalaemia_potassium_mmol,
+                           severe_bradycardia_bpm=cfg.safety.severe_bradycardia_bpm,
+                           severe_bradycardia_infant_bpm=cfg.safety.severe_bradycardia_infant_bpm)
     # New critical dynamics on serial comparison force escalation (TZ §8.4, §10).
     if serial is not None:
         for d in serial.deltas:
