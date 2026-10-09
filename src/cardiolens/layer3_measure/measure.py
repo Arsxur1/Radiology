@@ -329,9 +329,9 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
                 g_off = getattr(correction, "global_qt_ms", 0.0) if correction is not None else 0.0
                 m.intervals.qt_ms = round(g_qt + g_off, 1)
             elif t_found is False:
-                # The T end ran onto the search limit: a QT read there is the limit,
-                # not the T wave (qtdb dev: median +282 ms, 10/10 false long QT). The
-                # single-lead fallback is no better, so QT stays unmeasured (D102).
+                # Above 100/min the T end ran onto the next beat's limit: a QT read there is
+                # the limit, not the T wave (infants, qtdb). The single-lead value in those
+                # windows was off by up to +390 ms, so QT stays unmeasured (D102).
                 m.qt_ms_fiducial = qt_ms
                 m.intervals.qt_ms = None
                 m.qt_unmeasurable = True
