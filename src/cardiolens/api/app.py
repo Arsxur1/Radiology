@@ -25,7 +25,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.background import BackgroundTask
 
@@ -72,6 +72,7 @@ def cases() -> dict:
 
 @app.post("/api/analyze")
 async def analyze(
+    request: Request,
     case: str | None = Form(default=None),
     mode: str | None = Form(default=None),
     sampling_rate_hz: float | None = Form(default=None),
@@ -84,6 +85,9 @@ async def analyze(
     prior_ecg_id: str | None = Form(default=None),
     files: list[UploadFile] = File(default=[]),
 ) -> JSONResponse:
+    client = request.client.host if request.client else "unknown"
+    if service.rate_limited(client):
+        raise HTTPException(status_code=429, detail="too many analyses; try again in a minute")
     try:
         if files:
             # Read in chunks and stop past the limit, so an oversized upload is never

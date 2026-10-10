@@ -174,3 +174,24 @@ def test_wfdb_upload_with_its_data_file_is_accepted():
             files.append(("files", (f"sample_ecg.{ext}", fh.read(), "application/octet-stream")))
     r = client.post("/api/analyze", data={"mode": "A"}, files=files)
     assert r.status_code == 200 and r.json()["measurements"]["heart_rate_bpm"] > 0
+
+
+def test_analysis_rate_limit_per_client(monkeypatch):
+    # D104: a sliding one-minute window per client; 0 turns it off.
+    from cardiolens.api import service
+    monkeypatch.setenv("CARDIOLENS_RATE_LIMIT_PER_MIN", "2")
+    monkeypatch.setattr(service, "_HITS", {})
+    assert not service.rate_limited("a", now=0.0) and not service.rate_limited("a", now=1.0)
+    assert service.rate_limited("a", now=2.0)              # third within the minute
+    assert not service.rate_limited("b", now=2.0)          # other clients unaffected
+    assert not service.rate_limited("a", now=61.5)         # window has moved on
+    monkeypatch.setattr(service, "_HITS", {})
+    codes = [client.post("/api/analyze", data={"case": "normal", "mode": "A"}).status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+    monkeypatch.setenv("CARDIOLENS_RATE_LIMIT_PER_MIN", "0")
+    assert client.post("/api/analyze", data={"case": "normal", "mode": "A"}).status_code == 200
+
+
+def test_analysis_ids_are_128_bit():
+    aid = client.post("/api/analyze", data={"case": "normal", "mode": "A"}).json()["analysis_id"]
+    assert len(aid) == 32 and int(aid, 16) >= 0

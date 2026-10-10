@@ -5,9 +5,11 @@ Kept separate from the FastAPI wiring so it is unit-testable without HTTP.
 
 from __future__ import annotations
 
+import os
+import secrets
 import shutil
 import tempfile
-import uuid
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -149,12 +151,37 @@ def run_and_store(sig, *, mode: str | None,
     if prior_id:
         sig.context.prior_ecg_id = prior_id
     result = run_pipeline(sig, mode=mode, prior=prior)
-    analysis_id = uuid.uuid4().hex[:12]
+    analysis_id = secrets.token_hex(16)   # 128 bits: analyses carry age, sex and findings (D104)
     _STORE[analysis_id] = result
     _STORE.move_to_end(analysis_id)
     while len(_STORE) > STORE_MAX_ENTRIES:
         _STORE.popitem(last=False)  # evict least-recently-used
     return analysis_id, result
+
+
+_HITS: dict[str, list[float]] = {}
+
+
+def rate_limited(client: str, *, now: float | None = None) -> bool:
+    """Sliding one-minute window per client for the analysis endpoint (D104).
+
+    ``CARDIOLENS_RATE_LIMIT_PER_MIN`` sets the limit (default 60; 0 turns it off).
+    In-process only, like the analysis store — a production deployment needs a shared one.
+    """
+    limit = int(os.environ.get("CARDIOLENS_RATE_LIMIT_PER_MIN", "60"))
+    if limit <= 0:
+        return False
+    now = time.monotonic() if now is None else now
+    hits = [t for t in _HITS.get(client, []) if now - t < 60.0]
+    if len(hits) >= limit:
+        _HITS[client] = hits
+        return True
+    hits.append(now)
+    _HITS[client] = hits
+    if len(_HITS) > 10_000:                      # bound memory: drop idle clients
+        for k in [k for k, v in _HITS.items() if not v or now - v[-1] >= 60.0]:
+            del _HITS[k]
+    return False
 
 
 def get_analysis(analysis_id: str) -> PipelineResult | None:
