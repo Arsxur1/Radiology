@@ -116,8 +116,10 @@ def test_feedback_uses_stored_confidence_and_summarises(tmp_path, monkeypatch):
     assert s[f0["code"]]["rejected"] == 1 and s[f0["code"]]["precision"] == 0.0
     assert s[f0["code"]]["mean_confidence_shown"] == f0["confidence"]  # not the client's 0.99
     assert s["atrial_flutter"]["missed"] == 1 and s["atrial_flutter"]["precision"] is None
-    # Too few samples: nothing is fitted or saved.
-    rc = client.post("/api/calibration/fit", params={"save": True}).json()
+    # Too few samples: nothing is fitted or saved, even with the admin token (D104).
+    monkeypatch.setenv("CARDIOLENS_ADMIN_TOKEN", "t")
+    rc = client.post("/api/calibration/fit", params={"save": True},
+                     headers={"X-CardioLens-Admin-Token": "t"}).json()
     assert rc["saved"] is False and not (tmp_path / "cal.json").exists()
 
 
@@ -131,7 +133,14 @@ def test_calibration_fit_saves_when_it_helps(tmp_path, monkeypatch):
     for i in range(30):
         store.append(Feedback(analysis_id=str(i), findings=[FindingFeedback(
             code="x", verdict="confirmed" if i % 3 == 0 else "rejected", confidence=0.9)]))
-    rc = client.post("/api/calibration/fit", params={"save": True}).json()
+    # D104: no token configured -> saving is refused; a wrong token likewise.
+    assert client.post("/api/calibration/fit", params={"save": True}).status_code == 403
+    monkeypatch.setenv("CARDIOLENS_ADMIN_TOKEN", "s3cret")
+    bad = client.post("/api/calibration/fit", params={"save": True},
+                      headers={"X-CardioLens-Admin-Token": "wrong"})
+    assert bad.status_code == 403 and not (tmp_path / "cal.json").exists()
+    rc = client.post("/api/calibration/fit", params={"save": True},
+                     headers={"X-CardioLens-Admin-Token": "s3cret"}).json()
     assert rc["fitted"] and rc["saved"] and rc["ece_after"] < rc["ece_before"]
     assert (tmp_path / "cal.json").exists()
 

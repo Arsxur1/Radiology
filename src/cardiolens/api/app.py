@@ -19,12 +19,13 @@ touches the cloud (TZ §12).
 
 from __future__ import annotations
 
+import hmac
 import os
 import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.background import BackgroundTask
 
@@ -188,13 +189,26 @@ def feedback_summary() -> dict:
     return {"findings": _feedback_store().summary()}
 
 
+def _admin_ok(token: str | None) -> bool:
+    """Saving a calibrator changes every later analysis, so it needs the admin token (D104).
+
+    With CARDIOLENS_ADMIN_TOKEN unset, saving is disabled.
+    """
+    expected = os.environ.get("CARDIOLENS_ADMIN_TOKEN")
+    return bool(expected) and token is not None and hmac.compare_digest(token, expected)
+
+
 @app.post("/api/calibration/fit")
-def fit_calibration(save: bool = False) -> dict:
+def fit_calibration(save: bool = False,
+                    x_cardiolens_admin_token: str | None = Header(default=None)) -> dict:
     """Fit the confidence calibrator from accumulated feedback (TZ §13, §16).
 
-    With ``save=true`` a fitted scaler that lowers the calibration error is written
-    where the pipeline loads it; the D85/D86 caps stay a ceiling either way (D87).
+    With ``save=true`` (and the admin token, D104) a fitted scaler that lowers the
+    calibration error is written where the pipeline loads it; the D85/D86 caps stay a
+    ceiling either way (D87).
     """
+    if save and not _admin_ok(x_cardiolens_admin_token):
+        raise HTTPException(status_code=403, detail="saving the calibrator requires the admin token")
     samples = _feedback_store().calibration_dataset()
     scaler = TemperatureScaler().fit(samples)
     ece_before = expected_calibration_error(samples)
