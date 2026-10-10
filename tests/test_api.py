@@ -134,3 +134,34 @@ def test_calibration_fit_saves_when_it_helps(tmp_path, monkeypatch):
     rc = client.post("/api/calibration/fit", params={"save": True}).json()
     assert rc["fitted"] and rc["saved"] and rc["ece_after"] < rc["ece_before"]
     assert (tmp_path / "cal.json").exists()
+
+
+def test_wfdb_header_cannot_point_at_files_that_were_not_uploaded():
+    # D104: a header naming a data file that was not uploaded is rejected before wfdb reads
+    # anything, so no other file on the server can be pulled in as a signal.
+    hea = b"x 1 250 2000\nother 16 200/mV 16 0 0 0 0 I\n"
+    r = client.post("/api/analyze", data={"mode": "A"}, files=[("files", ("x.hea", hea, "text/plain"))])
+    assert r.status_code == 400 and "not uploaded" in r.json()["detail"]
+
+
+def test_malformed_upload_is_a_400_not_a_server_error():
+    r = client.post("/api/analyze", data={"mode": "A"},
+                    files=[("files", ("ecg.edf", b"not an edf file", "application/octet-stream"))])
+    assert r.status_code == 400 and "could not parse" in r.json()["detail"]
+
+
+def test_oversized_upload_is_rejected_while_reading(monkeypatch):
+    from cardiolens.api import service
+    monkeypatch.setattr(service, "MAX_UPLOAD_BYTES", 1000)
+    r = client.post("/api/analyze", data={"mode": "A", "sampling_rate_hz": "500"},
+                    files=[("files", ("ecg.csv", b"1\n" * 2000, "text/csv"))])
+    assert r.status_code == 400 and "too large" in r.json()["detail"]
+
+
+def test_wfdb_upload_with_its_data_file_is_accepted():
+    files = []
+    for ext in ("hea", "dat"):
+        with open(os.path.join(_SAMPLES, f"sample_ecg.{ext}"), "rb") as fh:
+            files.append(("files", (f"sample_ecg.{ext}", fh.read(), "application/octet-stream")))
+    r = client.post("/api/analyze", data={"mode": "A"}, files=files)
+    assert r.status_code == 200 and r.json()["measurements"]["heart_rate_bpm"] > 0

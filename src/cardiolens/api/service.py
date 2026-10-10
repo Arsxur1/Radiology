@@ -48,6 +48,16 @@ def signal_from_case(case: str):
     return generate_synthetic_ecg(**DEMO_CASES[case])
 
 
+def _wfdb_data_files(hea: Path) -> set[str]:
+    """Data files a WFDB header refers to (signal lines after the record line)."""
+    files: set[str] = set()
+    lines = [ln for ln in hea.read_text(encoding="latin-1").splitlines()
+             if ln.strip() and not ln.lstrip().startswith("#")]
+    for ln in lines[1:]:
+        files.add(ln.split()[0])
+    return files
+
+
 def signal_from_uploads(
     files: list[UploadFile],
     *,
@@ -74,6 +84,14 @@ def signal_from_uploads(
 
         hea = next((p for p in saved if p.suffix.lower() == ".hea"), None)
         if hea is not None:
+            # A header may only point at files uploaded with it (D104): no other path on
+            # the server is ever read, whatever the WFDB library would accept.
+            uploaded = {p.name for p in saved}
+            # Multi-segment headers name segment records without an extension.
+            missing = sorted(f for f in _wfdb_data_files(hea)
+                             if f not in uploaded and f + ".hea" not in uploaded)
+            if missing:
+                raise ValueError(f"WFDB header refers to files that were not uploaded: {missing}")
             return load_wfdb(hea.with_suffix(""))
         edf = next((p for p in saved if p.suffix.lower() in (".edf", ".bdf")), None)
         if edf is not None:
@@ -87,6 +105,10 @@ def signal_from_uploads(
                 raise ValueError("sampling_rate_hz is required for CSV input")
             return load_csv(csv, sampling_rate_hz=sampling_rate_hz, unit=unit)
         raise ValueError("unsupported upload; expected WFDB(.hea+.dat), EDF, DICOM-ECG (.dcm) or CSV")
+    except ValueError:
+        raise
+    except Exception as exc:  # a malformed file is a client error, not a 500 (D104)
+        raise ValueError(f"could not parse the uploaded file: {type(exc).__name__}") from exc
     finally:
         # Parsers read the raw signal into memory, so the temp files are no
         # longer needed once parsing returns (or raises) — never leak them.

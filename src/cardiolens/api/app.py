@@ -85,10 +85,17 @@ async def analyze(
 ) -> JSONResponse:
     try:
         if files:
-            uploads = [
-                service.UploadFile(filename=f.filename or "upload", content=await f.read())
-                for f in files
-            ]
+            # Read in chunks and stop past the limit, so an oversized upload is never
+            # held in memory whole (D104).
+            uploads, total = [], 0
+            for f in files:
+                chunks = []
+                while chunk := await f.read(1 << 20):
+                    total += len(chunk)
+                    if total > service.MAX_UPLOAD_BYTES:
+                        raise ValueError(f"upload too large (> {service.MAX_UPLOAD_BYTES} bytes)")
+                    chunks.append(chunk)
+                uploads.append(service.UploadFile(filename=f.filename or "upload", content=b"".join(chunks)))
             sig = service.signal_from_uploads(
                 uploads, sampling_rate_hz=sampling_rate_hz, unit=unit
             )
