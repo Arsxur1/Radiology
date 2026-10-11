@@ -5,9 +5,13 @@ Kept separate from the FastAPI wiring so it is unit-testable without HTTP.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
+import pickle
 import secrets
 import shutil
+import sqlite3
 import tempfile
 import time
 from collections import OrderedDict
@@ -145,6 +149,52 @@ def apply_patient_overrides(
 _STORE: OrderedDict[str, PipelineResult] = OrderedDict()
 
 
+def _db() -> tuple[sqlite3.Connection, bytes] | None:
+    """Opt-in persistent store (D109): CARDIOLENS_DB_PATH + CARDIOLENS_DB_KEY.
+
+    Results hold numpy arrays, so they are pickled; every record carries an HMAC of
+    the bytes under the key and is unpickled only if it verifies, so a tampered or
+    foreign database file is never deserialised. Unset path — in-memory store only.
+    """
+    path = os.environ.get("CARDIOLENS_DB_PATH")
+    if not path:
+        return None
+    key = os.environ.get("CARDIOLENS_DB_KEY", "")
+    if len(key) < 16:
+        raise RuntimeError("CARDIOLENS_DB_PATH needs CARDIOLENS_DB_KEY of at least 16 characters")
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE IF NOT EXISTS analyses (id TEXT PRIMARY KEY, created REAL, mac TEXT, blob BLOB)")
+    return con, key.encode()
+
+
+def _mac(key: bytes, analysis_id: str, blob: bytes) -> str:
+    return hmac.new(key, analysis_id.encode() + b"\0" + blob, hashlib.sha256).hexdigest()
+
+
+def _persist(analysis_id: str, result: PipelineResult) -> None:
+    db = _db()
+    if db is None:
+        return
+    con, key = db
+    blob = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+    with con:
+        con.execute("INSERT OR REPLACE INTO analyses VALUES (?, ?, ?, ?)",
+                    (analysis_id, time.time(), _mac(key, analysis_id, blob), blob))
+    con.close()
+
+
+def _load(analysis_id: str) -> PipelineResult | None:
+    db = _db()
+    if db is None:
+        return None
+    con, key = db
+    row = con.execute("SELECT mac, blob FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
+    con.close()
+    if row is None or not hmac.compare_digest(row[0], _mac(key, analysis_id, row[1])):
+        return None
+    return pickle.loads(row[1])  # bytes verified by the HMAC above
+
+
 def run_and_store(sig, *, mode: str | None,
                   prior_id: str | None = None) -> tuple[str, PipelineResult]:
     prior = get_analysis(prior_id) if prior_id else None
@@ -156,6 +206,7 @@ def run_and_store(sig, *, mode: str | None,
     _STORE.move_to_end(analysis_id)
     while len(_STORE) > STORE_MAX_ENTRIES:
         _STORE.popitem(last=False)  # evict least-recently-used
+    _persist(analysis_id, result)
     return analysis_id, result
 
 
@@ -188,4 +239,10 @@ def get_analysis(analysis_id: str) -> PipelineResult | None:
     result = _STORE.get(analysis_id)
     if result is not None:
         _STORE.move_to_end(analysis_id)  # mark as recently used
+        return result
+    result = _load(analysis_id)            # after a restart or LRU eviction (D109)
+    if result is not None:
+        _STORE[analysis_id] = result
+        while len(_STORE) > STORE_MAX_ENTRIES:
+            _STORE.popitem(last=False)
     return result

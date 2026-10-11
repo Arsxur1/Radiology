@@ -46,6 +46,22 @@ app = FastAPI(title="CardioLens", version="0.1.0")
 _STATIC = Path(__file__).parent / "static"
 
 
+def _api_keys() -> list[str]:
+    return [k.strip() for k in os.environ.get("CARDIOLENS_API_KEYS", "").split(",") if k.strip()]
+
+
+@app.middleware("http")
+async def require_api_key(request: Request, call_next):
+    """Opt-in API keys (D109): with CARDIOLENS_API_KEYS set, every /api/* call needs a
+    matching X-API-Key header; the page itself and /health stay open. Unset — no check."""
+    keys = _api_keys()
+    if keys and request.url.path.startswith("/api/"):
+        given = request.headers.get("x-api-key") or ""
+        if not any(hmac.compare_digest(given, k) for k in keys):
+            return JSONResponse({"detail": "missing or invalid API key"}, status_code=401)
+    return await call_next(request)
+
+
 def _cleanup(tmp_dir: str) -> BackgroundTask:
     """Delete a temp dir after the FileResponse has been sent (no disk leak)."""
     return BackgroundTask(shutil.rmtree, tmp_dir, ignore_errors=True)

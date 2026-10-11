@@ -195,3 +195,37 @@ def test_analysis_rate_limit_per_client(monkeypatch):
 def test_analysis_ids_are_128_bit():
     aid = client.post("/api/analyze", data={"case": "normal", "mode": "A"}).json()["analysis_id"]
     assert len(aid) == 32 and int(aid, 16) >= 0
+
+
+def test_api_keys_are_opt_in(monkeypatch):
+    # D109: unset -> open as before; set -> /api/* needs X-API-Key, the page and /health stay open.
+    assert client.get("/api/cases").status_code == 200
+    monkeypatch.setenv("CARDIOLENS_API_KEYS", "k1, k2")
+    assert client.get("/api/cases").status_code == 401
+    assert client.get("/api/cases", headers={"X-API-Key": "nope"}).status_code == 401
+    assert client.get("/api/cases", headers={"X-API-Key": "k2"}).status_code == 200
+    assert client.get("/health").status_code == 200 and client.get("/").status_code == 200
+
+
+def test_sqlite_store_survives_restart_and_rejects_tampering(tmp_path, monkeypatch):
+    # D109: opt-in persistent store; records are HMAC-signed and never unpickled unverified.
+    import sqlite3
+
+    from cardiolens.api import service
+    db = tmp_path / "a.db"
+    monkeypatch.setenv("CARDIOLENS_DB_PATH", str(db))
+    monkeypatch.setenv("CARDIOLENS_DB_KEY", "0123456789abcdef")
+    aid = client.post("/api/analyze", data={"case": "stemi", "mode": "A"}).json()["analysis_id"]
+    monkeypatch.setattr(service, "_STORE", service.OrderedDict())          # "restart"
+    assert client.get(f"/api/analysis/{aid}/conclusion").status_code == 200
+    monkeypatch.setattr(service, "_STORE", service.OrderedDict())
+    con = sqlite3.connect(db)
+    blob = bytearray(con.execute("SELECT blob FROM analyses WHERE id = ?", (aid,)).fetchone()[0])
+    blob[len(blob) // 2] ^= 0xFF                                               # flip one byte
+    with con:
+        con.execute("UPDATE analyses SET blob = ? WHERE id = ?", (bytes(blob), aid))
+    con.close()
+    assert client.get(f"/api/analysis/{aid}/conclusion").status_code == 404
+    monkeypatch.setenv("CARDIOLENS_DB_KEY", "short")
+    with pytest.raises(RuntimeError, match="CARDIOLENS_DB_KEY"):
+        service._db()
