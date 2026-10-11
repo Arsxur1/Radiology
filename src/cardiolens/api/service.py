@@ -177,10 +177,26 @@ def _persist(analysis_id: str, result: PipelineResult) -> None:
         return
     con, key = db
     blob = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+    now = time.time()
     with con:
         con.execute("INSERT OR REPLACE INTO analyses VALUES (?, ?, ?, ?)",
-                    (analysis_id, time.time(), _mac(key, analysis_id, blob), blob))
+                    (analysis_id, now, _mac(key, analysis_id, blob), blob))
+        days = float(os.environ.get("CARDIOLENS_DB_RETENTION_DAYS", "0") or 0)
+        if days > 0:  # opt-in retention (D110): older records are purged on each write
+            con.execute("DELETE FROM analyses WHERE created < ?", (now - days * 86400.0,))
     con.close()
+
+
+def delete_analysis(analysis_id: str) -> bool:
+    """Remove an analysis from memory and from the persistent store (D110)."""
+    found = _STORE.pop(analysis_id, None) is not None
+    db = _db()
+    if db is not None:
+        con, _ = db
+        with con:
+            found = con.execute("DELETE FROM analyses WHERE id = ?", (analysis_id,)).rowcount > 0 or found
+        con.close()
+    return found
 
 
 def _load(analysis_id: str) -> PipelineResult | None:

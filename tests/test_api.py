@@ -229,3 +229,39 @@ def test_sqlite_store_survives_restart_and_rejects_tampering(tmp_path, monkeypat
     monkeypatch.setenv("CARDIOLENS_DB_KEY", "short")
     with pytest.raises(RuntimeError, match="CARDIOLENS_DB_KEY"):
         service._db()
+
+
+def test_delete_analysis_removes_store_db_and_feedback(tmp_path, monkeypatch):
+    # D110: deletion on request clears memory, the SQLite store and the feedback log entries.
+    from cardiolens.feedback import FeedbackStore
+    monkeypatch.setenv("CARDIOLENS_DB_PATH", str(tmp_path / "a.db"))
+    monkeypatch.setenv("CARDIOLENS_DB_KEY", "0123456789abcdef")
+    monkeypatch.setenv("CARDIOLENS_FEEDBACK_PATH", str(tmp_path / "fb.jsonl"))
+    a = client.post("/api/analyze", data={"case": "stemi", "mode": "A"}).json()
+    b = client.post("/api/analyze", data={"case": "normal", "mode": "A"}).json()
+    for d in (a, b):
+        fb = {"analysis_id": d["analysis_id"], "reviewer": "Dr X", "findings": [
+            {"code": d["findings"][0]["code"], "verdict": "confirmed"}]}
+        assert client.post(f"/api/analysis/{d['analysis_id']}/feedback", json=fb).status_code == 200
+    r = client.delete(f"/api/analysis/{a['analysis_id']}")
+    assert r.status_code == 200 and r.json()["feedback_records_removed"] == 1
+    assert client.get(f"/api/analysis/{a['analysis_id']}/conclusion").status_code == 404
+    assert [f.analysis_id for f in FeedbackStore.at(tmp_path / "fb.jsonl").all()] == [b["analysis_id"]]
+    assert client.delete(f"/api/analysis/{a['analysis_id']}").status_code == 404
+
+
+def test_db_retention_purges_old_records(tmp_path, monkeypatch):
+    import sqlite3
+
+    from cardiolens.api import service
+    monkeypatch.setenv("CARDIOLENS_DB_PATH", str(tmp_path / "a.db"))
+    monkeypatch.setenv("CARDIOLENS_DB_KEY", "0123456789abcdef")
+    old = client.post("/api/analyze", data={"case": "normal", "mode": "A"}).json()["analysis_id"]
+    con = sqlite3.connect(tmp_path / "a.db")
+    with con:
+        con.execute("UPDATE analyses SET created = created - 40 * 86400 WHERE id = ?", (old,))
+    con.close()
+    monkeypatch.setenv("CARDIOLENS_DB_RETENTION_DAYS", "30")
+    client.post("/api/analyze", data={"case": "normal", "mode": "A"})
+    monkeypatch.setattr(service, "_STORE", service.OrderedDict())
+    assert client.get(f"/api/analysis/{old}/conclusion").status_code == 404

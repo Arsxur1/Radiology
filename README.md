@@ -102,6 +102,7 @@ uvicorn cardiolens.api.app:app --reload      # → http://127.0.0.1:8000
 | GET | `/api/analysis/{id}/waveform.svg` | Размеченная кривая |
 | GET | `/api/analysis/{id}/graph.png` | Каузальный граф |
 | GET | `/api/analysis/{id}/conclusion?lang=ru\|uz` | Текст заключения |
+| DELETE | `/api/analysis/{id}` | Удалить анализ и отзывы по нему (D110); срок хранения в БД — `CARDIOLENS_DB_RETENTION_DAYS` |
 
 Пример через curl:
 

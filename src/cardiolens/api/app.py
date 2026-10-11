@@ -182,6 +182,17 @@ def conclusion(analysis_id: str, lang: str = "ru") -> str:
     return format_conclusion(result, "uz" if lang == "uz" else "ru")
 
 
+@app.delete("/api/analysis/{analysis_id}")
+def delete_analysis(analysis_id: str) -> dict:
+    """Delete one analysis on request (D110): memory, the persistent store and its physician
+    feedback records (they may carry a reviewer name and a free-text comment)."""
+    found = service.delete_analysis(analysis_id)
+    n_feedback = _feedback_store().remove(analysis_id)
+    if not found and not n_feedback:
+        raise HTTPException(status_code=404, detail="analysis not found")
+    return {"deleted": analysis_id, "feedback_records_removed": n_feedback}
+
+
 @app.post("/api/analysis/{analysis_id}/feedback")
 def submit_feedback(analysis_id: str, fb: Feedback) -> dict:
     """Capture physician corrections for future fine-tuning/calibration (TZ §13)."""

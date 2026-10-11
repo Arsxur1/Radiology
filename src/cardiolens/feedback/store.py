@@ -72,6 +72,27 @@ class FeedbackStore:
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(fb.model_dump(), ensure_ascii=False) + "\n")
 
+    def remove(self, analysis_id: str) -> int:
+        """Drop every record of one analysis (deletion on request, D110); returns the count.
+
+        Records may carry a reviewer name and a free-text comment, so they go with the analysis.
+        The file is rewritten atomically (write to a sibling, then replace)."""
+        if not self.path.exists():
+            return 0
+        keep, dropped = [], 0
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            if json.loads(line).get("analysis_id") == analysis_id:
+                dropped += 1
+            else:
+                keep.append(line)
+        if dropped:
+            tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+            tmp.write_text("".join(x + "\n" for x in keep), encoding="utf-8")
+            tmp.replace(self.path)
+        return dropped
+
     def all(self) -> list[Feedback]:
         if not self.path.exists():
             return []
