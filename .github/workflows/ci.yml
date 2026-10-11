@@ -32,3 +32,28 @@ jobs:
 
       - name: Run tests (pytest)
         run: pytest -q --cov=cardiolens --cov-report=term
+
+  docker:
+    # D112: the image is built and exercised end to end (no Docker daemon in the dev sandbox).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t cardiolens:ci .
+
+      - name: Run container and smoke-test the API
+        run: |
+          docker run -d --name cl -p 8000:8000 cardiolens:ci
+          for i in $(seq 60); do curl -fsS http://127.0.0.1:8000/health && break; sleep 2; done
+          curl -fsS -o /dev/null http://127.0.0.1:8000/
+          out=$(curl -fsS -F case=stemi -F mode=B http://127.0.0.1:8000/api/analyze)
+          echo "$out" | python3 -c "import sys, json; d = json.load(sys.stdin); assert d['mode'] == 'escalate', d['mode']; assert any(a['code'] == 'st_elevation' for a in d['critical_alerts']); print('analysis ok', d['analysis_id'])"
+          id=$(echo "$out" | python3 -c "import sys, json; print(json.load(sys.stdin)['analysis_id'])")
+          curl -fsS -o report.pdf http://127.0.0.1:8000/api/analysis/$id/report.pdf
+          test "$(head -c 4 report.pdf)" = "%PDF"
+          docker inspect --format '{{.Config.User}}' cl | grep -qx cardiolens
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs cl || true
