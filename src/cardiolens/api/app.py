@@ -19,10 +19,13 @@ touches the cloud (TZ §12).
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import json
 import os
 import shutil
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -55,11 +58,36 @@ async def require_api_key(request: Request, call_next):
     """Opt-in API keys (D109): with CARDIOLENS_API_KEYS set, every /api/* call needs a
     matching X-API-Key header; the page itself and /health stay open. Unset — no check."""
     keys = _api_keys()
-    if keys and request.url.path.startswith("/api/"):
-        given = request.headers.get("x-api-key") or ""
-        if not any(hmac.compare_digest(given, k) for k in keys):
-            return JSONResponse({"detail": "missing or invalid API key"}, status_code=401)
-    return await call_next(request)
+    given = request.headers.get("x-api-key") or ""
+    if (keys and request.url.path.startswith("/api/")
+            and not any(hmac.compare_digest(given, k) for k in keys)):
+        response = JSONResponse({"detail": "missing or invalid API key"}, status_code=401)
+        _audit(request, response.status_code, given)
+        return response
+    response = await call_next(request)
+    _audit(request, response.status_code, given)
+    return response
+
+
+def _audit(request: Request, status: int, key: str) -> None:
+    """Opt-in access log (D111): one JSON line per /api/* request to CARDIOLENS_AUDIT_LOG.
+
+    Records time, method, path, status, client address and an 8-hex fingerprint of the
+    API key (SHA-256 prefix) — never the key, the request body or the patient data."""
+    path = os.environ.get("CARDIOLENS_AUDIT_LOG")
+    if not path or not request.url.path.startswith("/api/"):
+        return
+    entry = {
+        "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+        "method": request.method,
+        "path": request.url.path,
+        "status": status,
+        "client": request.client.host if request.client else None,
+        "key": hashlib.sha256(key.encode()).hexdigest()[:8] if key else None,
+    }
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry) + "\n")
 
 
 def _cleanup(tmp_dir: str) -> BackgroundTask:

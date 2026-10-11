@@ -265,3 +265,22 @@ def test_db_retention_purges_old_records(tmp_path, monkeypatch):
     client.post("/api/analyze", data={"case": "normal", "mode": "A"})
     monkeypatch.setattr(service, "_STORE", service.OrderedDict())
     assert client.get(f"/api/analysis/{old}/conclusion").status_code == 404
+
+
+def test_audit_log_is_opt_in_and_never_stores_the_key(tmp_path, monkeypatch):
+    # D111: one JSON line per /api/* request (incl. rejected ones); key only as a fingerprint.
+    import json as _json
+    log = tmp_path / "audit.jsonl"
+    client.get("/api/cases")
+    assert not log.exists()
+    monkeypatch.setenv("CARDIOLENS_AUDIT_LOG", str(log))
+    monkeypatch.setenv("CARDIOLENS_API_KEYS", "secret-key-1")
+    client.get("/api/cases")                                              # 401
+    aid = client.post("/api/analyze", data={"case": "normal", "mode": "A"},
+                      headers={"X-API-Key": "secret-key-1"}).json()["analysis_id"]
+    client.delete(f"/api/analysis/{aid}", headers={"X-API-Key": "secret-key-1"})
+    client.get("/health")                                                 # not logged
+    rows = [_json.loads(x) for x in log.read_text().splitlines()]
+    assert [(r["method"], r["status"]) for r in rows] == [("GET", 401), ("POST", 200), ("DELETE", 200)]
+    assert rows[0]["key"] is None and rows[1]["key"] and len(rows[1]["key"]) == 8
+    assert "secret-key-1" not in log.read_text() and rows[2]["path"].endswith(aid)
