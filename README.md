@@ -39,6 +39,17 @@ pip install -e ".[dev]"        # ядро + pytest
 pip install -e ".[dev,llm]"    # + Claude-провайдер (anthropic)
 ```
 
+### Контейнер (D112)
+
+```bash
+docker build -t cardiolens .
+docker run -p 8000:8000 -v cardiolens-data:/data cardiolens     # → http://localhost:8000
+```
+
+Опции — переменные окружения (`CARDIOLENS_API_KEYS`, `CARDIOLENS_DB_PATH` + `CARDIOLENS_DB_KEY`,
+`CARDIOLENS_AUDIT_LOG`, `CARDIOLENS_RATE_LIMIT_PER_MIN`, `CARDIOLENS_ADMIN_TOKEN`). При установке пакетом без
+контейнера укажите `CARDIOLENS_CONFIG_DIR` — каталог `configs/` из репозитория.
+
 ## Запуск демо (сквозной пример, ТЗ §18)
 
 ```bash

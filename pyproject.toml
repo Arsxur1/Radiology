@@ -33,6 +33,11 @@ dev = ["pytest", "pytest-cov", "ruff", "httpx", "opencv-python-headless", "pydic
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# The web UI ships inside the package (D112); configs/ stays at the repository root and is
+# located through CARDIOLENS_CONFIG_DIR when installed non-editably (Dockerfile does this).
+[tool.setuptools.package-data]
+cardiolens = ["api/static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

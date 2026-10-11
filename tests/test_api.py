@@ -284,3 +284,17 @@ def test_audit_log_is_opt_in_and_never_stores_the_key(tmp_path, monkeypatch):
     assert [(r["method"], r["status"]) for r in rows] == [("GET", 401), ("POST", 200), ("DELETE", 200)]
     assert rows[0]["key"] is None and rows[1]["key"] and len(rows[1]["key"]) == 8
     assert "secret-key-1" not in log.read_text() and rows[2]["path"].endswith(aid)
+
+
+def test_config_dir_override_and_clear_error(tmp_path, monkeypatch):
+    # D112: a non-editable install finds configs through CARDIOLENS_CONFIG_DIR; a wrong
+    # location fails with a message naming the variable.
+    import shutil
+
+    from cardiolens.config import configs_dir, load_app_config
+    shutil.copytree(configs_dir(), tmp_path / "cfg")
+    monkeypatch.setenv("CARDIOLENS_CONFIG_DIR", str(tmp_path / "cfg"))
+    assert configs_dir() == tmp_path / "cfg" and load_app_config().mode
+    monkeypatch.setenv("CARDIOLENS_CONFIG_DIR", str(tmp_path / "missing"))
+    with pytest.raises(FileNotFoundError, match="CARDIOLENS_CONFIG_DIR"):
+        configs_dir()

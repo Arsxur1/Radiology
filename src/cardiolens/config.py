@@ -24,7 +24,16 @@ def _repo_root() -> Path:
 
 
 def configs_dir() -> Path:
-    return _repo_root() / "configs"
+    """``CARDIOLENS_CONFIG_DIR`` if set (installed package, container — D112), else the
+    repository's ``configs/`` (source checkout, editable install)."""
+    env = os.environ.get("CARDIOLENS_CONFIG_DIR")
+    path = Path(env) if env else _repo_root() / "configs"
+    if not (path / "app.yaml").exists():
+        raise FileNotFoundError(
+            f"CardioLens configuration not found in {path}; set CARDIOLENS_CONFIG_DIR to the "
+            f"directory holding app.yaml, norms/ and rules/ (a non-editable install does not "
+            f"carry the repository's configs/)")
+    return path
 
 
 def calibrator_path() -> Path:
