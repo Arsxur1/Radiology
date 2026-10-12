@@ -57,3 +57,19 @@ jobs:
       - name: Container logs on failure
         if: failure()
         run: docker logs cl || true
+
+  audit:
+    # D113: known vulnerabilities in the runtime dependency set (as the image installs it).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install runtime dependencies and pip-audit
+        run: |
+          python -m pip install --upgrade pip "setuptools>=83"
+          pip install ".[dicom,llm]" pip-audit
+      - name: pip-audit
+        run: pip-audit --progress-spinner off
+

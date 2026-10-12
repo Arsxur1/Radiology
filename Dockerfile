@@ -17,7 +17,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY configs ./configs
-RUN pip install ".[dicom]" && useradd --create-home --uid 10001 cardiolens \
+RUN pip install --upgrade pip "setuptools>=83" && pip install ".[dicom]" && useradd --create-home --uid 10001 cardiolens \
     && mkdir -p /data && chown cardiolens /data
 
 USER cardiolens
