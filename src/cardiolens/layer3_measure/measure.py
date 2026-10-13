@@ -290,7 +290,10 @@ def _page_beats(sig: SignalRepresentation, windows: dict, rhythm_row: np.ndarray
             valid[i] = True
     starts = sorted({0} | {int(round(w[0] * fs)) for w in windows.values()} | {n})
     cols = [(a, b) for a, b in pairwise(starts) if b - a > int(0.5 * fs)]
-    if len(cols) < 2:
+    # One column = a strip where every lead runs over the whole record (12x1
+    # layout, D72): the envelope over all leads is the point, so it still applies
+    # — but only when the windows say so; no windows at all means no page.
+    if len(cols) < 1 or (len(cols) < 2 and not windows):
         return None
     env = np.zeros(n)
     for a, b in cols:

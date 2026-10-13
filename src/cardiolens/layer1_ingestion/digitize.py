@@ -170,7 +170,8 @@ TRACK_TURN_PX = 3              # the raw ink must reach this far beyond both sid
 TRACK_FLANK = 2                # columns on each side of an apex read from the raw run midpoint
 
 
-def _trace_rows_tracked(mask: np.ndarray, thin: np.ndarray, x0: int, x1: int, y0: int, y1: int) -> np.ndarray:
+def _trace_rows_tracked(mask: np.ndarray, thin: np.ndarray, x0: int, x1: int, y0: int, y1: int,
+                        baseline_weight: float = TRACK_BASELINE_WEIGHT) -> np.ndarray:
     """Per-column trace row by tracking, not by the median of all ink (D47).
 
     * The box is extended by ``TRACK_EXTEND`` of its height above and below, so
@@ -221,7 +222,7 @@ def _trace_rows_tracked(mask: np.ndarray, thin: np.ndarray, x0: int, x1: int, y0
             back.append(None)
             continue
         mids = [(a + b) / 2.0 for a, b in runs]
-        cost = [TRACK_BASELINE_WEIGHT * abs(m - centre) / h for m in mids]
+        cost = [baseline_weight * abs(m - centre) / h for m in mids]
         bp = [-1] * len(runs)
         if prev_cost is not None:
             gap = float(i - last)
@@ -991,6 +992,7 @@ def _dewarp_by_quadrilateral(gray: np.ndarray) -> np.ndarray | None:
     out_w, out_h = int(round(width)), int(round(height))
     if out_w < 50 or out_h < 50:
         return None
+    _dewarp_by_quadrilateral.last_warp = (hm, (out_w, out_h))  # type: ignore[attr-defined]
     return cv2.warpPerspective(gray, hm, (out_w, out_h), borderValue=255)
 
 
@@ -1124,7 +1126,31 @@ def _dewarp_by_grid_texture(gray: np.ndarray) -> np.ndarray | None:
     if not (50 < out_w < 4 * w and 50 < out_h < 4 * h):
         return None
     shift = np.array([[1, 0, -mn[0]], [0, 1, -mn[1]], [0, 0, 1]])
+    _dewarp_by_grid_texture.last_warp = (shift @ hi, (out_w, out_h))  # type: ignore[attr-defined]
     return cv2.warpPerspective(gray, shift @ hi, (out_w, out_h), borderValue=255)
+
+
+def _compose_warps(steps: list[tuple[np.ndarray, tuple[int, int]]], size: tuple[int, int]):
+    """One 3x3 map and output size equivalent to applying ``steps`` in order."""
+    total = np.eye(3)
+    for m, s in steps:
+        total = np.asarray(m, dtype=float) @ total
+        size = s
+    return total, size
+
+
+def apply_dewarp(img: np.ndarray, transform=None, *, nearest: bool = False, border: int = 0) -> np.ndarray:
+    """Warp a companion image (an ink mask, the colour photo) exactly like the last
+    ``dewarp_page`` call warped its grayscale input — ``dewarp_page.last_transform``."""
+    import cv2
+
+    hm, size = transform or getattr(dewarp_page, "last_transform", (np.eye(3), img.shape[1::-1]))
+    if np.allclose(hm, np.eye(3)) and tuple(size) == tuple(img.shape[1::-1]):
+        return img
+    flags = cv2.INTER_NEAREST if nearest else cv2.INTER_LINEAR
+    src = img.astype(np.uint8) if img.dtype == bool else img
+    out = cv2.warpPerspective(src, hm, tuple(int(v) for v in size), flags=flags, borderValue=border)
+    return out.astype(bool) if img.dtype == bool else out
 
 
 def dewarp_page(gray: np.ndarray) -> np.ndarray:
@@ -1136,25 +1162,47 @@ def dewarp_page(gray: np.ndarray) -> np.ndarray:
     grid-textured region's hull, sides snapped to the outermost grid lines)
     mapped to a rectangle, then the vanishing-point step for the few-pixel
     residual. Without either, the vanishing-point method alone handles a mild
-    perspective (to ~2 %). The input is returned unchanged when none applies."""
+    perspective (to ~2 %). The input is returned unchanged when none applies.
+
+    The composed map of the path taken is left in ``dewarp_page.last_transform``
+    (3x3 matrix, output size) so ``apply_dewarp`` can warp companion images."""
+    h, w = gray.shape
+    steps: list[tuple[np.ndarray, tuple[int, int]]] = []
+
+    def finish(out: np.ndarray) -> np.ndarray:
+        dewarp_page.last_transform = _compose_warps(steps, (w, h))  # type: ignore[attr-defined]
+        return out
+
+    def refine(img: np.ndarray) -> np.ndarray:
+        out = _refine_affine(img)
+        steps.extend(getattr(_refine_affine, "last_warps", []))
+        return out
+
     by_texture = _dewarp_by_grid_texture(gray)
     if by_texture is not None:
-        return _refine_affine(by_texture)
+        steps.append(_dewarp_by_grid_texture.last_warp)  # type: ignore[attr-defined]
+        return finish(refine(by_texture))
     by_quad = _dewarp_by_quadrilateral(gray)
     if by_quad is not None:
         # Sanity: the rectified page must show a square grid (pitch along x and y
         # within 10 %); a wrong quadrilateral yields none or a skewed one.
         px, py = estimate_grid_pitch_xy(by_quad)
         if px and py and 0.9 < px / py < 1.1:
+            steps.append(_dewarp_by_quadrilateral.last_warp)  # type: ignore[attr-defined]
             second = _dewarp_by_vanishing_points(by_quad)
             if second is not None:
                 px2, py2 = estimate_grid_pitch_xy(second)
                 if not (px2 and py2 and 0.95 < px2 / py2 < 1.05
                         and _line_angle_spread(second) < 0.8 * _line_angle_spread(by_quad)):
                     second = None
-            return _refine_affine(second if second is not None else by_quad)
+            if second is not None:
+                steps.append(_dewarp_by_vanishing_points.last_warp)  # type: ignore[attr-defined]
+            return finish(refine(second if second is not None else by_quad))
     vp = _dewarp_by_vanishing_points(gray)
-    return _refine_affine(vp) if vp is not None else gray
+    if vp is not None:
+        steps.append(_dewarp_by_vanishing_points.last_warp)  # type: ignore[attr-defined]
+        return finish(refine(vp))
+    return finish(gray)
 
 
 def _dewarp_by_vanishing_points(gray: np.ndarray) -> np.ndarray | None:
@@ -1199,6 +1247,7 @@ def _dewarp_by_vanishing_points(gray: np.ndarray) -> np.ndarray | None:
     # more parallel (a rotation or a noisy fit must not trigger a warp).
     if not _line_angle_spread(warped) < _line_angle_spread(gray):
         return None
+    _dewarp_by_vanishing_points.last_warp = (hm, (w, h))  # type: ignore[attr-defined]
     return warped
 
 
@@ -1209,6 +1258,7 @@ def _refine_affine(warped: np.ndarray) -> np.ndarray:
     import cv2
 
     h, w = warped.shape
+    steps: list[tuple[np.ndarray, tuple[int, int]]] = []
     segs2 = _grid_segments(warped)
     if segs2 is not None and len(segs2) >= 8:
         a2 = np.arctan2(segs2[:, 3] - segs2[:, 1], segs2[:, 2] - segs2[:, 0])
@@ -1224,10 +1274,13 @@ def _refine_affine(warped: np.ndarray) -> np.ndarray:
                 c = np.array([w / 2, h / 2])
                 m = np.hstack([a_inv, (c - a_inv @ c).reshape(2, 1)])
                 warped = cv2.warpAffine(warped, m, (w, h), borderValue=255)
+                steps.append((np.vstack([m, [0.0, 0.0, 1.0]]), (w, h)))
     px, py = estimate_grid_pitch_xy(warped)
     if px and py and 0.8 < px / py < 1.25 and abs(px / py - 1.0) > 0.01:
         m = np.array([[1.0, 0.0, 0.0], [0.0, px / py, h / 2 * (1 - px / py)]])
         warped = cv2.warpAffine(warped, m, (w, h), borderValue=255)
+        steps.append((np.vstack([m, [0.0, 0.0, 1.0]]), (w, h)))
+    _refine_affine.last_warps = steps  # type: ignore[attr-defined]
     return warped
 
 

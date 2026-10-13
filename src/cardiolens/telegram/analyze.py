@@ -14,7 +14,8 @@ import numpy as np
 
 from cardiolens.contracts.signal import Provenance, SignalRepresentation
 from cardiolens.feedback import Feedback, FindingFeedback
-from cardiolens.layer1_ingestion.digitize import digitize_page_to_signal, estimate_grid_pitch
+from cardiolens.layer1_ingestion.digitize import estimate_grid_pitch
+from cardiolens.layer1_ingestion.strip import digitize_auto_to_signal
 from cardiolens.layer6_interpret.stub import StubProvider
 from cardiolens.pipeline import PipelineResult, run_pipeline
 from cardiolens.telegram.store import Record
@@ -52,9 +53,10 @@ def is_ecg_photo(path: str | Path, min_pitch_px: float = 3.0) -> tuple[bool, flo
 
 
 def analyse_photo(path: str | Path, *, mode: str = "A", provider=None) -> tuple[PipelineResult | None, str | None]:
-    """Digitise the page and run the pipeline; (result, None) or (None, error text)."""
+    """Digitise the photo (3x4 page or 12x1 strip, chosen from the ink — D72) and
+    run the pipeline; (result, None) or (None, error text)."""
     try:
-        sig = digitize_page_to_signal(path)
+        sig = digitize_auto_to_signal(path)
         return run_pipeline(sig, mode=mode, provider=provider or StubProvider()), None
     except Exception as e:  # digitiser raises on pages it cannot read — that is data too
         return None, f"{type(e).__name__}: {e}"
@@ -128,7 +130,9 @@ def summarize(result: PipelineResult) -> dict:
     iv = m.intervals
     prov = result.signal.provenance
     calib = next((n for n in prov.notes if n.startswith("calibration:")), None)
+    layout = next((n.split(":")[0] for n in prov.notes if "strip" in n or "page" in n), None)
     return {
+        "layout": layout,
         "heart_rate_bpm": m.heart_rate_bpm, "pr_ms": iv.pr_ms, "qrs_ms": iv.qrs_ms,
         "qt_ms": iv.qt_ms, "qtc_bazett_ms": iv.qtc_bazett_ms, "qrs_axis_deg": m.axes.qrs_deg,
         "confidence": result.report.confidence_value, "digitiser_coverage": prov.confidence,
@@ -169,8 +173,8 @@ def format_card(rec: Record, result: PipelineResult | None, error: str | None = 
                  f"QTc {_fmt(s['qtc_bazett_ms'])} мс · ось {_fmt(s['qrs_axis_deg'], '°')}")
     lines.append("Находки: " + "; ".join(findings))
     lines.append("Коды: " + (", ".join(sorted(result.findings.codes())) or "—"))
-    lines.append(f"Уверенность {s['confidence']:.2f} · оцифровка {_fmt(s['digitiser_coverage'], '', 2)} · "
-                 f"нарратив: {result.report.provider}")
+    lines.append(f"Уверенность {s['confidence']:.2f} · оцифровка {_fmt(s['digitiser_coverage'], '', 2)}"
+                 f"{' · раскладка ' + s['layout'] if s.get('layout') else ''} · нарратив: {result.report.provider}")
     lines.append("")
     lines.append(VERDICT_HELP)
     return "\n".join(lines)

@@ -56,8 +56,8 @@ def parse_header_comments(text: str) -> dict:
 def days_between(infarction: str, ecg: str) -> int | None:
     """ECG date (dd/mm/yyyy) minus infarction date (dd-Mon-yy), in days."""
     try:
-        d_ecg = datetime.strptime(ecg, "%d/%m/%Y")  # noqa: DTZ007 - calendar dates, no tz
-        d_inf = datetime.strptime(infarction, "%d-%b-%y")  # noqa: DTZ007
+        d_ecg = datetime.strptime(ecg, "%d/%m/%Y")
+        d_inf = datetime.strptime(infarction, "%d-%b-%y")
     except ValueError:
         return None
     return (d_ecg - d_inf).days
