@@ -118,7 +118,7 @@ def test_wide_tachycardia_is_not_sinus_and_narrow_is_svt():
 
 
 # --- Paced rhythm (source D24, D74, D75) ---
-from cardiolens.layer3_measure.pacing import (  # noqa: E402
+from cardiolens.layer3_measure.pacing import (
     pacing_multilead_spike_times,
     pacing_spike_coupling,
     pacing_spike_ratio,
@@ -164,3 +164,52 @@ def test_multilead_spike_detects_small_qrs_locked_spikes():
     assert len(pacing_multilead_spike_times(sig)) >= 5
     one = _spiked_ecg(-0.04, leads=["II"], scale=0.6)
     assert pacing_multilead_spike_times(one) == []
+
+
+# --- Pathological Q and Brugada type 1 (source D36, D89, D90) ---
+from cardiolens.contracts.features import Morphology
+
+_NO_Q = (0.0, 0.0, 800.0, False)
+
+
+def _q_codes(q_waves, qrs_ms=95, v1_term=None, norms="adult", age_years=60):
+    m = Measurements(heart_rate_bpm=70, rhythm_regular=True, qrs_v1_terminal_positive=v1_term,
+                     intervals=Intervals(pr_ms=160, qrs_ms=qrs_ms, qt_ms=390, qtc_bazett_ms=420),
+                     morphology=Morphology(q_waves=q_waves))
+    sig = SignalRepresentation(signal=np.zeros((12, 10)), sampling_rate_hz=500,
+                               lead_names=list(STANDARD_12_LEADS), duration_s=0.02,
+                               source="synthetic", patient=Patient(age_years=age_years, sex="male"))
+    return detect_findings(sig, m, norms=load_norms(norms))
+
+
+def test_pathological_q_contiguous_leads_and_depth():
+    q = {ld: _NO_Q for ld in STANDARD_12_LEADS}
+    q["III"] = (44.0, 300.0, 400.0, False)
+    assert "pathological_q_waves" not in _q_codes(q).codes()       # isolated Q in III
+    q["aVF"] = (40.0, 250.0, 500.0, False)
+    f = _q_codes(q).by_code("pathological_q_waves")
+    assert f is not None and "III,aVF" in f.label_ru and "нижняя" in f.label_ru
+    q["aVF"] = (40.0, 60.0, 900.0, False)                           # shallow
+    assert "pathological_q_waves" not in _q_codes(q).codes()
+
+
+def test_pathological_q_v2_v3_and_absent_in_children():
+    q = {ld: _NO_Q for ld in STANDARD_12_LEADS}
+    q["V2"] = q["V3"] = (0.0, 0.0, 20.0, True)
+    assert "pathological_q_waves" in _q_codes(q).codes()
+    assert "pathological_q_waves" not in _q_codes(q, norms="pediatric", age_years=8).codes()
+
+
+def _brugada_m(v1=(450.0, 300.0, 150.0, -250.0), s_v6=-200.0):
+    m = Measurements(heart_rate_bpm=70, intervals=Intervals(qrs_ms=110))
+    m.morphology.right_precordial_st = {"V1": v1, "V2": (120.0, 100.0, 80.0, -60.0)}
+    m.morphology.terminal_s_lateral = {"I": -150.0, "V6": s_v6}
+    return m
+
+
+def test_brugada_type1_coved_pattern():
+    f = _find(_brugada_m()).by_code("brugada_pattern")
+    assert f is not None and "V1" in f.label_ru and f.confidence == 0.3
+    assert "brugada_pattern" not in _find(_brugada_m(v1=(450.0, 480.0, 500.0, -250.0))).codes()  # saddleback
+    assert "brugada_pattern" not in _find(_brugada_m(v1=(450.0, 300.0, 150.0, 80.0))).codes()    # upright T
+    assert "brugada_pattern" not in _find(_brugada_m(s_v6=-400.0)).codes()                        # true RBBB

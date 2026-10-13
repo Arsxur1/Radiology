@@ -77,6 +77,12 @@ class TWave(BaseModel):
 
 class Morphology(BaseModel):
     """Waveform morphology descriptors (TZ §6)."""
+    # Initial Q per lead on the 12-lead median beat: (Q ms, Q depth µV, R µV, QS) (D36).
+    q_waves: dict[str, tuple[float, float, float, bool]] = Field(default_factory=dict)
+    # Right precordial ST profile (V1, V2): (J, J+40, J+80, T min) µV — Brugada type 1 (D89).
+    right_precordial_st: dict[str, tuple[float, float, float, float]] = Field(default_factory=dict)
+    # Terminal S in I/V6 on the median beat, µV — true RBBB excludes Brugada (D90).
+    terminal_s_lateral: dict[str, float] = Field(default_factory=dict)
 
     st: list[STMeasurement] = Field(default_factory=list)
     t_waves: list[TWave] = Field(default_factory=list)

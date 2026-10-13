@@ -35,6 +35,11 @@ from cardiolens.layer3_measure.delineation import (
     spatial_velocity,
     terminal_qrs_sign,
 )
+from cardiolens.layer3_measure.global_beat import (
+    global_q_waves,
+    global_right_precordial_st,
+    global_terminal_s,
+)
 from cardiolens.layer3_measure.intervals import (
     qtc_bazett,
     qtc_framingham,
@@ -438,6 +443,13 @@ def measure(sig: SignalRepresentation) -> Measurements:
             sig.signal, rpeaks, fs, windows=getattr(sig.provenance, "lead_windows", None), lead_names=sig.lead_names)
     m.r_peaks_samples = rpeaks.tolist()
     m.qrs_template_consistency = _qrs_template_consistency(sig, rpeaks, fs)
+    # Median-beat Q waves and right-precordial ST (ported from claude/vibrant-curie-ro1zsz
+    # D36, D89, D90): pathological Q and the Brugada type-1 pattern.
+    if len(rpeaks) >= 3:
+        names = list(sig.lead_names)
+        m.morphology.q_waves = global_q_waves(sig.signal, rpeaks, fs, names)
+        m.morphology.right_precordial_st = global_right_precordial_st(sig.signal, rpeaks, fs, names)
+        m.morphology.terminal_s_lateral = global_terminal_s(sig.signal, rpeaks, fs, names)
     m.n_beats = len(rpeaks)
 
     rr_s_mean = None

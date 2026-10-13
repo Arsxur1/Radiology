@@ -147,3 +147,10 @@ wpw:
   # least this (D65): without it the route fired on bundle branch blocks with a
   # PR of 100-118 ms (PTB-XL 28 true / 28 false; MIMIC 52 false).
   classic_delta_ms: 40
+
+# Pathological Q waves on the median beat (UDMI; ported from claude/vibrant-curie-ro1zsz D36).
+q_wave:
+  v2v3_q_ms_max: 20
+  q_ms_min: 30
+  q_depth_uv_min: 100
+  q_depth_r_ratio_min: 0.25

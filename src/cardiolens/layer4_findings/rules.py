@@ -306,6 +306,12 @@ def detect_findings(
             evidence=_ev(lead_I="inverted", aVR="upright"), confidence=0.65,
         ))
 
+    # Pathological Q (old MI) and the Brugada type-1 pattern on the median beat (ported
+    # from claude/vibrant-curie-ro1zsz D36, D89, D90). LBBB suppresses Brugada as in the source.
+    _q_wave_findings(m, norms, fs)
+    if fs.by_code("lbbb") is None:
+        _brugada_pattern(m, fs)
+
     # In a wide-complex tachycardia the "P" before each QRS and the initial QRS forces
     # are not interpretable: a short "PR" is not pre-excitation and PR is not AV
     # conduction (ported from claude/vibrant-curie-ro1zsz D37).
@@ -817,3 +823,79 @@ def _t_inversion_findings(m: Measurements, is_pediatric: bool, fs: FindingSet) -
             label_uz=f"T to'lqin inversiyasi ({', '.join(inv)})",
             evidence=_ev(leads=",".join(inv)), confidence=0.65,
         ))
+
+
+def _q_wave_findings(m: Measurements, norms, fs: FindingSet) -> None:
+    """Pathological Q waves in >= 2 contiguous leads — possible prior infarction (D36).
+
+    Q criteria are not interpretable with LBBB or pre-excitation (both create QS
+    complexes and pseudo-Q waves), so those suppress the finding here; pacing is
+    handled by the rhythm hierarchy in the pipeline.
+    """
+    qn = norms.get("q_wave")
+    if not qn or not m.morphology.q_waves:
+        return
+    if fs.by_code("lbbb") is not None or fs.by_code("wpw_preexcitation") is not None:
+        return
+    patho = set()
+    for lead, (q_ms, q_depth, r_amp, qs) in m.morphology.q_waves.items():
+        if lead in ("aVR", "V1"):
+            continue
+        if lead in ("V2", "V3"):
+            hit = qs or q_ms > qn["v2v3_q_ms_max"]
+        else:
+            hit = qs or (q_ms >= qn["q_ms_min"] and q_depth >= qn["q_depth_uv_min"]
+                         and q_depth >= qn["q_depth_r_ratio_min"] * max(r_amp, 1.0))
+        if hit:
+            patho.add(lead)
+    pairs = [(a, b) for a, b in _Q_CONTIGUOUS if a in patho and b in patho]
+    if not pairs:
+        return
+    leads = [ld for ld in _Q_LEAD_ORDER if ld in {x for p in pairs for x in p}]
+    walls = [(ru, uz) for ru, uz, group in _Q_WALLS if group & set(leads)]
+    wall_ru = ", ".join(ru for ru, _ in walls) + (" стенки" if len(walls) > 1 else " стенка")
+    wall_uz = ", ".join(uz for _, uz in walls) + (" devorlar" if len(walls) > 1 else " devor")
+    leads_txt = ",".join(leads)
+    fs.findings.append(Finding(
+        code="pathological_q_waves", group="ischemia",
+        label_ru=f"Патологические зубцы Q ({leads_txt}) — возможен перенесённый инфаркт "
+                 f"({wall_ru})",
+        label_uz=f"Patologik Q to'lqinlar ({leads_txt}) — o'tkazilgan infarkt ehtimoli "
+                 f"({wall_uz})",
+        evidence=_ev(leads=leads_txt, **{f"q_{ld}": m.morphology.q_waves[ld] for ld in leads}),
+        confidence=0.6,
+    ))
+
+
+# Contiguous lead pairs and walls for pathological Q waves (D36).
+_Q_CONTIGUOUS = [("I", "aVL"), ("II", "III"), ("III", "aVF"), ("II", "aVF"),
+                 ("V1", "V2"), ("V2", "V3"), ("V3", "V4"), ("V4", "V5"), ("V5", "V6")]
+_Q_LEAD_ORDER = ["I", "II", "III", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+_Q_WALLS = [("нижняя", "pastki", {"II", "III", "aVF"}),
+            ("передняя", "old", {"V1", "V2", "V3", "V4"}),
+            ("боковая", "yon", {"I", "aVL", "V5", "V6"})]
+
+
+_BRUGADA_J_UV = 200.0
+_BRUGADA_T_UV = -50.0
+_BRUGADA_RBBB_S_UV = -320.0
+
+
+def _brugada_pattern(m: Measurements, fs: FindingSet) -> None:
+    prof = m.morphology.right_precordial_st
+    leads = [ld for ld, (j, j40, j80, t_min) in prof.items()
+             if j >= _BRUGADA_J_UV and j40 < j and j80 < j40 and t_min <= _BRUGADA_T_UV]
+    if not leads:
+        return
+    if any(s <= _BRUGADA_RBBB_S_UV for s in m.morphology.terminal_s_lateral.values()):
+        return
+    fs.findings.append(Finding(
+        code="brugada_pattern", group="other",
+        label_ru=f"Паттерн Бругада 1 типа? ({', '.join(leads)}: куполообразный подъём ST ≥ 2 мм с "
+                 f"отрицательным T) — исключить БПНПГ и высокую установку электродов, консультация кардиолога",
+        label_uz=f"Brugada 1-tur patterni? ({', '.join(leads)}: gumbazsimon ST ko'tarilishi ≥ 2 mm, manfiy T) — "
+                 f"O'TBB va elektrodlarning baland o'rnatilishini istisno qiling, kardiolog maslahati",
+        evidence=_ev(**{f"{ld}_j_j40_j80_tmin_uv": "/".join(str(v) for v in prof[ld]) for ld in leads}),
+        # Natural-population PPV is unknown and low (the pattern is rare): lowest confidence.
+        confidence=0.3,
+    ))
