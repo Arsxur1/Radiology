@@ -384,3 +384,43 @@ def test_infant_bradycardia_episode_in_a_normal_rate_strip():
                                     Patient(age_years=0.05), 90, FindingSet())   # 100/min
     assert not _bradycardia_episode(m, norms_for_patient(5, None), Patient(age_years=5), 90,
                                     FindingSet())                                  # child
+
+
+def test_p_wave_polarity_on_median_beat():
+    # D116: P is upright in lead I on a normal ECG and inverted when LA/RA are swapped.
+    sig = generate_synthetic_ecg(heart_rate_bpm=75)
+    m, _, _ = _run(sig)
+    assert m.morphology.p_median_beat["I"] > 0
+    x = sig.signal.copy()
+    ix = list(sig.lead_names).index
+    x[ix("I")] = -sig.signal[ix("I")]
+    x[ix("II")], x[ix("III")] = sig.signal[ix("III")], sig.signal[ix("II")]
+    x[ix("aVR")], x[ix("aVL")] = sig.signal[ix("aVL")], sig.signal[ix("aVR")]
+    m2, _, _ = _run(sig.model_copy(update={"signal": x}))
+    assert m2.morphology.p_median_beat["I"] < 0
+
+
+
+def test_la_ra_reversal_from_p_wave():
+    # D116: the reversal is called from the P wave on the median beat. (The synthetic
+    # generator draws the same P in every lead, so measured values are used here.)
+    from cardiolens.contracts.features import Measurements
+    from cardiolens.contracts.findings import Finding, FindingSet
+    from cardiolens.pipeline import _la_ra_reversal
+
+    def run(p, qrs_flag, codes=()):
+        m = Measurements()
+        m.morphology.p_median_beat = p
+        fs = FindingSet(findings=[Finding(code=c, label_ru=c, label_uz=c, confidence=0.6)
+                                  for c in codes])
+        _la_ra_reversal(fs, m, qrs_flag, 10.0, [])
+        return fs.codes()
+
+    reversed_p = {"I": -90.0, "aVR": 40.0, "aVL": -120.0}
+    upright_p = {"I": 80.0, "aVR": -120.0, "aVL": 30.0}
+    assert "lead_reversal_la_ra" in run(reversed_p, False)
+    # Right QRS axis (QRS rule fires, Layer 4 added the finding) with upright P: withdrawn.
+    assert "lead_reversal_la_ra" not in run(upright_p, True, ["lead_reversal_la_ra"])
+    # No organised P (AF): the QRS-rule finding from Layer 4 stands.
+    assert "lead_reversal_la_ra" in run(reversed_p | {"I": 80.0}, True,
+                                        ["atrial_fibrillation", "lead_reversal_la_ra"])

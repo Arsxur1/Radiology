@@ -242,6 +242,29 @@ def global_t_amplitude(signal: np.ndarray, rpeaks, fs: float,
     return out
 
 
+def global_p_amplitude(signal: np.ndarray, rpeaks, fs: float,
+                       lead_names: list[str]) -> dict[str, float]:
+    """Signed P-wave peak per lead on the median beat, µV: from the global P onset to
+    20 ms before QRS onset, against the last 10 ms of the PR segment (D116). The level
+    before P onset is not used: at fast rates it lies on the previous T wave. Empty when
+    no P onset is found (AF, junctional rhythm)."""
+    X, a = median_beats(signal, rpeaks, fs)
+    if X is None:
+        return {}
+    rp = np.asarray(rpeaks, dtype=float)
+    rr_s = float(np.median(np.diff(rp))) / fs if rp.size > 2 else None
+    fid = global_fiducials(X, a, fs, rr_s)
+    po, on = fid["p_on"], int(fid["qrs_on"])
+    w10 = max(1, int(0.01 * fs))
+    if po is None or on - 2 * w10 - po < w10:
+        return {}
+    out: dict[str, float] = {}
+    for i, name in enumerate(lead_names):
+        pw = X[i][po:on - 2 * w10] - float(np.mean(X[i][on - w10:on]))
+        out[name] = round(float(pw[np.argmax(np.abs(pw))]), 1)
+    return out
+
+
 def global_initial_qrs_ratio(signal: np.ndarray, rpeaks, fs: float) -> float | None:
     """Delta-wave index (D59): mean summed slope energy over the first 40 ms after the
     global QRS onset divided by the QRS peak energy. Pre-excitation starts the QRS with

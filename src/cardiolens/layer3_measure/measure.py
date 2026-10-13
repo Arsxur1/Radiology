@@ -25,6 +25,7 @@ from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer3_measure.global_beat import (
     global_initial_qrs_ratio,
     global_intervals,
+    global_p_amplitude,
     global_q_waves,
     global_qrs_amplitudes,
     global_qrs_rs,
@@ -367,6 +368,9 @@ def measure(sig: SignalRepresentation, *, correction=None) -> Measurements:
             m.morphology.st_median_beat = global_st(sig.signal, rpeaks, fs, list(sig.lead_names))
             # T peak on the median beat (D49) — decides the critical hyperkalaemia tier.
             m.morphology.t_median_beat = global_t_amplitude(sig.signal, rpeaks, fs,
+                                                            list(sig.lead_names))
+            # P peak on the median beat: LA/RA electrode reversal inverts P in lead I (D116).
+            m.morphology.p_median_beat = global_p_amplitude(sig.signal, rpeaks, fs,
                                                             list(sig.lead_names))
             # R/S per lead on the median beat: largest deflection (peaked T, D65)
             # and Sokolow-Lyon (D66, set below).

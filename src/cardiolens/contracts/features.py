@@ -56,6 +56,8 @@ class Morphology(BaseModel):
     st_median_beat: dict[str, tuple[float, float]] = Field(default_factory=dict)
     # Signed T-wave peak per lead on the median beat, µV (D49).
     t_median_beat: dict[str, float] = Field(default_factory=dict)
+    # Signed P-wave peak per lead on the median beat, µV (D116).
+    p_median_beat: dict[str, float] = Field(default_factory=dict)
     # Largest QRS deflection per lead on the median beat, µV (D65).
     qrs_extreme_median_beat: dict[str, float] = Field(default_factory=dict)
     # QRS R (>= 0) and S (<= 0) per lead on the median beat, µV (D66, D70).

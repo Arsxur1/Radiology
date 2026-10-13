@@ -122,6 +122,7 @@ class QualityConfig(BaseModel):
     """
     beat_consistency_min: float = 0.8
     digitized_confidence_min: float = 0.8
+    la_ra_p_uv: float = 10.0
 
 
 class Versions(BaseModel):

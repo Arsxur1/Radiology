@@ -204,6 +204,7 @@ def run_pipeline(
     _apply_rhythm_hierarchy(findings, m, audit)
     _check_sinus_p_waves(findings, sig, m, audit)
     _af_atrial_evidence(findings, sig, m, audit, pediatric=norms.get("age_group") == "pediatric")
+    _la_ra_reversal(findings, m, la_ra_reversed, cfg.quality.la_ra_p_uv, audit)
     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
     # are unreliable, so withhold every R-peak-derived finding and report the poor
@@ -464,6 +465,39 @@ def _pvc_explains_irregularity(r_peaks, pvc_idx) -> tuple[bool, str]:
     mad_cv = 1.4826 * float(np.median(np.abs(clean - med))) / med
     explained = not (cv >= _AFIB_RR_CV_MIN and mad_cv >= _AFIB_RR_MAD_CV_MIN)
     return explained, f"clean CV {cv:.2f}, MAD-CV {mad_cv:.2f}"
+
+
+_NO_P_CODES = ("atrial_fibrillation", "atrial_flutter", "paced_rhythm", "rhythm_without_p_waves")
+
+
+def _la_ra_reversal(findings: FindingSet, m, qrs_flag: bool, p_uv: float, audit: list[str]) -> None:
+    """LA/RA electrode reversal from the P wave on the median beat (D116).
+
+    Reversal inverts lead I and swaps aVR with aVL, so P turns negative in I and P in
+    aVR rises above P in aVL. A right QRS axis (normal in children, RVH) inverts only
+    the QRS, which the Layer-2 QRS rule cannot tell apart. Without an organised P the
+    QRS rule is kept.
+    """
+    p = m.morphology.p_median_beat or {}
+    no_p = any(findings.by_code(c) is not None for c in _NO_P_CODES)
+    existing = findings.by_code("lead_reversal_la_ra")
+    if no_p or not {"I", "aVR", "aVL"} <= p.keys():
+        audit.append(f"[L4] LA/RA reversal: QRS rule ({qrs_flag}), no organised P")
+        return
+    flag = p["I"] < -p_uv and p["aVR"] > p["aVL"] + p_uv
+    audit.append(f"[L4] LA/RA reversal: P rule ({flag}; P I {p['I']}, aVR {p['aVR']}, "
+                 f"aVL {p['aVL']} uV; QRS rule {qrs_flag})")
+    if existing is not None:
+        findings.findings.remove(existing)
+    if flag:
+        findings.findings.append(Finding(
+            code="lead_reversal_la_ra", group="other",
+            label_ru="Подозрение на реверс электродов LA/RA (зубец P инвертирован в I)",
+            label_uz="LA/RA elektrodlar almashinuvi shubhasi (I da P teskari)",
+            evidence=[Evidence(feature="p_lead_I_uv", value=str(p["I"])),
+                      Evidence(feature="p_aVR_uv", value=str(p["aVR"])),
+                      Evidence(feature="p_aVL_uv", value=str(p["aVL"]))],
+            confidence=0.65))
 
 
 def _quality_ok(quality, threshold: float) -> bool:

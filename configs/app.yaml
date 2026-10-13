@@ -90,6 +90,11 @@ quality:
   # via column coverage) is not interpreted as if it were a digital recording —
   # below this quality_ok is forced low so mode B escalates (DECISIONS D15y).
   digitized_confidence_min: 0.80
+  # LA/RA electrode reversal (D116): P inverted in lead I (< -la_ra_p_uv) and P in aVR
+  # above P in aVL by la_ra_p_uv, on the median beat. The QRS-only rule (lead I QRS
+  # negative, aVR positive) flagged physiological right axis (children 13%) and is the
+  # fallback only when there is no organised P (AF, flutter, pacing, no P waves).
+  la_ra_p_uv: 10.0
 
 # Critical-alert tiers (TZ §10). QTc above the sex-specific limit (450/460 ms)
 # is reported as long QT on ~20% of resting ECGs — GE 12SL flags the same share
