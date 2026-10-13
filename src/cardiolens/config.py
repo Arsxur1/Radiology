@@ -79,6 +79,16 @@ class PauseConfig(BaseModel):
     critical_ms: float = 3000.0
 
 
+class PacingConfig(BaseModel):
+    """Paced-rhythm spike detection (TZ §7.1): an extreme slope outlier time-locked to
+    the QRS, or a spike-shaped event seen by many leads at once (D74-D75)."""
+    spike_ratio_min: float = 5.5
+    coupling_min: float = 0.2
+    multilead_k: float = 3.0
+    multilead_min_leads: int = 6
+    multilead_coupling_min: float = 0.3
+
+
 class QualityConfig(BaseModel):
     """Signal-organization gate (TZ §5): below beat_consistency_min the QRS complexes
     are not self-consistent (artifact/noise), so R-peak-derived findings are withheld."""
@@ -90,6 +100,7 @@ class AppConfig(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     ml: MLConfig = Field(default_factory=MLConfig)
     pause: PauseConfig = Field(default_factory=PauseConfig)
+    pacing: PacingConfig = Field(default_factory=PacingConfig)
     quality: QualityConfig = Field(default_factory=QualityConfig)
     mains_frequency_hz: float
     preprocessing: Preprocessing

@@ -115,3 +115,52 @@ def test_wide_tachycardia_is_not_sinus_and_narrow_is_svt():
     assert any(a.code == "wide_complex_tachycardia" for a in
                scan_critical(FindingSet(), Measurements(heart_rate_bpm=145,
                                                         intervals=Intervals(qrs_ms=150))).alerts)
+
+
+# --- Paced rhythm (source D24, D74, D75) ---
+from cardiolens.layer3_measure.pacing import (  # noqa: E402
+    pacing_multilead_spike_times,
+    pacing_spike_coupling,
+    pacing_spike_ratio,
+)
+
+
+def _r_times(sig):
+    return [r / sig.sampling_rate_hz for r in
+            run_pipeline(sig.model_copy(deep=True), mode="A").measurements.r_peaks_samples]
+
+
+def _spiked_ecg(offset_s, leads=None, scale=3.0):
+    base = generate_synthetic_ecg(heart_rate_bpm=72)
+    r_s = _r_times(base)
+    sig = generate_synthetic_ecg(heart_rate_bpm=72)
+    fs = sig.sampling_rate_hz
+    for name in (leads or ["II"]):
+        li = sig.lead_names.index(name)
+        amp = float(np.max(np.abs(sig.signal[li]))) * scale
+        for t in r_s:
+            i = int(round((t + offset_s) * fs))
+            if 0 <= i < sig.signal.shape[1]:
+                sig.signal[li, i] += amp
+    return sig
+
+
+def test_pacing_spike_coupling_math():
+    r = [1.0, 2.0, 3.0, 4.0]
+    assert pacing_spike_coupling([0.95, 1.95, 2.95, 3.95], r) == 1.0
+    assert pacing_spike_coupling([1.5, 2.5], r) == 0.0
+    assert pacing_spike_coupling([0.99], r) == 0.25
+
+
+def test_paced_call_requires_spike_locked_to_qrs():
+    assert pacing_spike_ratio(generate_synthetic_ecg(heart_rate_bpm=72)) < 5.5
+    locked = run_pipeline(_spiked_ecg(-0.04), mode="A").findings.codes()
+    assert "paced_rhythm" in locked and "sinus_rhythm" not in locked
+    assert "paced_rhythm" not in run_pipeline(_spiked_ecg(+0.40), mode="A").findings.codes()
+
+
+def test_multilead_spike_detects_small_qrs_locked_spikes():
+    sig = _spiked_ecg(-0.04, leads=list(STANDARD_12_LEADS), scale=0.6)
+    assert len(pacing_multilead_spike_times(sig)) >= 5
+    one = _spiked_ecg(-0.04, leads=["II"], scale=0.6)
+    assert pacing_multilead_spike_times(one) == []

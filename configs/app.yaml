@@ -62,3 +62,13 @@ pause:
 # R-peak-derived findings and reports poor quality instead (mode B escalates).
 quality:
   beat_consistency_min: 0.80
+
+# Paced rhythm (TZ §7.1; ported from claude/vibrant-curie-ro1zsz D24, D74, D75): a slope
+# outlier on the raw signal QRS-locked on >= coupling_min of beats, or a spike-shaped event
+# in >= multilead_min_leads leads at once (second difference > k x p99) QRS-locked on >= 30%.
+pacing:
+  spike_ratio_min: 5.5
+  coupling_min: 0.20
+  multilead_k: 3.0
+  multilead_min_leads: 6
+  multilead_coupling_min: 0.30
