@@ -215,3 +215,13 @@ def test_adult_axis_categories():
                                     intervals=Intervals(qrs_ms=90)))
         axis_codes = codes & {"extreme_axis", "left_axis_deviation", "right_axis_deviation"}
         assert axis_codes == ({code} if code else set()), (deg, axis_codes)
+
+
+def test_axis_beyond_180_in_children_is_right_deviation():
+    # D120: the axis comes in (-180, 180]; -170 deg is 190 deg, right-axis deviation for a
+    # child (normal to 180, extreme beyond 210); -120 deg (240 deg) stays extreme.
+    m = Measurements(heart_rate_bpm=120, axes=Axes(qrs_deg=-170), intervals=Intervals(qrs_ms=60))
+    codes = _ped_codes(m, age_years=5)
+    assert "right_axis_deviation" in codes and "extreme_axis" not in codes
+    m.axes.qrs_deg = -120
+    assert "extreme_axis" in _ped_codes(m, age_years=5)
