@@ -204,3 +204,14 @@ def test_newborn_axis_range_is_wider():
     assert "right_axis_deviation" in _ped_codes(m, age_years=0)
     m.axes.qrs_deg = 200
     assert "right_axis_deviation" in _ped_codes(m, age_days=10)
+
+
+def test_pediatric_peaked_t_limit_is_higher():
+    # D118: T 500 uV, over half the QRS, in 2 leads: peaked for an adult, not for a child.
+    from cardiolens.contracts.features import Morphology
+    t = {"V2": 500.0, "V3": 500.0}
+    q = {"V2": 800.0, "V3": 800.0}
+    m = Measurements(heart_rate_bpm=90, intervals=Intervals(qrs_ms=80),
+                     morphology=Morphology(t_median_beat=t, qrs_extreme_median_beat=q))
+    assert "peaked_t_waves" in _codes(m)
+    assert "peaked_t_waves" not in _ped_codes(m, age_years=8)

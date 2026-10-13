@@ -50,6 +50,14 @@ axis_deg:
   extreme_low: -90
   extreme_high: 210
 
+# Peaked-T finding (D118): children have taller T waves. On ZZU-pECG dev the adult
+# limit (T > 400 uV and > half the largest QRS deflection, >= 2 leads) fired on 12% of
+# normal children; 600 uV fires on 5.8%. The critical hyperkalaemia alert keeps its
+# own tall-T criterion (safety.tall_t_*), unchanged.
+peaked_t:
+  min_uv: 600
+  qrs_ratio: 0.5
+
 voltage_uv:
   low_voltage_limb: 400
 

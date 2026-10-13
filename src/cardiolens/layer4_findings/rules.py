@@ -282,7 +282,7 @@ def detect_findings(
     _t_inversion_findings(m, is_pediatric, fs)
 
     # Peaked T-waves feed the hyperkalemia causal chain.
-    peaked = _peaked_t_leads(m)
+    peaked = _peaked_t_leads(m, norms.get("peaked_t", {}))
     if len(peaked) >= 2 or tall_t_criterion(m.morphology.t_median_beat):
         fs.findings.append(Finding(
             code="peaked_t_waves", group="other",
@@ -804,17 +804,20 @@ def _pediatric_svt(norms, patient, hr: float, p_ratio: float | None) -> bool:
     return p_max is not None and p_ratio is not None and p_ratio < p_max
 
 
-def _peaked_t_leads(m: Measurements) -> list[str]:
+def _peaked_t_leads(m: Measurements, limits: dict | None = None) -> list[str]:
     """Leads with a peaked T on the median beat (D65): T > 400 µV and more than half the
     largest QRS deflection, both against the PR baseline. The per-beat list (whole-lead
     median baseline) is used only when the median beat is unavailable. The finding also
     fires on the D49 tall-T criterion, so the hyperkalaemia alert (which requires the
-    finding) is never lost; this mirrors the default safety thresholds (1000/600 µV)."""
+    finding) is never lost; this mirrors the default safety thresholds (1000/600 µV).
+    Children take a higher T limit from the norm table (``peaked_t``, D118)."""
+    limits = limits or {}
+    min_uv = limits.get("min_uv", _PEAKED_T_UV)
+    ratio = limits.get("qrs_ratio", _PEAKED_T_QRS_RATIO)
     t, q = m.morphology.t_median_beat, m.morphology.qrs_extreme_median_beat
     if not t or not q:
         return list(m.morphology.peaked_t_leads)
-    return [l for l, v in t.items()
-            if l in q and v > _PEAKED_T_UV and v > _PEAKED_T_QRS_RATIO * q[l]]
+    return [l for l, v in t.items() if l in q and v > min_uv and v > ratio * q[l]]
 
 
 def _flat_t_leads(m: Measurements) -> list[str]:

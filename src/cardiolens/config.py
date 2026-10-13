@@ -125,6 +125,15 @@ class QualityConfig(BaseModel):
     la_ra_p_uv: float = 10.0
 
 
+class AVDissociationConfig(BaseModel):
+    """Unlinked atrial activity after median QRS-T subtraction (D117)."""
+    atrial_ventricular_ratio: float = 1.3
+    pp_spread_max: float = 0.2
+    peak_uv_min: float = 120.0
+    peak_noise_min: float = 4.0
+    rr_mad_cv_max: float = 0.05
+
+
 class Versions(BaseModel):
     schema_version: str = Field(alias="schema")
     rules_base: str
@@ -144,6 +153,7 @@ class AppConfig(BaseModel):
     pacing: PacingConfig = PacingConfig()
     quality: QualityConfig = QualityConfig()
     safety: SafetyConfig = SafetyConfig()
+    av_dissociation: AVDissociationConfig = AVDissociationConfig()
 
 
 @functools.lru_cache(maxsize=1)
