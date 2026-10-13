@@ -42,6 +42,11 @@ qtc_ms:
 # pediatric normal QRS-axis range is intentionally wide to avoid over-calling.
 axis_deg:
   qrs_normal: [-30, 180]
+  # Newborns (D114): pECG-Norm, 379 normal 0-30 d, axis p97.5 194 deg; upper 180
+  # flagged 5.8% of normal newborns as right-axis deviation, 195 flags 1.8%.
+  # From 31 days the p97.5 is 112 deg, so the general range stays.
+  qrs_normal_by_age:
+    - { age_days_max: 30, range: [-30, 195] }
   extreme_low: -90
   extreme_high: 210
 

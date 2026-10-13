@@ -339,7 +339,7 @@ def detect_findings(
     # ------------------------------------------------------------------ #
     # Axis deviation (TZ §7.4) and low QRS voltage (TZ §7.5)
     # ------------------------------------------------------------------ #
-    _axis_findings(m, norms, fs)
+    _axis_findings(m, norms, fs, sig.patient)
     _low_voltage_findings(m, norms, fs)
     _atrial_enlargement_findings(m, norms, fs)
 
@@ -524,11 +524,19 @@ def _atrial_enlargement_findings(m: Measurements, norms, fs: FindingSet) -> None
         ))
 
 
-def _axis_findings(m: Measurements, norms, fs: FindingSet) -> None:
-    """QRS-axis deviation (TZ §7.4)."""
+def _axis_findings(m: Measurements, norms, fs: FindingSet, patient=None) -> None:
+    """QRS-axis deviation (TZ §7.4); newborns have their own normal range (D114)."""
     axis = m.axes.qrs_deg
     ad = norms.get("axis_deg", {})
     rng = ad.get("qrs_normal")
+    age_days = getattr(patient, "age_days", None)
+    if age_days is None and getattr(patient, "age_years", None):
+        # age_years 0 only says "under a year", not "newborn", so it keeps the general range
+        age_days = patient.age_years * 365.25
+    for band in ad.get("qrs_normal_by_age", []):
+        if age_days is not None and age_days <= band["age_days_max"]:
+            rng = band["range"]
+            break
     if axis is None or not rng:
         return
     lo, hi = rng

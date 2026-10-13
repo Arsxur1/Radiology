@@ -188,3 +188,19 @@ def test_severe_bradycardia_alert_uses_the_pals_limit_under_one_year():
     unknown = [a.code for a in scan_critical(FindingSet(), m).alerts]
     assert "severe_bradycardia" in infant
     assert "severe_bradycardia" not in adult and "severe_bradycardia" not in unknown
+
+
+def _ped_codes(m, **age):
+    sig = _sig()
+    sig.patient = Patient(sex="male", **age)
+    return detect_findings(sig, m, norms=load_norms("pediatric"), la_ra_reversed=False).codes()
+
+
+def test_newborn_axis_range_is_wider():
+    # D114: axis 190 is normal for a newborn (p97.5 194) but right-axis deviation at 2 months.
+    m = Measurements(heart_rate_bpm=140, axes=Axes(qrs_deg=190), intervals=Intervals(qrs_ms=60))
+    assert "right_axis_deviation" not in _ped_codes(m, age_days=10)
+    assert "right_axis_deviation" in _ped_codes(m, age_days=60)
+    assert "right_axis_deviation" in _ped_codes(m, age_years=0)
+    m.axes.qrs_deg = 200
+    assert "right_axis_deviation" in _ped_codes(m, age_days=10)
