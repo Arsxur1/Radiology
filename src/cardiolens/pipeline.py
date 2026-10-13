@@ -27,7 +27,6 @@ from cardiolens.arrhythmia.atrial import (
     p_window_amplitude,
     pre_qrs_consistency,
 )
-from cardiolens.arrhythmia.av_dissociation import av_dissociation
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
     AppConfig,
@@ -206,7 +205,6 @@ def run_pipeline(
     _check_sinus_p_waves(findings, sig, m, audit)
     _af_atrial_evidence(findings, sig, m, audit, pediatric=norms.get("age_group") == "pediatric")
     _la_ra_reversal(findings, m, la_ra_reversed, cfg.quality.la_ra_p_uv, audit)
-    _av_dissociation(findings, sig, m, cfg, audit)
     # Signal-organization gate (§5) — runs AFTER all finding emission. If the QRS
     # complexes are not self-consistent, the R-peaks (hence HR, intervals, rhythm)
     # are unreliable, so withhold every R-peak-derived finding and report the poor
@@ -467,32 +465,6 @@ def _pvc_explains_irregularity(r_peaks, pvc_idx) -> tuple[bool, str]:
     mad_cv = 1.4826 * float(np.median(np.abs(clean - med))) / med
     explained = not (cv >= _AFIB_RR_CV_MIN and mad_cv >= _AFIB_RR_MAD_CV_MIN)
     return explained, f"clean CV {cv:.2f}, MAD-CV {mad_cv:.2f}"
-
-
-def _av_dissociation(findings: FindingSet, sig, m, cfg, audit: list[str]) -> None:
-    """Hedged AV dissociation finding (D117); paced rhythm has no native AV relation."""
-    if findings.by_code("paced_rhythm") is not None or not m.r_peaks_samples:
-        return
-    hit = av_dissociation(sig, m.r_peaks_samples, m.heart_rate_bpm, m.rr_mad_cv,
-                          cfg.av_dissociation)
-    if hit is None:
-        return
-    lead, f = hit
-    rate = round(f["atrial_rate"])
-    findings.findings.append(Finding(
-        code="av_dissociation", group="rhythm",
-        label_ru=f"Подозрение на АВ-диссоциацию: зубцы P ({rate}/мин, {lead}) не связаны с QRS "
-                 f"(ЧСС {m.heart_rate_bpm}/мин) — исключить полную АВ-блокаду",
-        label_uz=f"AV dissotsiatsiya shubhasi: P to'lqinlari ({rate}/daq, {lead}) QRS bilan "
-                 f"bog'liq emas (YUT {m.heart_rate_bpm}/daq) — to'liq AV blokadani istisno qilish",
-        evidence=[Evidence(feature="lead", value=lead),
-                  Evidence(feature="atrial_rate_bpm", value=str(rate)),
-                  Evidence(feature="residual_p_uv", value=f"{f['peak_uv']:.0f}"),
-                  Evidence(feature="pp_spread", value=f"{f['pp_spread']:.3f}"),
-                  Evidence(feature="rr_mad_cv", value=str(m.rr_mad_cv))],
-        confidence=0.5))
-    audit.append(f"[L4] AV dissociation: lead {lead}, atrial {rate}/min vs ventricular "
-                 f"{m.heart_rate_bpm}/min, residual P {f['peak_uv']:.0f} uV")
 
 
 _NO_P_CODES = ("atrial_fibrillation", "atrial_flutter", "paced_rhythm", "rhythm_without_p_waves")
