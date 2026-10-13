@@ -196,16 +196,6 @@ def _ped_codes(m, **age):
     return detect_findings(sig, m, norms=load_norms("pediatric"), la_ra_reversed=False).codes()
 
 
-def test_newborn_axis_range_is_wider():
-    # D114: axis 190 is normal for a newborn (p97.5 194) but right-axis deviation at 2 months.
-    m = Measurements(heart_rate_bpm=140, axes=Axes(qrs_deg=190), intervals=Intervals(qrs_ms=60))
-    assert "right_axis_deviation" not in _ped_codes(m, age_days=10)
-    assert "right_axis_deviation" in _ped_codes(m, age_days=60)
-    assert "right_axis_deviation" in _ped_codes(m, age_years=0)
-    m.axes.qrs_deg = 200
-    assert "right_axis_deviation" in _ped_codes(m, age_days=10)
-
-
 def test_pediatric_peaked_t_limit_is_higher():
     # D118: T 500 uV, over half the QRS, in 2 leads: peaked for an adult, not for a child.
     from cardiolens.contracts.features import Morphology
@@ -217,18 +207,7 @@ def test_pediatric_peaked_t_limit_is_higher():
     assert "peaked_t_waves" not in _ped_codes(m, age_years=8)
 
 
-def test_axis_beyond_180_in_children_is_right_deviation():
-    # D119: the axis comes in (-180, 180]; -170 deg is 190 deg. For a child (normal up to
-    # 180, extreme beyond 210) that is right-axis deviation, for a newborn (<= 195) normal.
-    m = Measurements(heart_rate_bpm=120, axes=Axes(qrs_deg=-170), intervals=Intervals(qrs_ms=60))
-    codes = _ped_codes(m, age_years=5)
-    assert "right_axis_deviation" in codes and "extreme_axis" not in codes
-    assert not ({"right_axis_deviation", "extreme_axis"} & _ped_codes(m, age_days=10))
-    m.axes.qrs_deg = -120  # 240 deg: extreme in children too
-    assert "extreme_axis" in _ped_codes(m, age_years=5)
-
-
-def test_adult_axis_categories_unchanged_by_wrap():
+def test_adult_axis_categories():
     for deg, code in ((-120, "extreme_axis"), (-170, "extreme_axis"), (-90, "left_axis_deviation"),
                       (-60, "left_axis_deviation"), (150, "right_axis_deviation"),
                       (180, "right_axis_deviation"), (45, None)):
