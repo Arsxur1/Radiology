@@ -613,8 +613,13 @@ def _conduction_findings(m: Measurements, norms, fs: FindingSet, is_pediatric: b
     # RBBB morphology (terminal R in V1, QRS >= 130 ms) goes to the bundle-branch rule:
     # without this, D59 hid 2 RBBB on each held-out set (D60).
     rbbb_like = m.qrs_v1_terminal_positive is True and iv.qrs_ms >= _WPW_RBBB_QRS_MS
-    if (ratio is not None and iv.pr_ms is not None and iv.pr_ms < _WPW_PR_MAX_MS
-            and ratio < _DELTA_RATIO_MAX and not rbbb_like):
+    # Children (D122): a normal child's upstroke is brisker (delta ratio p1 0.35 on ZZU dev
+    # normals), so the pediatric table loosens both limits.
+    wpw = norms.get("wpw", {})
+    pr_max = wpw.get("pr_max_ms", _WPW_PR_MAX_MS)
+    delta_max = wpw.get("delta_ratio_max", _DELTA_RATIO_MAX)
+    if (ratio is not None and iv.pr_ms is not None and iv.pr_ms < pr_max
+            and ratio < delta_max and not rbbb_like):
         fs.findings.append(Finding(
             code="wpw_preexcitation", group="interval",
             label_ru=f"Преэкзитация (WPW): короткий PR {iv.pr_ms} мс + дельта-волна "

@@ -53,6 +53,13 @@ peaked_t:
   min_uv: 600
   qrs_ratio: 0.5
 
+# Pre-excitation (D122): short PR + slurred QRS upstroke (D59 adult limits PR < 130 ms,
+# delta ratio < 0.22). ZZU-pECG dev: normal children delta ratio p1 0.35, WPW median 0.26;
+# PR < 140 and ratio < 0.30 find 37/77 WPW (adult limits 26/77) at 3/1240 normals.
+wpw:
+  pr_max_ms: 140
+  delta_ratio_max: 0.30
+
 voltage_uv:
   low_voltage_limb: 400
 

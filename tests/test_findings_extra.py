@@ -225,3 +225,11 @@ def test_axis_beyond_180_in_children_is_right_deviation():
     assert "right_axis_deviation" in codes and "extreme_axis" not in codes
     m.axes.qrs_deg = -120
     assert "extreme_axis" in _ped_codes(m, age_years=5)
+
+
+def test_pediatric_wpw_limits_are_wider():
+    # D122: PR 135 ms and delta ratio 0.27 is pre-excitation for a child, not for an adult.
+    m = Measurements(heart_rate_bpm=90, intervals=Intervals(qrs_ms=100, pr_ms=135),
+                     qrs_initial_energy_ratio=0.27)
+    assert "wpw_preexcitation" not in _codes(m)
+    assert "wpw_preexcitation" in _ped_codes(m, age_years=10)
