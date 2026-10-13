@@ -215,3 +215,24 @@ def test_pediatric_peaked_t_limit_is_higher():
                      morphology=Morphology(t_median_beat=t, qrs_extreme_median_beat=q))
     assert "peaked_t_waves" in _codes(m)
     assert "peaked_t_waves" not in _ped_codes(m, age_years=8)
+
+
+def test_axis_beyond_180_in_children_is_right_deviation():
+    # D119: the axis comes in (-180, 180]; -170 deg is 190 deg. For a child (normal up to
+    # 180, extreme beyond 210) that is right-axis deviation, for a newborn (<= 195) normal.
+    m = Measurements(heart_rate_bpm=120, axes=Axes(qrs_deg=-170), intervals=Intervals(qrs_ms=60))
+    codes = _ped_codes(m, age_years=5)
+    assert "right_axis_deviation" in codes and "extreme_axis" not in codes
+    assert not ({"right_axis_deviation", "extreme_axis"} & _ped_codes(m, age_days=10))
+    m.axes.qrs_deg = -120  # 240 deg: extreme in children too
+    assert "extreme_axis" in _ped_codes(m, age_years=5)
+
+
+def test_adult_axis_categories_unchanged_by_wrap():
+    for deg, code in ((-120, "extreme_axis"), (-170, "extreme_axis"), (-90, "left_axis_deviation"),
+                      (-60, "left_axis_deviation"), (150, "right_axis_deviation"),
+                      (180, "right_axis_deviation"), (45, None)):
+        codes = _codes(Measurements(heart_rate_bpm=70, axes=Axes(qrs_deg=deg),
+                                    intervals=Intervals(qrs_ms=90)))
+        axis_codes = codes & {"extreme_axis", "left_axis_deviation", "right_axis_deviation"}
+        assert axis_codes == ({code} if code else set()), (deg, axis_codes)
