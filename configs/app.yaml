@@ -1,0 +1,53 @@
+# CardioLens application configuration.
+# Nothing algorithmic is hard-coded in the source; runtime behaviour is driven
+# from this file (TZ §0: "Ничего не хардкодь, где нужны конфиги").
+
+# Operating mode (TZ §2).
+#   A = decision support (default, safe). B = autonomous (gated).
+mode: "A"
+
+# Mains interference to reject (TZ §5). 50 Hz for Uzbekistan; 60 for US grid.
+mains_frequency_hz: 50
+
+preprocessing:
+  target_sampling_rate_hz: 500
+  bandpass_low_hz: 0.5      # baseline-wander removal
+  bandpass_high_hz: 40.0    # keep ST intact, remove HF noise
+  # Signal Quality Index below this marks a lead as low-quality (0..1).
+  sqi_accept_threshold: 0.5
+
+# Layer-6 narrative provider (TZ §12). The core (Layers 1-5) is always offline.
+#   auto   = Claude if ANTHROPIC_API_KEY is set, else a local OpenAI-compatible server
+#            if one answers at local_base_url, else the deterministic stub.
+#   claude | local | stub = force one provider (local falls back to stub on error).
+llm:
+  provider: "auto"
+  local_base_url: "http://127.0.0.1:11434/v1"   # Ollama / llama.cpp / vLLM / LM Studio
+  local_model: "llama3.1:8b"
+  timeout_s: 120
+
+# Learnable layer (TZ §17 v2): a gradient-boosted model over Layer-3 measurements
+# adds evidence to rule findings and non-critical "model suggests" findings for
+# classes it proved precise on. Trained with `python -m cardiolens.ml.train`; the
+# artifact is not committed (rules-only when absent). The safety layer never
+# consumes it.
+ml:
+  enabled: true
+  model_path: "configs/models/rhythm_hgb.joblib"
+
+# Confidence gating for autonomous mode B (TZ §2, §16).
+confidence:
+  # Autonomous report is emitted only if overall confidence >= this.
+  autonomous_min_overall: 0.85
+  # Per-finding confidence floor for autonomous mode.
+  autonomous_min_component: 0.70
+
+# Disclaimers surfaced in every report (TZ §2, §10).
+disclaimers:
+  ru: "Инструмент поддержки принятия решений. Не заменяет врача."
+  uz: "Qaror qabul qilishni qo'llab-quvvatlash vositasi. Shifokor o'rnini bosmaydi."
+
+# Versioning for traceability / regulator-readiness (TZ §1, §11).
+versions:
+  schema: "0.1.0"
+  rules_base: "pathophysiology-0.1.0"

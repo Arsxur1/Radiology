@@ -1,0 +1,59 @@
+# CardioLens: local LLM + web UI with one command (TZ §12, §14).
+#
+#   docker compose up                       # http://localhost:8000  (first run pulls the model)
+#   CARDIOLENS_LLM_MODEL=qwen2.5:7b docker compose up
+#
+# Three services: `ollama` (the model server, weights kept in the `ollama`
+# volume), `ollama-pull` (one-shot: downloads the model once), `cardiolens`
+# (the API + UI, pointed at the Ollama container). Nothing talks to the
+# internet except the one-off model download.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    # NVIDIA GPU (needs the NVIDIA container toolkit) — uncomment:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: ["gpu"]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${CARDIOLENS_LLM_MODEL:-llama3.1:8b}"]
+    restart: "no"
+
+  cardiolens:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      CARDIOLENS_LLM_PROVIDER: auto            # Claude key -> local -> stub
+      CARDIOLENS_LLM_BASE_URL: http://ollama:11434/v1
+      CARDIOLENS_LLM_MODEL: ${CARDIOLENS_LLM_MODEL:-llama3.1:8b}
+      CARDIOLENS_LLM_TIMEOUT_S: "180"
+      CARDIOLENS_FEEDBACK_PATH: /data/feedback/feedback.jsonl
+    volumes:
+      - feedback:/data/feedback
+    ports:
+      - "8000:8000"
+
+volumes:
+  ollama:
+  feedback:

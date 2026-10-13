@@ -1,0 +1,176 @@
+# Pediatric ECG reference norms (TZ §6, Rijnbeek/Davignon style).
+# Age-dependent — adult models transfer poorly to children (TZ §15).
+# Simplified age bands for MVP; expand per Davignon tables in later increments.
+age_group: "pediatric"
+applies_when:
+  age_years_max: 15
+
+# Heart-rate norms are strongly age-dependent (bpm).
+heart_rate_bpm_by_age:
+  - { age_days_max: 30, range: [90, 180] }        # neonate
+  - { age_years_max: 1, range: [100, 170] }        # infant
+  - { age_years_max: 3, range: [90, 150] }
+  - { age_years_max: 8, range: [70, 120] }
+  - { age_years_max: 15, range: [60, 110] }
+
+rhythm:
+  atrial_flutter_bpm: [200, 350]
+  # Atrial fibrillation gates: RR coefficient of variation above, and fraction of
+  # beats with an organised P below. Chosen on the train half of 964 PhysioNet
+  # ecg-arrhythmia records with a specificity floor and confirmed on the test half
+  # and PTB-XL (AF-or-flutter family: spec >= 0.92 everywhere, sensitivity
+  # 0.50 -> 0.62 on PTB-XL). The old (0.15, 0.30) was tuned on 300 records.
+  af_rr_cv_min: 0.10
+  af_p_ratio_max: 0.5
+  # Conducted P: refined P onset on >= 50 % of beats with beat-to-beat PR SD below
+  # this excludes AF (same physiology as the AV-dissociation gate, D26/D28).
+  af_pr_std_max_ms: 40
+  # Fibrillatory-wave route (D58): an irregular rhythm (RR CV above af_rr_cv_min)
+  # whose QRS-blanked residual has a 4-9 Hz / 0.5-4 Hz band-power index at or
+  # above this is AF even when the amplitude P gate sees "organised P" (coarse
+  # f-waves). Chosen on PTB-XL (123 AF): 0.537 -> 0.626 at spec 0.969 -> 0.958;
+  # ecg-arrhythmia halves +2 AF on one half, no new false alarm on either.
+  af_fwave_index_min: 0.45
+
+intervals_ms:
+  pr: [90, 170]        # shorter than adult (fallback when no band matches)
+  qrs: [50, 90]
+  qt: [300, 440]
+  # A bundle branch block is called from this width, not from the band's upper
+  # normal: the 9-15 y upper normal (~100 ms) is far below the adult BBB
+  # threshold and read 13 % of teenagers as LBBB (D44).
+  qrs_bbb: 110
+  # LBBB typing (D50): a wide QRS with a negative V1 is LBBB only when it is
+  # definitely wide, or wide with a late intrinsicoid deflection in V5/V6
+  # (ms). Narrower "wide" complexes with an early deflection are non-specific —
+  # on acute STEMI the ST take-off merges with the QRS end and the envelope
+  # over-reads the width by ~20 ms.
+  qrs_lbbb_definite: 120   # children: 110 is already a block, 120 is definitely wide
+  lbbb_intrinsicoid: 60
+
+# Upper normals by age band (98th percentiles; QRS from the 1838-record
+# ecg-arrhythmia pediatric cohort with this envelope measurement, PR/QT from
+# Davignon/Rijnbeek as reproduced in pediatric references, rounded). Band = first
+# entry whose age limit the patient is under.
+intervals_ms_by_age:
+  - { age_days_max: 30,  pr: [70, 140], qrs: [40, 80],  qt: [250, 400] }
+  - { age_years_max: 1,  pr: [70, 150], qrs: [40, 80],  qt: [250, 400] }
+  - { age_years_max: 3,  pr: [80, 150], qrs: [45, 85],  qt: [270, 420] }
+  - { age_years_max: 8,  pr: [90, 170], qrs: [50, 100], qt: [290, 430] }
+  - { age_years_max: 15, pr: [90, 180], qrs: [55, 105], qt: [300, 440] }
+
+qtc_ms:
+  formula: fridericia
+  upper: 460
+  # 2nd percentile of Fridericia QTc in the pediatric cohort is 321-329 ms; the
+  # adult 340 flagged 12 % of 4-8-year-olds as short QT (D44).
+  short_lower: 320
+  # Wide-QRS adjustment of the long-QT rule (Bogossian), as in the adult table (D60).
+  wide_qrs_ms: 120
+  wide_qrs_qt_fraction: 0.485
+
+# Peaked T of hyperkalaemia (D61). Children carry tall precordial T waves as a
+# normal finding (V2-V4 up to 1-1.5 mV in school age), so the amplitude floor is
+# higher than the adult one; the shape criteria are the same. Set from the
+# references' upper limits, prevalence checked on the 1591-child cohort — not a
+# validated pediatric hyperkalaemia criterion (no labelled pediatric cases).
+t_wave:
+  peaked_min_uv_precordial: 1500
+  peaked_min_uv_limb: 700
+  peaked_t_qrs_ratio: 0.75
+  peaked_half_width_ms: [40, 110]
+  peaked_asymmetry: [0.6, 1.6]
+  peaked_min_leads: 2
+
+# Right-axis deviation is a normal variant in neonates/infants (TZ §6). The
+# fallback range (no age) stays wide; the normal range by age band is the
+# 98th percentile of the QRS axis in the pediatric reference tables
+# (Davignon 1979/80, Rijnbeek 2001), rounded to 5°: ≈ +105° from 3 y on, higher
+# in infants and up to ~190° in the first month. On the ecg-arrhythmia pediatric
+# cohort (D53) the children labelled "right axis deviation" measure 88–176°
+# (median 97–110°): with 105° the label scores 15/22 at spec 0.95 (4–8 y) and
+# 6/15 at spec 0.96 (9–15 y) on train and test halves alike; the misses sit at
+# 88–101° — the chart label uses the adult +90° criterion — or are northwest
+# axes (reported as extreme_axis). The 2nd percentiles are near −10…−20° for
+# school ages; the lower bound is kept at the LAD threshold used so far.
+axis_deg:
+  qrs_normal: [-30, 180]
+  extreme_low: -90
+  extreme_high: 210
+axis_deg_by_age:
+  - { age_days_max: 30,  qrs_normal: [30, 190] }
+  - { age_years_max: 1,  qrs_normal: [10, 125] }
+  - { age_years_max: 3,  qrs_normal: [0, 115] }
+  - { age_years_max: 8,  qrs_normal: [-30, 105] }
+  - { age_years_max: 15, qrs_normal: [-30, 105] }
+
+voltage_uv:
+  low_voltage_limb: 400
+  # Age-band 98th-percentile QRS voltages (µV) after Davignon et al. 1979/80 as
+  # reproduced in pediatric ECG references (Park), rounded to the bands used here —
+  # APPROXIMATE transcriptions, not a re-derivation. Adult LVH voltage criteria are
+  # not applied to children: a tall R is normal. LVH = RV6 or SV1 above the band's
+  # 98th percentile with a supporting sign (strain / left axis) or both voltages;
+  # RVH = RV1 and SV6 both above, or one with right axis deviation.
+  pediatric_98th_by_age:
+    - { label: "neonate <=30 d", age_days_max: 30,  r_v1: 2400, s_v1: 2000, r_v6: 1400, s_v6: 1000 }
+    - { label: "infant <=1 y",  age_years_max: 1,  r_v1: 2000, s_v1: 1800, r_v6: 2200, s_v6: 900 }
+    - { label: "1-3 y",         age_years_max: 3,  r_v1: 1800, s_v1: 2100, r_v6: 2300, s_v6: 700 }
+    - { label: "3-8 y",         age_years_max: 8,  r_v1: 1600, s_v1: 2300, r_v6: 2600, s_v6: 500 }
+    - { label: "8-15 y",        age_years_max: 15, r_v1: 1100, s_v1: 2500, r_v6: 2400, s_v6: 400 }
+
+st_uv:
+  # Same J-point/plateau logic as adults. STEMI-alert thresholds (D66) sit above
+  # the 98th-99th percentile of the J point in 1591 children aged 4-15 (half A of
+  # a hash split; p98 / p99): V2-V3 184 / 221 µV, V4 167 / 182, inferior 83 / 97,
+  # lateral 83 / 108. The adult 100 µV fired on 34 children (2 %), almost all
+  # adolescent boys with the concave, upsloping early-repolarisation ST of V2-V4
+  # (J 162 µV median, J+60 253, J/T 0.22). Checked on half B: false alerts
+  # 17 -> 5 with these thresholds, -> 4 with the early-repolarisation gate below.
+  elevation_significant: 150
+  elevation_v2_v3: { male_under_40: 250, male: 250, female: 250 }
+  elevation_v4: 200
+  elevation_plateau_fraction: 0.8
+  # Early repolarisation (D66): a lead whose elevation is small next to its own T
+  # wave (J / T <= this) and upsloping (J+60 >= J) is a juvenile normal variant,
+  # reported as `early_repolarisation`, not as the alert. Absent in the adult table.
+  early_repolarisation_j_t_ratio_max: 0.25
+  # Neutral descriptor st_elevation_any: flat 1 mm in any lead (J and J+60), no
+  # sex/age V2-V3 thresholds; under BBB/LVH/WPW a discordant lead counts only from
+  # any_elevation_discordant_uv (Sgarbossa-like). Chosen on PTB-XL STE_ (28) and
+  # ecg-arrhythmia "ST tilt up" (58): sens 0.18 -> 0.61 and 0.81 -> 0.83 at the
+  # same specificity (0.80 / 0.82) — see D37.
+  any_elevation_uv: 100
+  any_elevation_discordant_uv: 200
+  # Proportional (Smith-modified Sgarbossa / Armstrong) rescue of DISCORDANT
+  # elevation under LBBB / LVH / pre-excitation for the STEMI-grade alert: a lead
+  # whose J-point elevation is at least proportional_discordant_ratio of its own
+  # S-wave depth (and >= proportional_discordant_min_uv with the usual J+60
+  # plateau) counts as primary elevation. On PTB-XL+ 12SL-STEMI under an
+  # LVH/LBBB context it rescues 10 of 45 misses at 0 false alerts on 148 normals
+  # (3 plain-LBBB false fires among 352 context records); CPSC 9 of 37 at 0 false;
+  # PTBDB 1 of 6 (D54).
+  proportional_discordant_ratio: 0.25
+  proportional_discordant_min_uv: 100
+  depression_significant: 100
+  depression_upsloping_uv: 50
+  # Juvenile pattern (D68): in children the ST segment slopes down into the
+  # inverted T of V1-V4 (and often III) — 96 false "ST depression" calls in 1580
+  # children, 85 of them in sinus tachycardia, leads V1 (66) and III (39), T
+  # inverted in the same lead. A lead whose T is inverted and whose ST descends
+  # into it (J+80 below J+60 by this margin) is the T wave's limb, not depression.
+  depression_into_inverted_t_margin_uv: 25
+
+# Clinically important pediatric caveat (TZ §7.2):
+# T-wave inversion in V1-V4 is NORMAL in children ("juvenile T-wave pattern").
+normal_variants:
+  juvenile_t_inversion_leads: ["V1", "V2", "V3", "V4"]
+
+# Pre-excitation by delta wave (D51): median over leads of the time from QRS
+# onset to half the maximal QRS slope; PTB-XL WPW 54 ms (p10-p90 26-88) vs 24 ms
+# (18-35) otherwise. Rule: delta_ms >= delta_ms and PR <= pr_max and QRS >= qrs_min.
+wpw:
+  delta_ms: 45
+  pr_max: 140
+  qrs_min: 90
+  classic_delta_ms: 40   # as in the adult table (D65)

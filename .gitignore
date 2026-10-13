@@ -1,0 +1,38 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+# Runtime output dir at repo root only — must NOT match src/cardiolens/outputs/
+/outputs/
+data/feedback/
+# Licensed PhysioNet datasets (downloaded locally for validation, never committed)
+data/ecg-arrhythmia/
+data/ecg-arrhythmia-balanced/
+data/ecg-arrhythmia-train/
+data/ptbxl/
+data/ptbdb/
+data/ecg-arrhythmia-pediatric/
+configs/calibrator.json
+*.pdf
+!docs/**/*.pdf
+.DS_Store
+# Trained learnable-layer artifacts (7 MB; reproducible with python -m cardiolens.ml.train)
+configs/models/*.joblib
+data/ptbxl-plus/
+data/cpsc2018/
+data/ptbxl-extra/
+data/cpsc2018-toddlers/
+data/ptbxl-toddlers/
+data/ludb/
+data/mimic-iv-ecg/
+data/georgia/
+# Telegram collector: photos, signals, session file, dataset (never committed)
+data/telegram/
+# scripts/run_local.sh: background Ollama log
+.ollama-serve.log

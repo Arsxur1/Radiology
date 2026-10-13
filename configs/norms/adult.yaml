@@ -1,0 +1,145 @@
+# Adult ECG reference norms (TZ §6 "движок норм по возрасту/полу").
+# Values are intentionally editable config, not code constants.
+# Ranges are [low, high]; durations in milliseconds, rates in bpm.
+age_group: "adult"
+applies_when:
+  age_years_min: 16
+
+heart_rate_bpm: [60, 100]
+
+rhythm:
+  # Regular atrial (F-wave) rate band for atrial flutter (bpm).
+  atrial_flutter_bpm: [200, 350]
+  # Atrial fibrillation gates: RR coefficient of variation above, and fraction of
+  # beats with an organised P below. Chosen on the train half of 964 PhysioNet
+  # ecg-arrhythmia records with a specificity floor and confirmed on the test half
+  # and PTB-XL (AF-or-flutter family: spec >= 0.92 everywhere, sensitivity
+  # 0.50 -> 0.62 on PTB-XL). The old (0.15, 0.30) was tuned on 300 records.
+  af_rr_cv_min: 0.10
+  af_p_ratio_max: 0.5
+  # Conducted P: refined P onset on >= 50 % of beats with beat-to-beat PR SD below
+  # this excludes AF (same physiology as the AV-dissociation gate, D26/D28).
+  af_pr_std_max_ms: 40
+  # Fibrillatory-wave route (D58): an irregular rhythm (RR CV above af_rr_cv_min)
+  # whose QRS-blanked residual has a 4-9 Hz / 0.5-4 Hz band-power index at or
+  # above this is AF even when the amplitude P gate sees "organised P" (coarse
+  # f-waves). Chosen on PTB-XL (123 AF): 0.537 -> 0.626 at spec 0.969 -> 0.958;
+  # ecg-arrhythmia halves +2 AF on one half, no new false alarm on either.
+  af_fwave_index_min: 0.45
+
+intervals_ms:
+  pr: [120, 200]
+  qrs: [70, 110]
+  qt: [350, 450]
+  # QTc thresholds are sex-specific below.
+  # LBBB typing (D50): a wide QRS with a negative V1 is LBBB only when it is
+  # definitely wide, or wide with a late intrinsicoid deflection in V5/V6
+  # (ms). Narrower "wide" complexes with an early deflection are non-specific —
+  # on acute STEMI the ST take-off merges with the QRS end and the envelope
+  # over-reads the width by ~20 ms.
+  qrs_lbbb_definite: 135
+  lbbb_intrinsicoid: 60
+
+qtc_ms:
+  # Correction formula used by the long/short-QT rules (bazett | fridericia |
+  # framingham). Fridericia by default: Bazett over-corrects at fast rates.
+  formula: fridericia
+  male_upper: 450
+  female_upper: 460
+  short_lower: 350
+  # Under a wide QRS (>= wide_qrs_ms, or a bundle branch block) the long-QT rule
+  # judges QT - wide_qrs_qt_fraction x QRS (Bogossian 2014): two thirds of the
+  # long-QT false calls on the 664 set carried a QRS >= 120 ms (D60).
+  wide_qrs_ms: 120
+  wide_qrs_qt_fraction: 0.485
+
+# Peaked ("tented") T of hyperkalaemia (D61): tall AND narrow AND symmetric, in
+# >= 2 leads. Amplitude alone is not specific — the 90th percentile of the
+# tallest precordial T in the 664 set is 1.45 mV. Half-width and asymmetry are
+# measured on the median beat; a deflection under 40 ms wide is not a T wave.
+# Prevalence of the pattern with these values: 0.9 % of the 664 set, 0.4 % of
+# PTB-XL (the old amplitude rule: 21 % and 14 %).
+t_wave:
+  peaked_min_uv_precordial: 1000
+  peaked_min_uv_limb: 500
+  peaked_t_qrs_ratio: 0.75
+  peaked_half_width_ms: [40, 110]
+  peaked_asymmetry: [0.6, 1.6]
+  peaked_min_leads: 2
+
+axis_deg:
+  qrs_normal: [-30, 90]
+  extreme_low: -90      # below this = extreme/northwest axis
+  extreme_high: 180
+
+voltage_uv:
+  # LVH voltage criteria (Sokolow-Lyon: SV1 + RV5/RV6), microvolts.
+  sokolow_lyon_lvh: 3500
+  # Cornell voltage: RaVL + SV3 above this (µV), sex-specific (Casale 1987).
+  cornell_lvh_male: 2800
+  cornell_lvh_female: 2000
+  # Romhilt-Estes point score (1968): >= lvh_points -> `lvh_probable` when neither
+  # voltage criterion fires (never the main `lvh` code alone, D39).
+  # voltage 3 pts (any limb R/S >= voltage_uv, or SV1/SV2 or RV5/RV6 >= 1.5 x that),
+  # strain 3 (T inversion AND >= strain_depression_uv ST depression in V5/V6),
+  # left atrial abnormality 3 (terminal P force V1 >= p_terminal_v1_uv_ms; 4000 =
+  # the textbook 1 mm x 40 ms fired on 22 % of PTB-XL non-LVH records with this
+  # measurement, 6000 keeps it at ~6 %), left axis deviation 2, QRS >= qrs_ms 1,
+  # intrinsicoid deflection V5/V6 >= 50 ms 1.
+  romhilt_estes:
+    lvh_points: 5
+    voltage_uv: 2000
+    strain_depression_uv: 100
+    p_terminal_v1_uv_ms: 6000
+    qrs_ms: 90
+    intrinsicoid_ms: 50
+  # Low QRS voltage: limb-lead QRS peak-to-peak below this (µV).
+  low_voltage_limb: 500
+
+st_uv:
+  # ST deviation thresholds (µV). Elevation is judged at the J point (STEMI
+  # definition) and must persist at J+60 (elevation_plateau_fraction of the
+  # threshold) — an S-wave tail or T-wave encroachment fails that. V2-V3 use the
+  # sex/age-specific STEMI thresholds (ESC/ACC: 2 mm men >=40, 2.5 mm men <40,
+  # 1.5 mm women). Depression is judged at J+60 and J+80 (horizontal/downsloping);
+  # upsloping depression (J+80 rising by depression_upsloping_uv over J+60) is not
+  # called.
+  elevation_significant: 100
+  elevation_v2_v3: { male_under_40: 250, male: 200, female: 150 }
+  elevation_plateau_fraction: 0.8
+  # Neutral descriptor st_elevation_any: flat 1 mm in any lead (J and J+60), no
+  # sex/age V2-V3 thresholds; under BBB/LVH/WPW a discordant lead counts only from
+  # any_elevation_discordant_uv (Sgarbossa-like). Chosen on PTB-XL STE_ (28) and
+  # ecg-arrhythmia "ST tilt up" (58): sens 0.18 -> 0.61 and 0.81 -> 0.83 at the
+  # same specificity (0.80 / 0.82) — see D37.
+  any_elevation_uv: 100
+  any_elevation_discordant_uv: 200
+  # Proportional (Smith-modified Sgarbossa / Armstrong) rescue of DISCORDANT
+  # elevation under LBBB / LVH / pre-excitation for the STEMI-grade alert: a lead
+  # whose J-point elevation is at least proportional_discordant_ratio of its own
+  # S-wave depth (and >= proportional_discordant_min_uv with the usual J+60
+  # plateau) counts as primary elevation. On PTB-XL+ 12SL-STEMI under an
+  # LVH/LBBB context it rescues 10 of 45 misses at 0 false alerts on 148 normals
+  # (3 plain-LBBB false fires among 352 context records); CPSC 9 of 37 at 0 false;
+  # PTBDB 1 of 6 (D54).
+  proportional_discordant_ratio: 0.25
+  proportional_discordant_min_uv: 100
+  depression_significant: 100
+  depression_upsloping_uv: 50
+
+# P-wave criteria for atrial enlargement (ecglibrary / 150 ECG Problems).
+p_wave:
+  duration_upper_ms: 120       # > 120 ms -> left atrial enlargement (P-mitrale)
+  amplitude_upper_uv: 250      # > 250 µV in lead II -> right atrial enlargement (P-pulmonale)
+
+# Pre-excitation by delta wave (D51): median over leads of the time from QRS
+# onset to half the maximal QRS slope; PTB-XL WPW 54 ms (p10-p90 26-88) vs 24 ms
+# (18-35) otherwise. Rule: delta_ms >= delta_ms and PR <= pr_max and QRS >= qrs_min.
+wpw:
+  delta_ms: 45
+  pr_max: 140
+  qrs_min: 90
+  # The classic route (short PR + wide QRS) also needs a slurred upstroke of at
+  # least this (D65): without it the route fired on bundle branch blocks with a
+  # PR of 100-118 ms (PTB-XL 28 true / 28 false; MIMIC 52 false).
+  classic_delta_ms: 40

@@ -1,0 +1,107 @@
+"""Validation runner (TZ §16).
+
+    python -m cardiolens.validate                        # synthetic labelled dataset
+    python -m cardiolens.validate --ptbxl <root>         # real PTB-XL (local checkout)
+    python -m cardiolens.validate --ecg-arrhythmia <root>  # Chapman/Ningbo (local checkout)
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+
+from cardiolens.validation import (
+    build_ecg_arrhythmia_dataset,
+    build_ludb_dataset,
+    build_mimic_dataset,
+    build_ptbdb_dataset,
+    build_ptbxl_dataset,
+    build_synthetic_dataset,
+    filter_by_age,
+    ptbdb_report_lines,
+    risk_report_lines,
+    run_validation,
+)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="CardioLens validation")
+    ap.add_argument("--ptbxl", help="path to a local PTB-XL checkout")
+    ap.add_argument("--ptbdb", help="path to a local PTB Diagnostic DB (fetch_ptbdb)")
+    ap.add_argument("--ludb", help="path to a local LUDB checkout (fetch_ludb): interval MAE against the wave marks")
+    ap.add_argument("--max-days", type=int, default=3,
+                    help="PTBDB: MI ECGs recorded at most this many days after the infarction are STEMI gold")
+    ap.add_argument("--ecg-arrhythmia",
+                    help="path to a local PhysioNet ecg-arrhythmia (Chapman/Ningbo) checkout")
+    ap.add_argument("--mimic", help="path to a local MIMIC-IV-ECG subset (fetch_mimic): gold = cart statements")
+    ap.add_argument("--ecg-images",
+                    help="folder of ECG photographs paired with their WFDB records: digitise and compare")
+    ap.add_argument("--telegram",
+                    help="Telegram collector store (data/telegram): gold = the reviewer's verdicts")
+    ap.add_argument("--limit", type=int, default=50)
+    ap.add_argument("--age-min", type=float, help="keep patients at least this old (years)")
+    ap.add_argument("--age-max", type=float, help="keep patients at most this old (years)")
+    args = ap.parse_args()
+
+    if args.ecg_images:
+        from cardiolens.validation.ecg_images import evaluate_images
+
+        report = evaluate_images(args.ecg_images, limit=args.limit)
+        print(f"=== CardioLens digitisation on photographs — {args.ecg_images} ===")
+        for line in report.lines():
+            print(line)
+        print("\nJSON:")
+        print(json.dumps(report.summary(), ensure_ascii=False, indent=2))
+        return
+
+    if args.ptbxl:
+        cases = build_ptbxl_dataset(args.ptbxl, limit=args.limit)
+        source = f"PTB-XL ({args.ptbxl})"
+    elif args.ptbdb:
+        cases = build_ptbdb_dataset(args.ptbdb, limit=args.limit, max_days=args.max_days)
+        source = f"PTBDB ({args.ptbdb}, STEMI gold = MI <= {args.max_days} d)"
+    elif args.ludb:
+        cases = build_ludb_dataset(args.ludb, limit=args.limit)
+        source = f"LUDB ({args.ludb}, intervals from the cardiologists' wave marks)"
+    elif args.ecg_arrhythmia:
+        cases = build_ecg_arrhythmia_dataset(args.ecg_arrhythmia, limit=args.limit)
+        source = f"ecg-arrhythmia ({args.ecg_arrhythmia})"
+    elif args.mimic:
+        cases = build_mimic_dataset(args.mimic, limit=args.limit)
+        source = f"MIMIC-IV-ECG ({args.mimic}, gold = the cart's statements)"
+    elif args.telegram:
+        from cardiolens.telegram.export import build_telegram_dataset
+
+        cases = build_telegram_dataset(args.telegram, limit=args.limit)
+        source = f"Telegram photos ({args.telegram}, gold = reviewer verdicts)"
+    else:
+        cases = build_synthetic_dataset()
+        source = "synthetic (offline)"
+
+    if args.age_min is not None or args.age_max is not None:
+        cases = filter_by_age(cases, args.age_min, args.age_max)
+        source += f" [age {args.age_min or 0}-{args.age_max or '∞'}]"
+    report = run_validation(cases)
+    print(f"=== CardioLens validation — {source} ===")
+    print(f"cases: {report.n_cases}")
+    print(f"macro sensitivity: {report.macro_sensitivity}")
+    print(f"PR MAE: {report.pr_mae_ms} ms | QT MAE: {report.qt_mae_ms} ms | QRS MAE: {report.qrs_mae_ms} ms")
+    print("\nper-class (sensitivity / specificity / support):")
+    for lbl, m in report.per_class.items():
+        print(f"  {lbl:24s} sens={m.sensitivity} spec={m.specificity} n={m.support}")
+    print("\nfamilies (any-of prediction vs any-of gold):")
+    for lbl, m in report.families.items():
+        print(f"  {lbl:24s} sens={m.sensitivity} spec={m.specificity} n={m.support}")
+    print("\nerror analysis by clinical risk tier (configs/risk_tiers.yaml):")
+    for line in risk_report_lines(report.risk):
+        print("  " + line)
+    if args.ptbdb:
+        print("\nPTBDB STEMI report (alert = st_elevation; any = descriptor family):")
+        for line in ptbdb_report_lines(cases, report):
+            print("  " + line)
+    print("\nJSON:")
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

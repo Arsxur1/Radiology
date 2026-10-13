@@ -1,0 +1,197 @@
+# Pathophysiological rule / causal-chain base (TZ §8, §18 п.3).
+# Declarative — the causal logic lives here as data, NOT in Python (TZ §8:
+# "конфигурируемая база правил ... не хардкод в логике").
+#
+# Each rule describes a chain "root cause -> mechanism -> effects".
+# The Layer-5 engine activates a rule when its trigger_findings intersect the
+# observed findings, then builds a networkx graph from nodes/edges.
+#
+# Schema (validated by src/cardiolens/contracts/causal.py :: RuleBase):
+#   id, label_ru, label_uz
+#   trigger_findings: [finding_code, ...]   # activation
+#   context_support:  {potassium_min, potassium_max, calcium_min, ...}  # optional
+#   physiologic: "physiologic" | "pathologic"
+#   critical: bool
+#   nodes: [{id, kind, label_ru, label_uz}]  kind: cause|mechanism|finding|artifact
+#   edges: [{from, to, relation}]            relation: causes|progresses_to|reciprocal|explained_by
+#   explanation_ru / explanation_uz: short causal narrative seed for Layer 6
+
+version: "pathophysiology-0.1.0"
+
+rules:
+  - id: "hyperkalemia_severity_chain"
+    label_ru: "Гиперкалиемия"
+    label_uz: "Giperkaliyemiya"
+    trigger_findings: ["peaked_t_waves", "wide_qrs_nonspecific"]
+    context_support: { potassium_min: 5.5 }
+    physiologic: "pathologic"
+    critical: true
+    nodes:
+      - { id: "hyperkalemia", kind: "cause", label_ru: "Гиперкалиемия", label_uz: "Giperkaliyemiya" }
+      - { id: "peaked_t_waves", kind: "finding", label_ru: "Высокие остроконечные T", label_uz: "Baland uchli T to'lqinlar" }
+      - { id: "wide_qrs_nonspecific", kind: "finding", label_ru: "Расширение QRS", label_uz: "QRS kengayishi" }
+      - { id: "sine_wave", kind: "finding", label_ru: "Синусоидальный паттерн", label_uz: "Sinusoidal pattern" }
+    edges:
+      - { from: "hyperkalemia", to: "peaked_t_waves", relation: "causes" }
+      - { from: "peaked_t_waves", to: "wide_qrs_nonspecific", relation: "progresses_to" }
+      - { from: "wide_qrs_nonspecific", to: "sine_wave", relation: "progresses_to" }
+    explanation_ru: "Нарастание тяжести гиперкалиемии: остроконечные T → расширение QRS → синусоида. Требует неотложного внимания."
+    explanation_uz: "Giperkaliyemiya og'irlashuvi: uchli T → QRS kengayishi → sinusoida. Shoshilinch e'tibor talab qiladi."
+
+  - id: "hypokalemia_chain"
+    label_ru: "Гипокалиемия"
+    label_uz: "Gipokaliyemiya"
+    trigger_findings: ["u_waves", "flat_t_waves", "long_qt"]
+    context_support: { potassium_max: 3.5 }
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "hypokalemia", kind: "cause", label_ru: "Гипокалиемия", label_uz: "Gipokaliyemiya" }
+      - { id: "flat_t_waves", kind: "finding", label_ru: "Уплощение зубцов T", label_uz: "T to'lqinlarining yassilanishi" }
+      - { id: "u_waves", kind: "finding", label_ru: "U-волны", label_uz: "U to'lqinlar" }
+      - { id: "st_depression", kind: "finding", label_ru: "Депрессия ST", label_uz: "ST depressiyasi" }
+      - { id: "long_qt", kind: "finding", label_ru: "Удлинение QT", label_uz: "QT uzayishi" }
+    edges:
+      - { from: "hypokalemia", to: "flat_t_waves", relation: "causes" }
+      - { from: "hypokalemia", to: "u_waves", relation: "causes" }
+      - { from: "hypokalemia", to: "st_depression", relation: "causes" }
+      - { from: "hypokalemia", to: "long_qt", relation: "causes" }
+    explanation_ru: "Гипокалиемия: уплощение T, U-волны, депрессия ST, удлинение QT (риск аритмий)."
+    explanation_uz: "Gipokaliyemiya: T yassilanishi, U to'lqinlar, ST depressiyasi, QT uzayishi (aritmiya xavfi)."
+
+  - id: "lvh_strain_chain"
+    label_ru: "ГЛЖ с вторичными изменениями (strain)"
+    label_uz: "CHQG ikkilamchi o'zgarishlar bilan (strain)"
+    trigger_findings: ["lvh", "st_depression", "t_inversion", "secondary_st_t_change"]
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "lvh", kind: "cause", label_ru: "Гипертрофия ЛЖ", label_uz: "Chap qorincha gipertrofiyasi" }
+      - { id: "strain_st_t", kind: "mechanism", label_ru: "Вторичные ST-T изменения (strain)", label_uz: "Ikkilamchi ST-T o'zgarishlar (strain)" }
+      - { id: "st_depression", kind: "finding", label_ru: "Депрессия ST", label_uz: "ST depressiyasi" }
+      - { id: "t_inversion", kind: "finding", label_ru: "Инверсия T", label_uz: "T inversiyasi" }
+      - { id: "secondary_st_t_change", kind: "finding", label_ru: "Дискордантные ST-T изменения", label_uz: "Diskordant ST-T o'zgarishlar" }
+    edges:
+      - { from: "lvh", to: "strain_st_t", relation: "causes" }
+      - { from: "strain_st_t", to: "st_depression", relation: "progresses_to" }
+      - { from: "strain_st_t", to: "t_inversion", relation: "progresses_to" }
+      - { from: "strain_st_t", to: "secondary_st_t_change", relation: "progresses_to" }
+    explanation_ru: "ST-T изменения объясняются перегрузкой при ГЛЖ (strain), а не первичной ишемией."
+    explanation_uz: "ST-T o'zgarishlari CHQG dagi strain bilan izohlanadi, birlamchi ishemiya emas."
+
+  - id: "electrode_reversal_la_ra"
+    label_ru: "Подозрение на реверс электродов LA/RA"
+    label_uz: "LA/RA elektrodlar almashinuvi shubhasi"
+    trigger_findings: ["lead_reversal_la_ra"]
+    physiologic: "physiologic"   # artifact, not true pathology
+    critical: false
+    nodes:
+      - { id: "lead_reversal_la_ra", kind: "artifact", label_ru: "Реверс электродов LA/RA", label_uz: "LA/RA elektrodlar almashinuvi" }
+      - { id: "pseudo_pathology", kind: "finding", label_ru: "Псевдопатологический паттерн", label_uz: "Psevdopatologik pattern" }
+    edges:
+      - { from: "lead_reversal_la_ra", to: "pseudo_pathology", relation: "explained_by" }
+    explanation_ru: "Паттерн объясняется перестановкой электродов (артефакт), а не истинной патологией — переснять ЭКГ."
+    explanation_uz: "Pattern elektrodlar almashinuvi (artefakt) bilan izohlanadi, haqiqiy patologiya emas — EKG qayta olinsin."
+
+  - id: "bbb_explains_wide_qrs"
+    label_ru: "Блокада ножки пучка Гиса"
+    label_uz: "Hisning oyoqcha blokadasi"
+    trigger_findings: ["rbbb", "lbbb", "secondary_st_t_change"]
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "bundle_branch_block", kind: "cause", label_ru: "Блокада ножки", label_uz: "Oyoqcha blokadasi" }
+      - { id: "rbbb", kind: "finding", label_ru: "БПНПГ", label_uz: "O'ng oyoqcha blokadasi" }
+      - { id: "lbbb", kind: "finding", label_ru: "БЛНПГ", label_uz: "Chap oyoqcha blokadasi" }
+      - { id: "secondary_st_t", kind: "mechanism", label_ru: "Вторичные ST-T изменения", label_uz: "Ikkilamchi ST-T o'zgarishlar" }
+      - { id: "secondary_st_t_change", kind: "finding", label_ru: "Дискордантные ST-T изменения", label_uz: "Diskordant ST-T o'zgarishlar" }
+    edges:
+      - { from: "bundle_branch_block", to: "rbbb", relation: "causes" }
+      - { from: "bundle_branch_block", to: "lbbb", relation: "causes" }
+      - { from: "rbbb", to: "secondary_st_t", relation: "progresses_to" }
+      - { from: "lbbb", to: "secondary_st_t", relation: "progresses_to" }
+      - { from: "secondary_st_t", to: "secondary_st_t_change", relation: "progresses_to" }
+    explanation_ru: "Широкий QRS объяснён блокадой ножки; связанные ST-T изменения вторичны, а не первичная ишемия."
+    explanation_uz: "Keng QRS oyoqcha blokadasi bilan izohlanadi; ST-T o'zgarishlar ikkilamchi, birlamchi ishemiya emas."
+
+  - id: "wpw_preexcitation_chain"
+    label_ru: "Преэкзитация (WPW)"
+    label_uz: "Preeksitatsiya (WPW)"
+    trigger_findings: ["wpw_preexcitation"]
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "accessory_pathway", kind: "cause", label_ru: "Дополнительный путь проведения", label_uz: "Qo'shimcha o'tkazish yo'li" }
+      - { id: "wpw_preexcitation", kind: "finding", label_ru: "Короткий PR + дельта", label_uz: "Qisqa PR + delta" }
+      - { id: "wide_qrs_preexcited", kind: "finding", label_ru: "Широкий QRS (преэкзитация)", label_uz: "Keng QRS (preeksitatsiya)" }
+    edges:
+      - { from: "accessory_pathway", to: "wpw_preexcitation", relation: "causes" }
+      - { from: "wpw_preexcitation", to: "wide_qrs_preexcited", relation: "progresses_to" }
+    explanation_ru: "Широкий QRS объяснён преэкзитацией по дополнительному пути, а не блокадой ножки."
+    explanation_uz: "Keng QRS qo'shimcha yo'l orqali preeksitatsiya bilan izohlanadi, oyoqcha blokadasi emas."
+
+  - id: "coronary_occlusion_territory"
+    label_ru: "Окклюзия коронарной артерии (территория)"
+    label_uz: "Koronar arteriya okklyuziyasi (hudud)"
+    trigger_findings: ["st_elevation"]
+    physiologic: "pathologic"
+    critical: true
+    nodes:
+      - { id: "coronary_occlusion", kind: "cause", label_ru: "Окклюзия коронарной артерии", label_uz: "Koronar arteriya okklyuziyasi" }
+      - { id: "st_elevation", kind: "finding", label_ru: "Элевация ST (территория)", label_uz: "ST elevatsiyasi (hudud)" }
+      - { id: "reciprocal_change", kind: "finding", label_ru: "Реципрокная депрессия ST", label_uz: "Retsiprok ST depressiyasi" }
+    edges:
+      - { from: "coronary_occlusion", to: "st_elevation", relation: "causes" }
+      - { from: "st_elevation", to: "reciprocal_change", relation: "reciprocal" }
+    explanation_ru: "Элевация ST по территории коронарной артерии; реципрокные изменения подтверждают острую окклюзию."
+    explanation_uz: "Koronar arteriya hududi bo'yicha ST elevatsiyasi; retsiprok o'zgarishlar o'tkir okklyuziyani tasdiqlaydi."
+
+  - id: "pericarditis_chain"
+    label_ru: "Острый перикардит"
+    label_uz: "O'tkir perikardit"
+    trigger_findings: ["pericarditis"]
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "pericardial_inflammation", kind: "cause", label_ru: "Воспаление перикарда", label_uz: "Perikard yallig'lanishi" }
+      - { id: "pericarditis", kind: "finding", label_ru: "Диффузная элевация ST", label_uz: "Diffuz ST elevatsiyasi" }
+      - { id: "pr_depression", kind: "finding", label_ru: "Депрессия PR", label_uz: "PR depressiyasi" }
+    edges:
+      - { from: "pericardial_inflammation", to: "pericarditis", relation: "causes" }
+      - { from: "pericarditis", to: "pr_depression", relation: "progresses_to" }
+    explanation_ru: "Диффузная (не территориальная) элевация ST с депрессией PR и без реципрокных изменений типична для перикардита, а не ОКС."
+    explanation_uz: "Diffuz (hududiy emas) ST elevatsiyasi PR depressiyasi bilan va retsiprok o'zgarishlarsiz — perikardit uchun tipik, OKS emas."
+
+  - id: "hypocalcemia_long_qt"
+    label_ru: "Гипокальциемия"
+    label_uz: "Gipokalsiyemiya"
+    trigger_findings: ["long_qt"]
+    context_support: { calcium_max: 2.1 }
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "hypocalcemia", kind: "cause", label_ru: "Гипокальциемия", label_uz: "Gipokalsiyemiya" }
+      - { id: "st_prolongation", kind: "mechanism", label_ru: "Удлинение сегмента ST", label_uz: "ST segmenti uzayishi" }
+      - { id: "long_qt", kind: "finding", label_ru: "Удлинение QT", label_uz: "QT uzayishi" }
+    edges:
+      - { from: "hypocalcemia", to: "st_prolongation", relation: "causes" }
+      - { from: "st_prolongation", to: "long_qt", relation: "progresses_to" }
+    explanation_ru: "Гипокальциемия удлиняет сегмент ST → удлинение QT (при низком уровне кальция)."
+    explanation_uz: "Gipokalsiyemiya ST segmentini uzaytiradi → QT uzayishi (past kalsiy darajasida)."
+
+  - id: "hypercalcemia_short_qt"
+    label_ru: "Гиперкальциемия"
+    label_uz: "Giperkalsiyemiya"
+    trigger_findings: ["short_qt"]
+    context_support: { calcium_min: 2.6 }
+    physiologic: "pathologic"
+    critical: false
+    nodes:
+      - { id: "hypercalcemia", kind: "cause", label_ru: "Гиперкальциемия", label_uz: "Giperkalsiyemiya" }
+      - { id: "st_shortening", kind: "mechanism", label_ru: "Укорочение сегмента ST", label_uz: "ST segmenti qisqarishi" }
+      - { id: "short_qt", kind: "finding", label_ru: "Укорочение QT", label_uz: "QT qisqarishi" }
+    edges:
+      - { from: "hypercalcemia", to: "st_shortening", relation: "causes" }
+      - { from: "st_shortening", to: "short_qt", relation: "progresses_to" }
+    explanation_ru: "Гиперкальциемия укорачивает сегмент ST → укорочение QT (при высоком уровне кальция)."
+    explanation_uz: "Giperkalsiyemiya ST segmentini qisqartiradi → QT qisqarishi (yuqori kalsiy darajasida)."
