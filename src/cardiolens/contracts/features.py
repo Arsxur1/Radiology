@@ -101,6 +101,11 @@ class Measurements(BaseModel):
     rr_std_ms: float | None = None            # RR interval variability
     rr_cv: float | None = None                # RR coefficient of variation
     hrv_sdnn_ms: float | None = None
+    rr_mad_cv: float | None = None            # robust RR dispersion (1.4826·MAD / median)
+    max_rr_ms: float | None = None            # longest RR gap (pause detection, §7.1/§10)
+    pause_ratio: float | None = None          # longest RR / median RR (dropped-beat cue)
+    # Median correlation of each QRS to the median beat (§5): noise has no repeatable beat.
+    qrs_template_consistency: float | None = None
     p_wave_ratio: float | None = None         # fraction of beats with an organised P (AF gate)
     fwave_index: float | None = None          # fibrillatory-wave band-power index (AF evidence, D58)
     p_onset_ratio: float | None = None        # fraction of beats with a refined P onset (PR)

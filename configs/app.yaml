@@ -51,3 +51,14 @@ disclaimers:
 versions:
   schema: "0.1.0"
   rules_base: "pathophysiology-0.1.0"
+
+# Pause / dropped beat (TZ §7.1, §10; ported from claude/vibrant-curie-ro1zsz).
+pause:
+  finding_ms: 2000
+  ratio: 1.8
+  critical_ms: 3000
+
+# Signal-organization gate (TZ §5): QRS self-consistency below this withholds the
+# R-peak-derived findings and reports poor quality instead (mode B escalates).
+quality:
+  beat_consistency_min: 0.80

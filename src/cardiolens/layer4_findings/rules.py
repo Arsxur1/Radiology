@@ -125,12 +125,40 @@ def detect_findings(
                 evidence=_ev(heart_rate_bpm=hr, norm_low=lo), confidence=0.9,
             ))
         elif hr > hi:
-            fs.findings.append(Finding(
-                code="sinus_tachycardia", group="rhythm",
-                label_ru=f"Тахикардия (ЧСС {hr}/мин)",
-                label_uz=f"Taxikardiya (YUT {hr}/daq)",
-                evidence=_ev(heart_rate_bpm=hr, norm_high=hi), confidence=0.9,
-            ))
+            # At/above svt_rate_min (adults) a regular narrow tachycardia is SVT, and a
+            # wide one is VT until proven otherwise (§10) — not sinus tachycardia; on
+            # INCART a 175/min VT run was reported as sinus tachycardia (ported from
+            # claude/vibrant-curie-ro1zsz D37). Children have no svt_rate_min.
+            svt_min = norms.get("svt_rate_min")
+            block = norms.get("intervals_ms", {}).get("qrs_bbb") or 120
+            qrs = m.intervals.qrs_ms
+            if not is_pediatric and svt_min and hr >= svt_min and qrs is not None and qrs >= block:
+                fs.findings.append(Finding(
+                    code="wide_complex_tachycardia", group="rhythm",
+                    label_ru=f"Тахикардия с широкими QRS (ЧСС {hr}/мин, QRS {qrs} мс) — "
+                             f"исключить желудочковую тахикардию",
+                    label_uz=f"Keng QRS li taxikardiya (YUT {hr}/daq, QRS {qrs} ms) — "
+                             f"ventrikulyar taxikardiyani istisno qilish",
+                    evidence=_ev(heart_rate_bpm=hr, qrs_ms=qrs, rate_min=svt_min,
+                                 qrs_min=block), confidence=0.7,
+                ))
+            elif (not is_pediatric and svt_min and hr >= svt_min
+                    and m.rhythm_regular is not False and qrs is not None and qrs < block):
+                fs.findings.append(Finding(
+                    code="supraventricular_tachycardia", group="rhythm",
+                    label_ru=f"Суправентрикулярная тахикардия (ЧСС {hr}/мин, "
+                             f"регулярная узкокомплексная)",
+                    label_uz=f"Supraventrikulyar taxikardiya (YUT {hr}/daq)",
+                    evidence=_ev(heart_rate_bpm=hr, svt_rate_min=svt_min,
+                                 qrs_ms=qrs, regular="yes"), confidence=0.7,
+                ))
+            else:
+                fs.findings.append(Finding(
+                    code="sinus_tachycardia", group="rhythm",
+                    label_ru=f"Тахикардия (ЧСС {hr}/мин)",
+                    label_uz=f"Taxikardiya (YUT {hr}/daq)",
+                    evidence=_ev(heart_rate_bpm=hr, norm_high=hi), confidence=0.9,
+                ))
         else:
             fs.findings.append(Finding(
                 code="sinus_rhythm", group="rhythm",
@@ -278,7 +306,16 @@ def detect_findings(
             evidence=_ev(lead_I="inverted", aVR="upright"), confidence=0.65,
         ))
 
+    # In a wide-complex tachycardia the "P" before each QRS and the initial QRS forces
+    # are not interpretable: a short "PR" is not pre-excitation and PR is not AV
+    # conduction (ported from claude/vibrant-curie-ro1zsz D37).
+    if fs.by_code("wide_complex_tachycardia") is not None:
+        fs.findings = [f for f in fs.findings if f.code not in _WCT_EXCLUDES]
+
     return fs
+
+
+_WCT_EXCLUDES = ("wpw_preexcitation", "first_degree_av_block", "pathological_q_waves")
 
 
 _SINUS_CODES = {"sinus_rhythm", "sinus_bradycardia", "sinus_tachycardia"}

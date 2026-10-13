@@ -72,10 +72,25 @@ class MLConfig(BaseModel):
     model_path: str = "configs/models/rhythm_hgb.joblib"   # relative to configs/ parent
 
 
+class PauseConfig(BaseModel):
+    """Pause / dropped-beat thresholds (TZ §7.1, §10)."""
+    finding_ms: float = 2000.0
+    ratio: float = 1.8
+    critical_ms: float = 3000.0
+
+
+class QualityConfig(BaseModel):
+    """Signal-organization gate (TZ §5): below beat_consistency_min the QRS complexes
+    are not self-consistent (artifact/noise), so R-peak-derived findings are withheld."""
+    beat_consistency_min: float = 0.8
+
+
 class AppConfig(BaseModel):
     mode: str
     llm: LLMConfig = Field(default_factory=LLMConfig)
     ml: MLConfig = Field(default_factory=MLConfig)
+    pause: PauseConfig = Field(default_factory=PauseConfig)
+    quality: QualityConfig = Field(default_factory=QualityConfig)
     mains_frequency_hz: float
     preprocessing: Preprocessing
     confidence: ConfidenceGates

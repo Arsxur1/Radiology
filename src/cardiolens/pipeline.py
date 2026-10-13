@@ -12,6 +12,12 @@ import functools
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from cardiolens.arrhythmia import (
+    detect_pvc_beats,
+    detect_ventricular_runs,
+    pvc_findings,
+    vt_run_finding,
+)
 from cardiolens.calibration import TemperatureScaler
 from cardiolens.config import (
     AppConfig,
@@ -22,7 +28,7 @@ from cardiolens.config import (
 )
 from cardiolens.contracts.causal import CausalGraph
 from cardiolens.contracts.features import Measurements
-from cardiolens.contracts.findings import FindingSet
+from cardiolens.contracts.findings import Evidence, Finding, FindingSet
 from cardiolens.contracts.report import InterpretationReport
 from cardiolens.contracts.signal import SignalRepresentation
 from cardiolens.layer2_preprocess import assess_quality, preprocess
@@ -100,6 +106,43 @@ def run_pipeline(
     if model is not None:
         for line in apply_ml_evidence(findings, m, model.meta.get("suggest_classes")):
             audit.append(f"[ML] {line}")
+    # Ventricular ectopy (TZ §7.1). VT (a §10 alert): runs of premature, abnormally
+    # shaped beats on the 12-lead strip; isolated PVCs and bigeminy by the 12-lead
+    # PVC rule (ported from claude/vibrant-curie-ro1zsz D25, D38, D40, D41).
+    runs = detect_ventricular_runs(sig, m.r_peaks_samples or [], sig.sampling_rate_hz)
+    if runs:
+        findings.findings.append(vt_run_finding(runs))
+        audit.append(f"[L4] ventricular run(s) (first beat, beats, rate): {runs}")
+    pvc_idx = detect_pvc_beats(sig, m.r_peaks_samples or [], sig.sampling_rate_hz)
+    if pvc_idx and not runs:
+        findings.findings.extend(pvc_findings(pvc_idx, len(m.r_peaks_samples)))
+        audit.append(f"[L4] 12-lead PVC rule: {len(pvc_idx)} PVC beat(s)")
+    # Pause / dropped beat (TZ §7.1, §10) — R-peak based.
+    pc = cfg.pause
+    if m.max_rr_ms is not None and (m.max_rr_ms >= pc.finding_ms
+                                    or (m.pause_ratio or 0) >= pc.ratio):
+        findings.findings.append(Finding(
+            code="sinus_pause", group="rhythm",
+            label_ru=f"Пауза ритма {m.max_rr_ms:.0f} мс (RR ×{m.pause_ratio})",
+            label_uz=f"Ritm pauzasi {m.max_rr_ms:.0f} ms (RR ×{m.pause_ratio})",
+            evidence=[Evidence(feature="max_rr_ms", value=f"{m.max_rr_ms:.0f}"),
+                      Evidence(feature="pause_ratio", value=str(m.pause_ratio))],
+            confidence=0.8, critical=m.max_rr_ms >= pc.critical_ms))
+        audit.append(f"[L4] pause: max_rr={m.max_rr_ms} ms ratio={m.pause_ratio}")
+    # Signal-organization gate (§5) — after all finding emission. If the QRS complexes
+    # are not self-consistent, R-peaks (hence HR, intervals, rhythm) are unreliable:
+    # withhold the findings and report poor quality; mode B escalates.
+    tc = m.qrs_template_consistency
+    if tc is not None and tc < cfg.quality.beat_consistency_min:
+        findings.findings = [Finding(
+            code="poor_quality_signal", group="quality",
+            label_ru=f"Сигнал непригоден для надёжной интерпретации "
+                     f"(консистентность QRS {tc} < {cfg.quality.beat_consistency_min})",
+            label_uz=f"Signal ishonchli talqin uchun yaroqsiz (QRS konsistentligi {tc})",
+            evidence=[Evidence(feature="qrs_template_consistency", value=str(tc))],
+            confidence=0.9)]
+        quality_ok = False
+        audit.append(f"[L2] signal disorganized (beat consistency {tc}) — R-peak findings withheld")
     # Apply confidence calibration to each finding (TZ §13).
     for f in findings.findings:
         f.confidence = round(calibrator.apply(f.confidence), 3)

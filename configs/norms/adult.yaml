@@ -27,6 +27,10 @@ rhythm:
   # ecg-arrhythmia halves +2 AF on one half, no new false alarm on either.
   af_fwave_index_min: 0.45
 
+# A regular narrow tachycardia at/above this rate is SVT, a wide one VT-suspect (§7.1,
+# §10; ported from claude/vibrant-curie-ro1zsz D37): resting sinus rarely exceeds ~140.
+svt_rate_min: 140
+
 intervals_ms:
   pr: [120, 200]
   qrs: [70, 110]

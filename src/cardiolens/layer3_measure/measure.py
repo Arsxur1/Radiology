@@ -437,6 +437,7 @@ def measure(sig: SignalRepresentation) -> Measurements:
         rpeaks = _reject_non_qrs_detections(
             sig.signal, rpeaks, fs, windows=getattr(sig.provenance, "lead_windows", None), lead_names=sig.lead_names)
     m.r_peaks_samples = rpeaks.tolist()
+    m.qrs_template_consistency = _qrs_template_consistency(sig, rpeaks, fs)
     m.n_beats = len(rpeaks)
 
     rr_s_mean = None
@@ -452,6 +453,10 @@ def measure(sig: SignalRepresentation) -> Measurements:
         cv = float(np.std(rr_reg) / (np.mean(rr_reg) + 1e-9))
         m.rr_cv = round(cv, 3)
         m.rhythm_regular = bool(cv < 0.10)
+        med = float(np.median(rr))
+        m.rr_mad_cv = round(1.4826 * float(np.median(np.abs(rr - med))) / (med + 1e-9), 3)
+        m.max_rr_ms = round(float(np.max(rr)) * 1000.0, 1)
+        m.pause_ratio = round(float(np.max(rr) / (med + 1e-9)), 2)
         if dropped:
             m.notes.append(f"{dropped} RR interval(s) of twice the median: possible missed beat(s), "
                            "excluded from the regularity statistic")
@@ -927,3 +932,35 @@ def _measure_t_morphology(
             # absolute cut alone flagged 70 % of children (small limb-lead
             # voltages) (D44).
             m.morphology.flat_t_leads.append(lead)
+
+
+def _qrs_template_consistency(
+    sig: SignalRepresentation, rpeaks: np.ndarray, fs: float,
+) -> float | None:
+    """Median correlation of each QRS complex to the median beat, in [0,1] (§5).
+
+    Real ECG has a self-consistent QRS shape from beat to beat — even in atrial
+    fibrillation, where timing is irregular but morphology is stable — so this
+    stays high (~0.98). Band-limited noise and artifact have no repeatable beat,
+    so spurious "R-peaks" correlate poorly (~0.6-0.75). It is the organization
+    signal a plain SNR/HF quality index misses once the band-pass has smoothed
+    broadband noise into the ECG band. ``None`` if too few beats to judge.
+    """
+    if len(rpeaks) < 3:
+        return None
+    li = sig.lead_names.index("II") if "II" in sig.lead_names else 0
+    row = sig.signal[li].astype(np.float64)
+    # +-90 ms captures the full QRS even for wide (BBB/paced) complexes, and the
+    # wider window also drives noise correlation down (a random signal decorrelates
+    # over a longer span) — sharpening the separation from real ECG.
+    w = int(0.09 * fs)
+    beats = [row[int(r) - w:int(r) + w] for r in rpeaks
+             if int(r) - w >= 0 and int(r) + w < len(row)]
+    if len(beats) < 3:
+        return None
+    m = np.vstack(beats)
+    templ = np.median(m, axis=0)
+    if np.std(templ) < 1e-9:
+        return 0.0
+    cors = [float(np.corrcoef(b, templ)[0, 1]) if np.std(b) > 1e-9 else 0.0 for b in m]
+    return round(float(np.median(cors)), 3)

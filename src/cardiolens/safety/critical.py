@@ -22,6 +22,10 @@ CRITICAL_CODES = {
     "peaked_t_waves": ("Паттерн гиперкалиемии (остроконечные T)",
                        "Giperkaliyemiya patterni (uchli T)"),
     "complete_av_block": ("Полная АВ-блокада", "To'liq AV blokada"),
+    "ventricular_tachycardia": ("Желудочковая тахикардия (пробежка ЖЭ)",
+                                "Ventrikulyar taxikardiya (VES yugurishi)"),
+    "wide_complex_tachycardia": ("Тахикардия с широкими комплексами (исключить ЖТ)",
+                                 "Keng kompleksli taxikardiya (JT ni istisno qilish)"),
 }
 
 
@@ -67,14 +71,18 @@ def scan_critical(findings: FindingSet, m: Measurements) -> SafetyResult:
     if hr is not None and hr < 40:
         add("severe_bradycardia", "Тяжёлая брадикардия", "Og'ir bradikardiya",
             reason=f"HR {hr} bpm < 40")
-    if hr is not None and hr > 150 and (m.intervals.qrs_ms or 0) > 120:
+    # Backstop when Layer 4 did not emit the finding (e.g. pediatric norms): the same
+    # 140/min threshold as the adult SVT/WCT split, so nothing wide in 140-150 slips by.
+    if (hr is not None and hr >= 140 and (m.intervals.qrs_ms or 0) > 120
+            and "wide_complex_tachycardia" not in findings.codes()):
         add("wide_complex_tachycardia",
             "Тахикардия с широкими комплексами (исключить ЖТ)",
             "Keng kompleksli taxikardiya (JT ni istisno qilish)",
             reason=f"HR {hr} bpm with wide QRS {m.intervals.qrs_ms} ms")
-    # Significant pause: max RR gap > 3 s.
-    if len(m.r_peaks_samples) >= 2:
-        pass  # gap analysis handled where fs is known; see pipeline note.
+    # Significant pause / asystole: longest RR gap >= 3 s (measured in Layer 3).
+    if m.max_rr_ms is not None and m.max_rr_ms >= 3000:
+        add("ventricular_pause", "Значимая пауза / асистолия", "Muhim pauza / asistoliya",
+            reason=f"max RR gap {m.max_rr_ms:.0f} ms >= 3000 ms")
 
     if not result.alerts:
         result.audit_log.append("[safety] no critical findings")
